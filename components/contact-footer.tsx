@@ -1,6 +1,6 @@
 'use client'
 
-import { Mail, Phone, MapPin, ArrowRight } from 'lucide-react'
+import { Mail, Phone, MapPin, ArrowRight, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function ContactFooter() {
@@ -9,21 +9,20 @@ export function ContactFooter() {
       {/* Contact Section */}
       <section
         id="contact"
-        className="relative py-24 px-4 md:px-8 bg-background"
+        className="relative py-24 px-4 md:px-8"
       >
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
+          {/* Section Header */}
           <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 text-foreground">
               Get In Touch
             </h2>
             <p className="text-foreground/70 text-lg max-w-2xl mx-auto">
-              Have questions? Our enterprise team is ready to help you find the
-              perfect solar solution.
+              Connect with our enterprise team to discuss your solar energy requirements and get a custom solution tailored to your business.
             </p>
           </div>
 
-          {/* Contact Grid */}
+          {/* Contact Methods */}
           <div className="grid md:grid-cols-3 gap-8 mb-16">
             {[
               {
@@ -35,27 +34,27 @@ export function ContactFooter() {
               {
                 icon: Phone,
                 title: 'Phone',
-                value: '+62 (555) 123-4567',
-                desc: 'Available 9AM - 6PM JST',
+                value: '+62 (021) 555-0123',
+                desc: 'Available Mon-Fri, 9AM-6PM WIB',
               },
               {
                 icon: MapPin,
                 title: 'Office',
                 value: 'Jakarta, Indonesia',
-                desc: 'Regional hubs across SE Asia',
+                desc: 'Regional presence across SE Asia',
               },
             ].map((contact, idx) => {
               const Icon = contact.icon
               return (
                 <div
                   key={idx}
-                  className="bg-card/40 backdrop-blur border border-foreground/10 rounded-xl p-8 text-center hover:border-primary/30 transition-colors"
+                  className="bg-card/50 border border-foreground/15 rounded-xl p-8 text-center hover:border-primary/50 transition-colors"
                 >
-                  <div className="inline-flex items-center justify-center h-12 w-12 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 mb-4">
-                    <Icon className="h-6 w-6 text-primary" />
+                  <div className="inline-flex items-center justify-center h-14 w-14 rounded-lg bg-primary/10 mb-4">
+                    <Icon className="h-7 w-7 text-primary" />
                   </div>
-                  <h3 className="font-bold mb-2">{contact.title}</h3>
-                  <p className="text-foreground/80 font-semibold mb-1">
+                  <h3 className="font-bold mb-2 text-foreground">{contact.title}</h3>
+                  <p className="text-foreground/80 font-semibold mb-1 text-sm">
                     {contact.value}
                   </p>
                   <p className="text-sm text-foreground/60">{contact.desc}</p>
@@ -65,32 +64,32 @@ export function ContactFooter() {
           </div>
 
           {/* Contact Form */}
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/10 to-secondary/10 border border-foreground/10 rounded-2xl p-8 md:p-12">
+          <div className="max-w-2xl mx-auto bg-card/50 border border-foreground/15 rounded-2xl p-8 md:p-12">
             <form className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 <input
                   type="text"
                   placeholder="Full Name"
-                  className="px-4 py-3 rounded-lg bg-background/50 border border-foreground/10 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50"
+                  className="px-4 py-3 rounded-lg bg-background/30 border border-foreground/20 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50"
                 />
                 <input
                   type="email"
                   placeholder="Email Address"
-                  className="px-4 py-3 rounded-lg bg-background/50 border border-foreground/10 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50"
+                  className="px-4 py-3 rounded-lg bg-background/30 border border-foreground/20 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50"
                 />
               </div>
               <input
                 type="text"
                 placeholder="Company Name"
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/10 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50"
+                className="w-full px-4 py-3 rounded-lg bg-background/30 border border-foreground/20 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50"
               />
               <textarea
-                placeholder="Tell us about your project..."
+                placeholder="Describe your energy requirements and business type..."
                 rows={4}
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/10 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50 resize-none"
+                className="w-full px-4 py-3 rounded-lg bg-background/30 border border-foreground/20 focus:border-primary/50 focus:outline-none text-foreground placeholder-foreground/50 resize-none"
               />
-              <Button className="w-full bg-primary hover:bg-primary/90 text-white rounded-full">
-                Send Message
+              <Button className="w-full bg-primary hover:bg-primary/90 text-white rounded-lg font-semibold">
+                Submit Inquiry
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </form>
@@ -99,7 +98,7 @@ export function ContactFooter() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-card/50 backdrop-blur border-t border-foreground/10 py-12 px-4 md:px-8">
+      <footer className="bg-card/50 border-t border-foreground/15 py-12 px-4 md:px-8">
         <div className="max-w-7xl mx-auto">
           {/* Footer Grid */}
           <div className="grid md:grid-cols-5 gap-8 mb-12">
@@ -107,12 +106,12 @@ export function ContactFooter() {
             <div>
               <div className="flex items-center space-x-2 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <span className="text-white font-bold">☀️</span>
+                  <Zap className="h-5 w-5 text-white" />
                 </div>
                 <span className="font-bold text-foreground">Solar Nusantara</span>
               </div>
               <p className="text-sm text-foreground/60">
-                Enterprise solar solutions for a sustainable future.
+                Enterprise renewable energy solutions across Southeast Asia.
               </p>
             </div>
 

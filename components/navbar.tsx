@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Search } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function Navbar() {
@@ -46,7 +46,7 @@ export function Navbar() {
           {/* Logo */}
           <Link href="#" className="flex items-center space-x-2 group">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <span className="text-white font-bold text-lg">☀️</span>
+              <Zap className="h-6 w-6 text-white" />
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent hidden sm:inline">
               Solar Nusantara

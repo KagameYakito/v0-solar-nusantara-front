@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Zap } from 'lucide-react'
+import { Check, Sun, Zap, Battery } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const products = [
@@ -14,7 +14,7 @@ const products = [
       'Temperature resistant',
       'Industry leading efficiency',
     ],
-    icon: '⚡',
+    Icon: Sun,
   },
   {
     name: 'Smart Inverters',
@@ -26,19 +26,19 @@ const products = [
       'Battery ready',
       'Real-time analytics',
     ],
-    icon: '🔄',
+    Icon: Zap,
   },
   {
     name: 'Battery Storage',
     power: '15kWh',
-    efficiency: 'N/A',
+    efficiency: '96%',
     features: [
       'Lithium-ion cells',
       'Fast charging',
       '10,000+ cycles',
       'Scalable system',
     ],
-    icon: '🔋',
+    Icon: Battery,
   },
 ]
 
@@ -46,89 +46,93 @@ export function Products() {
   return (
     <section
       id="products"
-      className="relative py-24 px-4 md:px-8 bg-gradient-to-br from-background via-card/20 to-background"
+      className="relative py-24 px-4 md:px-8"
     >
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Section Header */}
         <div className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            Our Product Line
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 text-foreground">
+            Featured Products
           </h2>
           <p className="text-foreground/70 text-lg max-w-2xl mx-auto">
-            Cutting-edge solar technology designed for enterprise scale and
-            reliability.
+            Enterprise-grade solar components engineered for maximum reliability and performance at scale.
           </p>
         </div>
 
         {/* Products Grid */}
-        <div className="grid md:grid-cols-3 gap-8 mb-12">
+        <div className="grid md:grid-cols-3 gap-8 mb-16">
           {products.map((product, idx) => (
             <div
               key={idx}
-              className="group relative bg-card/40 backdrop-blur border border-foreground/10 rounded-2xl p-8 hover:border-primary/30 transition-all duration-300 hover:shadow-xl"
+              className="group relative bg-card/50 backdrop-blur border border-foreground/15 rounded-xl p-8 hover:border-primary/50 transition-all duration-300"
             >
-              {/* Gradient overlay on hover */}
-              <div className="absolute -inset-px bg-gradient-to-br from-primary/20 to-secondary/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
-
               {/* Icon */}
-              <div className="text-5xl mb-4">{product.icon}</div>
+              <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-primary to-secondary/80 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <product.Icon className="h-8 w-8 text-white" />
+              </div>
 
               {/* Product Name */}
-              <h3 className="text-xl font-bold mb-2">{product.name}</h3>
+              <h3 className="text-2xl font-bold mb-4 text-foreground">
+                {product.name}
+              </h3>
 
-              {/* Specs */}
-              <div className="flex gap-4 mb-6 text-sm text-foreground/70">
+              {/* Technical Specs */}
+              <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-foreground/10">
                 <div>
-                  <p className="text-foreground/50">Output</p>
-                  <p className="font-semibold text-foreground">{product.power}</p>
+                  <p className="text-foreground/60 text-sm mb-1">Output</p>
+                  <p className="font-semibold text-primary text-lg">
+                    {product.power}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-foreground/50">Efficiency</p>
-                  <p className="font-semibold text-foreground">
+                  <p className="text-foreground/60 text-sm mb-1">Efficiency</p>
+                  <p className="font-semibold text-primary text-lg">
                     {product.efficiency}
                   </p>
                 </div>
               </div>
 
-              {/* Features */}
+              {/* Features List */}
               <ul className="space-y-3 mb-8">
                 {product.features.map((feature, i) => (
-                  <li key={i} className="flex items-start space-x-3">
+                  <li
+                    key={i}
+                    className="flex items-start space-x-3 text-foreground/80"
+                  >
                     <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-foreground/80">{feature}</span>
+                    <span className="text-sm">{feature}</span>
                   </li>
                 ))}
               </ul>
 
-              {/* Button */}
+              {/* CTA Button */}
               <Button
+                className="w-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg font-semibold"
                 variant="outline"
-                className="w-full border-foreground/20 hover:bg-primary/5 hover:border-primary/50 bg-transparent"
               >
-                Learn More
+                View Details
               </Button>
             </div>
           ))}
         </div>
 
-        {/* CTA Section */}
-        <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10 border border-foreground/10 rounded-3xl p-12 text-center">
-          <h3 className="text-3xl font-bold mb-4">
-            Ready to Transform Your Energy?
+        {/* Bottom CTA Section */}
+        <div className="bg-card/40 border border-primary/20 rounded-2xl p-12 text-center backdrop-blur">
+          <h3 className="text-3xl font-bold mb-3 text-foreground">
+            Enterprise Solution Inquiries
           </h3>
-          <p className="text-foreground/70 mb-8 max-w-2xl mx-auto">
-            Contact our enterprise team to design a custom solution for your
-            business needs.
+          <p className="text-foreground/70 mb-8 max-w-2xl mx-auto text-lg">
+            Our team specializes in designing custom solar solutions for large-scale industrial and commercial operations.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button className="bg-primary hover:bg-primary/90 text-white rounded-full">
-              Get a Quote
+            <Button className="bg-primary hover:bg-primary/90 text-white rounded-lg px-8 font-semibold">
+              Request Quote
             </Button>
             <Button
               variant="outline"
-              className="border-foreground/20 hover:bg-foreground/5 rounded-full bg-transparent"
+              className="border-foreground/30 hover:bg-foreground/5 rounded-lg px-8 font-semibold bg-transparent text-foreground"
             >
-              Schedule Demo
+              Schedule Consultation
             </Button>
           </div>
         </div>

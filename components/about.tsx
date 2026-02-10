@@ -1,6 +1,6 @@
 'use client'
 
-import { Users, Globe, Award, Zap } from 'lucide-react'
+import { Users, Globe, Award, Zap, Sun, Leaf } from 'lucide-react'
 
 export function About() {
   const values = [
@@ -29,81 +29,48 @@ export function About() {
   return (
     <section
       id="about"
-      className="relative py-24 px-4 md:px-8 bg-gradient-to-br from-background via-card/20 to-background"
+      className="relative py-24 px-4 md:px-8"
     >
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Section Header */}
         <div className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 text-foreground">
             About Solar Nusantara
           </h2>
           <p className="text-foreground/70 text-lg max-w-3xl mx-auto">
-            Leading the renewable energy revolution across Southeast Asia with
-            innovative solar solutions for enterprise clients.
+            Pioneering enterprise solar solutions across Southeast Asia for over 18 years with proven track record in industrial-scale renewable energy deployment.
           </p>
         </div>
 
         {/* Main Content */}
         <div className="grid md:grid-cols-2 gap-12 mb-16 items-center">
-          {/* Left Column - Image/Visual */}
-          <div className="relative h-96 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl border border-foreground/10 overflow-hidden flex items-center justify-center">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-6xl">☀️🌍</div>
+          {/* Left Column - Visual */}
+          <div className="relative h-80 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl border border-primary/20 overflow-hidden flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center gap-8">
+              <Sun className="h-24 w-24 text-primary/40 animate-pulse" />
+              <Leaf className="h-20 w-20 text-secondary/40" />
             </div>
-            <svg
-              className="absolute inset-0 w-full h-full opacity-10"
-              viewBox="0 0 400 400"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle
-                cx="200"
-                cy="200"
-                r="150"
-                stroke="currentColor"
-                strokeWidth="1"
-              />
-              <circle
-                cx="200"
-                cy="200"
-                r="100"
-                stroke="currentColor"
-                strokeWidth="1"
-              />
-              <circle
-                cx="200"
-                cy="200"
-                r="50"
-                stroke="currentColor"
-                strokeWidth="1"
-              />
-            </svg>
           </div>
 
           {/* Right Column - Text */}
           <div>
-            <h3 className="text-3xl font-bold mb-6">Our Mission</h3>
+            <h3 className="text-3xl font-bold mb-6 text-foreground">Our Mission</h3>
             <p className="text-foreground/70 mb-4">
-              Solar Nusantara is dedicated to making enterprise solar energy
-              accessible, affordable, and reliable for businesses across
-              Southeast Asia.
+              Solar Nusantara is dedicated to making enterprise solar energy accessible, affordable, and reliable for businesses across Southeast Asia with cutting-edge technology.
             </p>
             <p className="text-foreground/70 mb-6">
-              With over 15 years of industry experience, we've installed 500+MW
-              of solar capacity, helped 50+ enterprises achieve their
-              sustainability goals, and generated millions in energy savings for
-              our clients.
+              With over 18 years of industry experience, we've deployed 2.5GW of solar capacity, partnered with 250+ enterprises, and consistently delivered 40% average cost savings for clients across industrial and commercial sectors.
             </p>
 
             <div className="space-y-3">
               {[
                 'ISO 9001 & ISO 14001 Certified',
                 'Industry leader in safety standards',
-                'Award-winning customer service',
-                'Partner with global solar manufacturers',
+                'Award-winning enterprise support',
+                'Partnerships with global manufacturers',
               ].map((item, idx) => (
                 <div key={idx} className="flex items-center space-x-3">
-                  <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-secondary" />
+                  <div className="w-2 h-2 rounded-full bg-primary" />
                   <span className="text-foreground/80">{item}</span>
                 </div>
               ))}
@@ -111,41 +78,38 @@ export function About() {
           </div>
         </div>
 
-        {/* Values Grid */}
-        <div className="grid md:grid-cols-4 gap-6">
+        {/* Core Values */}
+        <div className="grid md:grid-cols-4 gap-6 mb-16">
           {values.map((value, idx) => {
             const Icon = value.icon
             return (
               <div
                 key={idx}
-                className="bg-card/40 backdrop-blur border border-foreground/10 rounded-xl p-6 hover:border-primary/30 transition-colors"
+                className="bg-card/50 border border-foreground/15 rounded-xl p-6 hover:border-primary/50 transition-colors"
               >
-                <div className="inline-flex items-center justify-center h-12 w-12 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 mb-4">
+                <div className="inline-flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-4">
                   <Icon className="h-6 w-6 text-primary" />
                 </div>
-                <h4 className="font-bold mb-2">{value.title}</h4>
+                <h4 className="font-bold mb-2 text-foreground">{value.title}</h4>
                 <p className="text-sm text-foreground/70">{value.description}</p>
               </div>
             )
           })}
         </div>
 
-        {/* Team Stats */}
-        <div className="grid md:grid-cols-4 gap-6 mt-16">
+        {/* Company Statistics */}
+        <div className="grid md:grid-cols-4 gap-6">
           {[
-            { number: '500+', label: 'Projects Completed' },
-            { number: '1000+', label: 'Team Members' },
-            { number: '50+', label: 'Enterprise Clients' },
-            { number: '5+', label: 'Countries Served' },
+            { number: '2.5GW', label: 'Installed Capacity' },
+            { number: '250+', label: 'Enterprise Partners' },
+            { number: '18+', label: 'Years Experience' },
+            { number: '99.9%', label: 'System Uptime' },
           ].map((stat, idx) => (
-            <div
-              key={idx}
-              className="text-center p-8 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl border border-foreground/10"
-            >
-              <div className="text-4xl font-bold text-transparent bg-gradient-to-r from-primary to-secondary bg-clip-text mb-2">
+            <div key={idx} className="text-center p-8 bg-card/40 border border-foreground/15 rounded-xl">
+              <div className="text-4xl font-bold text-primary mb-2">
                 {stat.number}
               </div>
-              <p className="text-foreground/70 font-medium">{stat.label}</p>
+              <p className="text-foreground/70 font-medium text-sm">{stat.label}</p>
             </div>
           ))}
         </div>
