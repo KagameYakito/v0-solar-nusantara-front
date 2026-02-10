@@ -58,7 +58,7 @@ export function Hero() {
             size="lg"
             className="bg-primary hover:bg-primary/90 text-white rounded-lg text-base font-semibold px-8"
           >
-            Get Started
+            View Products
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
           <Button

@@ -66,18 +66,6 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Search Bar - Center positioned on desktop */}
-          <div className="hidden lg:flex flex-1 max-w-xs mx-8">
-            <div className="w-full relative">
-              <input
-                type="text"
-                placeholder="Search solar solutions..."
-                className="w-full px-4 py-2 pl-10 rounded-lg bg-secondary/10 border border-border/50 text-sm focus:outline-none focus:border-primary/50 text-foreground placeholder-foreground/50"
-              />
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-foreground/50" />
-            </div>
-          </div>
-
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center space-x-4">
             <button
@@ -146,14 +134,7 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <div className="px-4 pt-2">
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full px-4 py-2 rounded-lg bg-secondary/10 border border-border/50 text-sm"
-              />
-            </div>
-            <div className="px-4 pt-2 flex space-x-2">
+            <div className="px-4 pt-4 flex space-x-2">
               <Button
                 variant="ghost"
                 size="sm"
