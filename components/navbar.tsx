@@ -2,12 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, Search } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AuthModals, type RegistrationData } from './auth-modals'
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     // Set initial theme
@@ -29,6 +34,31 @@ export function Navbar() {
       localStorage.theme = 'light'
       document.documentElement.classList.remove('dark')
     }
+  }
+
+  const handleLoginSubmit = (email: string, password: string) => {
+    // Simulate login - always show error as per requirements
+    // In real app, this would call an API
+  }
+
+  const handleRegisterSubmit = (data: RegistrationData) => {
+    // Auto-login after successful registration
+    setUserEmail(data.email)
+    setIsLoggedIn(true)
+    setIsRegisterModalOpen(false)
+  }
+
+  const handleSignOut = () => {
+    setIsLoggedIn(false)
+    setUserEmail('')
+    setIsLoginModalOpen(false)
+    setIsRegisterModalOpen(false)
+  }
+
+  const maskEmail = (email: string) => {
+    if (!email) return ''
+    const [localPart, domain] = email.split('@')
+    return `${localPart.charAt(0)}***@***.${domain.split('.')[1]}`
   }
 
   const navLinks = [
@@ -79,19 +109,40 @@ export function Navbar() {
                 <Moon className="h-5 w-5 text-foreground" />
               )}
             </button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-foreground/80 hover:text-foreground"
-            >
-              Log In
-            </Button>
-            <Button
-              size="sm"
-              className="bg-primary hover:bg-primary/90 text-white rounded-full"
-            >
-              Register
-            </Button>
+
+            {!isLoggedIn ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="text-foreground/80 hover:text-foreground"
+                >
+                  Log In
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setIsRegisterModalOpen(true)}
+                  className="bg-primary hover:bg-primary/90 text-white rounded-full"
+                >
+                  Register
+                </Button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm text-foreground/70 font-medium">
+                  {maskEmail(userEmail)}
+                </span>
+                <Button
+                  size="sm"
+                  onClick={handleSignOut}
+                  variant="outline"
+                  className="border-primary text-primary hover:bg-primary/10 rounded-full bg-transparent"
+                >
+                  Sign Out
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -135,20 +186,67 @@ export function Navbar() {
               </Link>
             ))}
             <div className="px-4 pt-4 flex space-x-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 text-foreground/80"
-              >
-                Log In
-              </Button>
-              <Button size="sm" className="flex-1 bg-primary text-white">
-                Register
-              </Button>
+              {!isLoggedIn ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsLoginModalOpen(true)
+                      setIsOpen(false)
+                    }}
+                    className="flex-1 text-foreground/80"
+                  >
+                    Log In
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setIsRegisterModalOpen(true)
+                      setIsOpen(false)
+                    }}
+                    className="flex-1 bg-primary text-white"
+                  >
+                    Register
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled
+                    className="flex-1 text-foreground/60 cursor-default"
+                  >
+                    {maskEmail(userEmail)}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      handleSignOut()
+                      setIsOpen(false)
+                    }}
+                    variant="outline"
+                    className="flex-1 border-primary text-primary"
+                  >
+                    Sign Out
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}
       </div>
+
+      {/* Auth Modals */}
+      <AuthModals
+        isLoginOpen={isLoginModalOpen}
+        isRegisterOpen={isRegisterModalOpen}
+        onLoginClose={() => setIsLoginModalOpen(false)}
+        onRegisterClose={() => setIsRegisterModalOpen(false)}
+        onLoginSubmit={handleLoginSubmit}
+        onRegisterSubmit={handleRegisterSubmit}
+      />
     </nav>
   )
 }
