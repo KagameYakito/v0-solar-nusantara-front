@@ -86,28 +86,30 @@ export function AuthModals({
   // Login Modal
   if (isLoginOpen) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50"
           onClick={onLoginClose}
+          role="presentation"
         />
 
         {/* Modal */}
-        <div className="relative bg-card border border-foreground/10 rounded-2xl p-8 w-full max-w-md mx-4 shadow-2xl animate-in fade-in zoom-in duration-300">
+        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-lg z-10">
           {/* Close Button */}
           <button
             onClick={onLoginClose}
-            className="absolute top-4 right-4 p-2 hover:bg-foreground/10 rounded-lg transition-colors"
+            className="absolute top-4 right-4 p-1.5 hover:bg-foreground/10 rounded-lg transition-colors"
+            aria-label="Close modal"
           >
-            <X className="h-5 w-5 text-foreground/70" />
+            <X className="h-5 w-5 text-foreground/60" />
           </button>
 
           {/* Header */}
-          <h2 className="text-2xl font-bold mb-2 text-foreground">
+          <h2 className="text-2xl font-bold mb-1 text-foreground pr-8">
             Enterprise Log In
           </h2>
-          <p className="text-sm text-foreground/60 mb-6">
+          <p className="text-sm text-foreground/60 mb-6 pr-8">
             Access your Solar Nusantara account
           </p>
 
@@ -178,28 +180,30 @@ export function AuthModals({
   // Register Modal
   if (isRegisterOpen) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50"
           onClick={onRegisterClose}
+          role="presentation"
         />
 
         {/* Modal */}
-        <div className="relative bg-card border border-foreground/10 rounded-2xl p-8 w-full max-w-md mx-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-300">
+        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-lg max-h-[90vh] overflow-y-auto z-10">
           {/* Close Button */}
           <button
             onClick={onRegisterClose}
-            className="sticky top-0 float-right p-2 hover:bg-foreground/10 rounded-lg transition-colors mb-2"
+            className="absolute top-4 right-4 p-1.5 hover:bg-foreground/10 rounded-lg transition-colors"
+            aria-label="Close modal"
           >
-            <X className="h-5 w-5 text-foreground/70" />
+            <X className="h-5 w-5 text-foreground/60" />
           </button>
 
           {/* Header */}
-          <h2 className="text-2xl font-bold mb-2 text-foreground">
+          <h2 className="text-2xl font-bold mb-1 text-foreground pr-8">
             B2B Registration
           </h2>
-          <p className="text-sm text-foreground/60 mb-6">
+          <p className="text-sm text-foreground/60 mb-6 pr-8">
             Daftar akun perusahaan Anda untuk mengakses solusi solar enterprise
           </p>
 
