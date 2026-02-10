@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 216 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 24 100% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 216 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 216 100% 50%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    /* Dark mode - deep navy with electric blue accents */
+    --background: 224 36% 6%;
+    --foreground: 0 0% 98%;
+    --card: 224 36% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 224 36% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 216 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 24 100% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 224 10% 30%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 216 100% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 224 20% 18%;
+    --input: 224 20% 18%;
+    --ring: 216 100% 55%;
+  }
+}
+
+/* Floating orb animation */
+@keyframes float-orb {
+  0%, 100% {
+    transform: translate(0, 0);
+    opacity: 0.15;
+  }
+  25% {
+    transform: translate(30px, -30px);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate(-20px, 40px);
+    opacity: 0.2;
+  }
+  75% {
+    transform: translate(40px, 20px);
+    opacity: 0.25;
+  }
+}
+
+@keyframes float-orb-slow {
+  0%, 100% {
+    transform: translate(0, 0);
+    opacity: 0.1;
+  }
+  33% {
+    transform: translate(-40px, 50px);
+    opacity: 0.2;
+  }
+  66% {
+    transform: translate(50px, -30px);
+    opacity: 0.15;
+  }
+}
+
+@keyframes float-orb-slower {
+  0%, 100% {
+    transform: translate(0, 0);
+    opacity: 0.12;
+  }
+  40% {
+    transform: translate(60px, 30px);
+    opacity: 0.22;
+  }
+  80% {
+    transform: translate(-30px, -50px);
+    opacity: 0.18;
+  }
+}
+
+/* Glow animation */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(37, 99, 235, 0.6);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
