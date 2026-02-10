@@ -86,16 +86,16 @@ export function AuthModals({
   // Login Modal
   if (isLoginOpen) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
-        {/* Backdrop */}
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden">
+        {/* Backdrop with blur */}
         <div
-          className="fixed inset-0 bg-black/50"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={onLoginClose}
           role="presentation"
         />
 
         {/* Modal */}
-        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-lg z-10">
+        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl z-[10000]">
           {/* Close Button */}
           <button
             onClick={onLoginClose}
@@ -180,16 +180,16 @@ export function AuthModals({
   // Register Modal
   if (isRegisterOpen) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden">
-        {/* Backdrop */}
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden">
+        {/* Backdrop with blur */}
         <div
-          className="fixed inset-0 bg-black/50"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           onClick={onRegisterClose}
           role="presentation"
         />
 
         {/* Modal */}
-        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-lg max-h-[90vh] overflow-y-auto z-10">
+        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl max-h-[90vh] overflow-y-auto z-[10000]">
           {/* Close Button */}
           <button
             onClick={onRegisterClose}
