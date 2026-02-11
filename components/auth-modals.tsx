@@ -86,16 +86,21 @@ export function AuthModals({
   // Login Modal
   if (isLoginOpen) {
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden">
-        {/* Backdrop with blur */}
+      <div>
+        {/* Backdrop with blur - fixed to viewport */}
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
           onClick={onLoginClose}
           role="presentation"
         />
 
-        {/* Modal */}
-        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl z-[10000]">
+        {/* Modal - centered on viewport using top/left/transform */}
+        <div
+          className="fixed top-1/2 left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl z-[10000]"
+          style={{
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
           {/* Close Button */}
           <button
             onClick={onLoginClose}
@@ -165,7 +170,7 @@ export function AuthModals({
             <button
               onClick={() => {
                 onLoginClose()
-                setTimeout(() => {}, 100)
+                setTimeout(() => { }, 100)
               }}
               className="text-primary hover:underline font-medium"
             >
@@ -180,16 +185,21 @@ export function AuthModals({
   // Register Modal
   if (isRegisterOpen) {
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden">
-        {/* Backdrop with blur */}
+      <div>
+        {/* Backdrop with blur - fixed to viewport */}
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
           onClick={onRegisterClose}
           role="presentation"
         />
 
-        {/* Modal */}
-        <div className="relative bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl max-h-[90vh] overflow-y-auto z-[10000]">
+        {/* Modal - centered on viewport using top/left/transform */}
+        <div
+          className="fixed top-1/2 left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto z-[10000]"
+          style={{
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
           {/* Close Button */}
           <button
             onClick={onRegisterClose}

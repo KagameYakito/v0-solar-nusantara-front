@@ -66,7 +66,7 @@ export function Hero() {
             variant="outline"
             className="border-foreground/30 hover:bg-foreground/5 rounded-lg text-base font-semibold bg-transparent"
           >
-            Request Demo
+            Request for Quotation
           </Button>
         </div>
 
