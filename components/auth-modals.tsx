@@ -23,6 +23,8 @@ export interface RegistrationData {
   companyAddress: string
   projectVolume: string
   email: string
+  password?: string
+  passwordConfirm?: string
 }
 
 export function AuthModals({
@@ -45,6 +47,8 @@ export function AuthModals({
     companyAddress: '',
     projectVolume: '<1MW',
     email: '',
+    password: '',
+    passwordConfirm: '',
   })
   const [registerError, setRegisterError] = useState('')
 
@@ -63,9 +67,17 @@ export function AuthModals({
       !registerData.contactName ||
       !registerData.contactPhone ||
       !registerData.companyAddress ||
-      !registerData.email
+      !registerData.email ||
+      !registerData.password ||
+      !registerData.passwordConfirm
     ) {
       setRegisterError('Semua field harus diisi')
+      return
+    }
+
+    // Validate password match
+    if (registerData.password !== registerData.passwordConfirm) {
+      setRegisterError('Kata sandi tidak sesuai')
       return
     }
 
@@ -96,9 +108,9 @@ export function AuthModals({
 
         {/* Modal - positioned below navbar, centered horizontally */}
         <div
-          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl z-[10000] mx-4"
+          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl z-[10000]"
           style={{
-            top: '55vh',
+            top: 'calc(50vh - 200px)',
             transform: 'translateX(-50%)',
           }}
         >
@@ -196,7 +208,7 @@ export function AuthModals({
 
         {/* Modal - positioned below navbar, centered horizontally, scrollable if needed */}
         <div
-          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl max-h-[85vh] overflow-y-auto z-[10000] mx-4"
+          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-2xl shadow-2xl min-h-[80vh] overflow-y-auto z-[10000]"
           style={{
             top: '55vh',
             transform: 'translateX(-50%)',
@@ -213,7 +225,7 @@ export function AuthModals({
 
           {/* Header */}
           <h2 className="text-2xl font-bold mb-1 text-foreground pr-8">
-            B2B Registration
+            Pendaftaran Akun
           </h2>
           <p className="text-sm text-foreground/60 mb-6 pr-8">
             Daftar akun perusahaan Anda untuk mengakses solusi solar enterprise
@@ -332,6 +344,47 @@ export function AuthModals({
                 placeholder="contact@company.com"
                 className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
               />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Kata Sandi *
+              </label>
+              <input
+                type="password"
+                value={registerData.password || ''}
+                onChange={(e) => handleRegisterChange('password', e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
+              />
+            </div>
+
+            {/* Password Confirmation */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Konfirmasi Kata Sandi *
+              </label>
+              <input
+                type="password"
+                value={registerData.passwordConfirm || ''}
+                onChange={(e) => handleRegisterChange('passwordConfirm', e.target.value)}
+                placeholder="••••••••"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  registerData.password &&
+                  registerData.passwordConfirm &&
+                  registerData.password !== registerData.passwordConfirm
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
+              />
+              {registerData.password &&
+                registerData.passwordConfirm &&
+                registerData.password !== registerData.passwordConfirm && (
+                  <p className="text-destructive text-sm mt-2">
+                    Kata sandi tidak sesuai
+                  </p>
+                )}
             </div>
 
             {/* Error Message */}
