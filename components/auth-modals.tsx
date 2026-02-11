@@ -23,6 +23,8 @@ export interface RegistrationData {
   companyAddress: string
   projectVolume: string
   email: string
+  password?: string
+  confirmPassword?: string
 }
 
 export function AuthModals({
@@ -45,8 +47,11 @@ export function AuthModals({
     companyAddress: '',
     projectVolume: '<1MW',
     email: '',
+    password: '',
+    confirmPassword: '',
   })
   const [registerError, setRegisterError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,19 +61,33 @@ export function AuthModals({
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const newFieldErrors: Record<string, string> = {}
 
     // Validate all required fields
-    if (
-      !registerData.companyName ||
-      !registerData.contactName ||
-      !registerData.contactPhone ||
-      !registerData.companyAddress ||
-      !registerData.email
-    ) {
-      setRegisterError('Semua field harus diisi')
+    if (!registerData.companyName) newFieldErrors.companyName = 'Nama Perusahaan wajib diisi'
+    if (!registerData.contactName) newFieldErrors.contactName = 'Kontak Utama wajib diisi'
+    if (!registerData.contactPhone) newFieldErrors.contactPhone = 'Nomor WhatsApp wajib diisi'
+    if (!registerData.companyAddress) newFieldErrors.companyAddress = 'Alamat Perusahaan wajib diisi'
+    if (!registerData.email) newFieldErrors.email = 'Email Perusahaan wajib diisi'
+    if (!registerData.password) newFieldErrors.password = 'Kata Sandi wajib diisi'
+    if (!registerData.confirmPassword) newFieldErrors.confirmPassword = 'Konfirmasi Kata Sandi wajib diisi'
+    else if (registerData.password && registerData.confirmPassword && registerData.password !== registerData.confirmPassword) {
+      newFieldErrors.confirmPassword = 'Kata sandi tidak sesuai'
+    }
+
+    if (Object.keys(newFieldErrors).length > 0) {
+      setFieldErrors(newFieldErrors)
+      setRegisterError('')
+
+      // Scroll to first error field smoothly
+      const firstErrorField = document.querySelector(`[data-field="${Object.keys(newFieldErrors)[0]}"]`)
+      if (firstErrorField) {
+        firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
       return
     }
 
+    setFieldErrors({})
     setRegisterError('')
     onRegisterSubmit(registerData)
   }
@@ -98,7 +117,7 @@ export function AuthModals({
         <div
           className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl z-[10000] mx-4"
           style={{
-            top: '55vh',
+            top: 'calc(10vh + 10px)',
             transform: 'translateX(-50%)',
           }}
         >
@@ -196,15 +215,18 @@ export function AuthModals({
 
         {/* Modal - positioned below navbar, centered horizontally, scrollable if needed */}
         <div
-          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl max-h-[85vh] overflow-y-auto z-[10000] mx-4"
+          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] overflow-y-auto z-[10000]"
           style={{
-            top: '55vh',
+            top: 'calc(7vh + 10px)',
             transform: 'translateX(-50%)',
           }}
         >
           {/* Close Button */}
           <button
-            onClick={onRegisterClose}
+            onClick={() => {
+              setFieldErrors({})
+              onRegisterClose()
+            }}
             className="absolute top-4 right-4 p-1.5 hover:bg-foreground/10 rounded-lg transition-colors"
             aria-label="Close modal"
           >
@@ -222,19 +244,27 @@ export function AuthModals({
           {/* Form */}
           <form onSubmit={handleRegisterSubmit} className="space-y-4">
             {/* Company Name */}
-            <div>
+            <div data-field="companyName">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Nama Perusahaan *
               </label>
               <input
                 type="text"
                 value={registerData.companyName}
-                onChange={(e) =>
+                onChange={(e) => {
                   handleRegisterChange('companyName', e.target.value)
-                }
+                  if (fieldErrors.companyName) setFieldErrors({ ...fieldErrors, companyName: '' })
+                }}
                 placeholder="PT. Maju Jaya"
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  fieldErrors.companyName
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
               />
+              {fieldErrors.companyName && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.companyName}</p>
+              )}
             </div>
 
             {/* Industry Type */}
@@ -257,49 +287,75 @@ export function AuthModals({
             </div>
 
             {/* Contact Name */}
-            <div>
+            <div data-field="contactName">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Kontak Utama (Nama) *
               </label>
               <input
                 type="text"
                 value={registerData.contactName}
-                onChange={(e) => handleRegisterChange('contactName', e.target.value)}
+                onChange={(e) => {
+                  handleRegisterChange('contactName', e.target.value)
+                  if (fieldErrors.contactName) setFieldErrors({ ...fieldErrors, contactName: '' })
+                }}
                 placeholder="Nama lengkap"
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  fieldErrors.contactName
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
               />
+              {fieldErrors.contactName && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.contactName}</p>
+              )}
             </div>
 
             {/* Contact Phone */}
-            <div>
+            <div data-field="contactPhone">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Nomor WhatsApp *
               </label>
               <input
                 type="tel"
                 value={registerData.contactPhone}
-                onChange={(e) =>
+                onChange={(e) => {
                   handleRegisterChange('contactPhone', e.target.value)
-                }
+                  if (fieldErrors.contactPhone) setFieldErrors({ ...fieldErrors, contactPhone: '' })
+                }}
                 placeholder="+62 812 3456 7890"
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  fieldErrors.contactPhone
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
               />
+              {fieldErrors.contactPhone && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.contactPhone}</p>
+              )}
             </div>
 
             {/* Company Address */}
-            <div>
+            <div data-field="companyAddress">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Alamat Perusahaan *
               </label>
               <textarea
                 value={registerData.companyAddress}
-                onChange={(e) =>
+                onChange={(e) => {
                   handleRegisterChange('companyAddress', e.target.value)
-                }
+                  if (fieldErrors.companyAddress) setFieldErrors({ ...fieldErrors, companyAddress: '' })
+                }}
                 placeholder="Jl. Merdeka No. 123, Jakarta"
                 rows={3}
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors resize-none"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors resize-none ${
+                  fieldErrors.companyAddress
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
               />
+              {fieldErrors.companyAddress && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.companyAddress}</p>
+              )}
             </div>
 
             {/* Project Volume */}
@@ -321,19 +377,76 @@ export function AuthModals({
             </div>
 
             {/* Email */}
-            <div>
+            <div data-field="email">
               <label className="block text-sm font-medium text-foreground mb-2">
                 Email Perusahaan *
               </label>
               <input
                 type="email"
                 value={registerData.email}
-                onChange={(e) => handleRegisterChange('email', e.target.value)}
+                onChange={(e) => {
+                  handleRegisterChange('email', e.target.value)
+                  if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' })
+                }}
                 placeholder="contact@company.com"
-                className="w-full px-4 py-3 rounded-lg bg-background/50 border border-foreground/20 text-foreground placeholder-foreground/50 focus:outline-none focus:border-primary/50 transition-colors"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  fieldErrors.email
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
               />
+              {fieldErrors.email && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.email}</p>
+              )}
             </div>
 
+            {/* Kata Sandi */}
+            <div data-field="password">
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Kata Sandi *
+              </label>
+              <input
+                type="password"
+                value={registerData.password || ''}
+                onChange={(e) => {
+                  handleRegisterChange('password', e.target.value)
+                  if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' })
+                }}
+                placeholder="••••••••"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  fieldErrors.password
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
+              />
+              {fieldErrors.password && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.password}</p>
+              )}
+            </div>
+
+            {/* Konfirmasi Kata Sandi */}
+            <div data-field="confirmPassword">
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Konfirmasi Kata Sandi *
+              </label>
+              <input
+                type="password"
+                value={registerData.confirmPassword || ''}
+                onChange={(e) => {
+                  handleRegisterChange('confirmPassword', e.target.value)
+                  if (fieldErrors.confirmPassword) setFieldErrors({ ...fieldErrors, confirmPassword: '' })
+                }}
+                placeholder="••••••••"
+                className={`w-full px-4 py-3 rounded-lg bg-background/50 border text-foreground placeholder-foreground/50 focus:outline-none transition-colors ${
+                  fieldErrors.confirmPassword
+                    ? 'border-destructive/50 focus:border-destructive'
+                    : 'border-foreground/20 focus:border-primary/50'
+                }`}
+              />
+              {fieldErrors.confirmPassword && (
+                <p className="text-destructive text-xs mt-1">{fieldErrors.confirmPassword}</p>
+              )}
+            </div>
             {/* Error Message */}
             {registerError && (
               <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
