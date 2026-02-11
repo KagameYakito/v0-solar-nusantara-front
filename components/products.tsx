@@ -60,7 +60,7 @@ export function Products() {
         </div>
 
         {/* Products Grid */}
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
+        <div className="grid md:grid-cols-3 gap-8">
           {products.map((product, idx) => (
             <div
               key={idx}
@@ -114,27 +114,6 @@ export function Products() {
               </Button>
             </div>
           ))}
-        </div>
-
-        {/* Bottom CTA Section */}
-        <div className="bg-card/40 border border-primary/20 rounded-2xl p-12 text-center backdrop-blur">
-          <h3 className="text-3xl font-bold mb-3 text-foreground">
-            Enterprise Solution Inquiries
-          </h3>
-          <p className="text-foreground/70 mb-8 max-w-2xl mx-auto text-lg">
-            Our team specializes in designing custom solar solutions for large-scale industrial and commercial operations.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button className="bg-primary hover:bg-primary/90 text-white rounded-lg px-8 font-semibold">
-              Request Quote
-            </Button>
-            <Button
-              variant="outline"
-              className="border-foreground/30 hover:bg-foreground/5 rounded-lg px-8 font-semibold bg-transparent text-foreground"
-            >
-              Schedule Consultation
-            </Button>
-          </div>
         </div>
       </div>
     </section>
