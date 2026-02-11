@@ -94,11 +94,12 @@ export function AuthModals({
           role="presentation"
         />
 
-        {/* Modal - centered on viewport using top/left/transform */}
+        {/* Modal - positioned below navbar, centered horizontally */}
         <div
-          className="fixed top-1/2 left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl z-[10000]"
+          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl z-[10000] mx-4"
           style={{
-            transform: 'translate(-50%, -50%)',
+            top: '55vh',
+            transform: 'translateX(-50%)',
           }}
         >
           {/* Close Button */}
@@ -193,11 +194,12 @@ export function AuthModals({
           role="presentation"
         />
 
-        {/* Modal - centered on viewport using top/left/transform */}
+        {/* Modal - positioned below navbar, centered horizontally, scrollable if needed */}
         <div
-          className="fixed top-1/2 left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto z-[10000]"
+          className="fixed left-1/2 bg-card border border-foreground/15 rounded-xl p-6 w-full max-w-sm shadow-2xl max-h-[85vh] overflow-y-auto z-[10000] mx-4"
           style={{
-            transform: 'translate(-50%, -50%)',
+            top: '55vh',
+            transform: 'translateX(-50%)',
           }}
         >
           {/* Close Button */}
