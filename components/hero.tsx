@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { ArrowRight, Search, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -54,13 +55,15 @@ export function Hero() {
 
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <Button
-            size="lg"
-            className="bg-primary hover:bg-primary/90 text-white rounded-lg text-base font-semibold px-8"
-          >
-            View Products
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+          <Link href="/catalog">
+            <Button
+              size="lg"
+              className="bg-primary hover:bg-primary/90 text-white rounded-lg text-base font-semibold px-8"
+            >
+              View Products
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </Link>
           <Button
             size="lg"
             variant="outline"
