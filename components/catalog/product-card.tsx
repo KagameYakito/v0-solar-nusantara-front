@@ -9,7 +9,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   return (
-    <div className="bg-card/50 border border-foreground/15 rounded-lg overflow-hidden">
+    <div className="bg-card/50 border border-foreground/15 rounded-lg overflow-hidden transition-all duration-200 hover:-translate-y-1">
       {/* Product Image */}
       <div className="aspect-square bg-background/50 border-b border-foreground/15 flex items-center justify-center relative overflow-hidden">
         <Image
