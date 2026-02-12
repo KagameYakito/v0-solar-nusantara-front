@@ -8,23 +8,23 @@ import type { Product } from '@/data/categories'
 
 interface ProductGridProps {
   products: Product[]
-  selectedSubcategory: string | null
+  searchTerm: string
+  onSearchChange: (term: string) => void
 }
 
 const ITEMS_PER_PAGE = 28 // 4 columns × 7 rows
 
-export function ProductGrid({ products, selectedSubcategory }: ProductGridProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+export function ProductGrid({ products, searchTerm, onSearchChange }: ProductGridProps) {
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Filter products based on search query (case-insensitive, starts with)
+  // Filter products based on search term (case-insensitive, starts with)
   const filteredProducts = useMemo(() => {
-    if (!searchQuery.trim()) return products
+    if (!searchTerm.trim()) return products
 
     return products.filter((product) =>
-      product.name.toLowerCase().startsWith(searchQuery.toLowerCase())
+      product.name.toLowerCase().startsWith(searchTerm.toLowerCase())
     )
-  }, [products, searchQuery])
+  }, [products, searchTerm])
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE)
@@ -34,20 +34,10 @@ export function ProductGrid({ products, selectedSubcategory }: ProductGridProps)
     startIndex + ITEMS_PER_PAGE
   )
 
-  // Reset to page 1 when search query changes
+  // Reset to page 1 when search term changes
   const handleSearchChange = (query: string) => {
-    setSearchQuery(query)
+    onSearchChange(query)
     setCurrentPage(1)
-  }
-
-  if (!selectedSubcategory) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-foreground/60 text-lg">
-          Select a subcategory from the left to view products
-        </p>
-      </div>
-    )
   }
 
   return (
@@ -60,7 +50,7 @@ export function ProductGrid({ products, selectedSubcategory }: ProductGridProps)
             <input
               type="text"
               placeholder="Search products by name..."
-              value={searchQuery}
+              value={searchTerm}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="flex-1 bg-transparent text-foreground placeholder-foreground/50 focus:outline-none text-base"
             />
@@ -69,10 +59,16 @@ export function ProductGrid({ products, selectedSubcategory }: ProductGridProps)
       </div>
 
       {/* Product Grid */}
-      {filteredProducts.length === 0 ? (
+      {products.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <p className="text-foreground/60 text-lg">
-            No products found matching "{searchQuery}"
+            No products available
+          </p>
+        </div>
+      ) : filteredProducts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-foreground/60 text-lg">
+            No products found matching "{searchTerm}"
           </p>
         </div>
       ) : (

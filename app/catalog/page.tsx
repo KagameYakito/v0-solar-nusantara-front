@@ -10,11 +10,22 @@ import { categoriesData } from '@/data/categories'
 
 export default function CatalogPage() {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
-  // Get products for selected subcategory
+  // Get products for selected subcategory or all products
   const getSelectedProducts = () => {
-    if (!selectedSubcategory) return []
+    // Return ALL products when no subcategory selected
+    if (!selectedSubcategory) {
+      const allProducts: any[] = []
+      categoriesData.forEach((category) => {
+        category.subcategories.forEach((sub) => {
+          allProducts.push(...sub.products)
+        })
+      })
+      return allProducts
+    }
 
+    // Existing subcategory logic
     for (const category of categoriesData) {
       for (const subcategory of category.subcategories) {
         if (subcategory.name === selectedSubcategory) {
@@ -59,7 +70,8 @@ export default function CatalogPage() {
           <div className="lg:col-span-3">
             <ProductGrid
               products={getSelectedProducts()}
-              selectedSubcategory={selectedSubcategory}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
             />
           </div>
         </div>
