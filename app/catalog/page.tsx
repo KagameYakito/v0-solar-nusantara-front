@@ -26,7 +26,7 @@ export default function CatalogPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] to-[#1e293b] dark:opacity-100 opacity-0 transition-opacity duration-300">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] to-[#1e293b] animate-fade-in">
       {/* Header */}
       <header className="border-b border-foreground/15 bg-card/50 backdrop-blur p-4 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
