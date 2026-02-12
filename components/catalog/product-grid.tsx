@@ -17,12 +17,19 @@ const ITEMS_PER_PAGE = 28 // 4 columns × 7 rows
 export function ProductGrid({ products, searchTerm, onSearchChange }: ProductGridProps) {
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Filter products based on search term (case-insensitive, starts with)
+  // Filter products based on search term (multi-keyword, case-insensitive, order-insensitive)
   const filteredProducts = useMemo(() => {
     if (!searchTerm.trim()) return products
 
+    // Split search term into keywords and filter out empty strings
+    const keywords = searchTerm
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((k) => k)
+
+    // Only show products that contain ALL keywords (anywhere in the product name)
     return products.filter((product) =>
-      product.name.toLowerCase().startsWith(searchTerm.toLowerCase())
+      keywords.every((keyword) => product.name.toLowerCase().includes(keyword))
     )
   }, [products, searchTerm])
 

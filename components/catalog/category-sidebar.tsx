@@ -25,6 +25,15 @@ export function CategorySidebar({
     <div className="bg-card/50 border border-foreground/15 rounded-lg p-4">
       <h2 className="text-lg font-semibold text-foreground mb-4">Categories</h2>
 
+      {/* Semua Button - View All Products */}
+      <button
+        onClick={() => onSelectSubcategory(null)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left rounded-lg hover:bg-foreground/10 transition-colors text-foreground text-sm font-medium mb-4 border border-primary/30 bg-primary/5"
+        aria-label="View all products"
+      >
+        <span className="font-semibold">Semua</span>
+      </button>
+
       <div className="space-y-2">
         {categories.map((category) => (
           <div key={category.name}>
