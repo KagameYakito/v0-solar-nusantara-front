@@ -78,7 +78,7 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
         </div>
 
         {/* CTA Buttons */}
-        <div className as="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
           {isLoggedIn ? (
             <Link href="/catalog">
               <Button
@@ -105,8 +105,8 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
             disabled={!isLoggedIn}
             variant="outline"
             className={`rounded-lg text-base font-semibold ${isLoggedIn
-                ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
-                : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
+              ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
+              : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
               }`}
             onClick={!isLoggedIn ? handleRestrictedClick : undefined}
           >
