@@ -1,23 +1,46 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Search, Zap } from 'lucide-react'
+import { ArrowRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export function Hero() {
-  return (
-    <section
-      id="home"
-      className="relative min-h-screen flex items-center justify-center pt-32 px-4 pb-12"
-    >
-      <div className="max-w-5xl mx-auto text-center w-full">
-        {/* Badge */}
-        <div className="inline-flex items-center space-x-2 mb-8 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
-          <Zap className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold text-primary">
-            Enterprise Solar Solutions
-          </span>
-        </div>
+interface HeroProps {
+  isLoggedIn?: boolean
+}
+
+export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(initialIsLoggedIn ?? false)
+
+  // Listen for localStorage changes to sync login state
+  useEffect(() => {
+    const syncLoginState = () => {
+      const loggedIn = localStorage.getItem('isLoggedIn') === 'true'
+      setIsLoggedIn(loggedIn)
+    }
+
+    // Initial sync
+    syncLoginState()
+
+    // Listen to storage changes (from other tabs/windows)
+    window.addEventListener('storage', syncLoginState)
+
+    // Also check periodically in case the navbar updated without storage event
+    const interval = setInterval(syncLoginState, 500)
+
+    return () => {
+      window.removeEventListener('storage', syncLoginState)
+      clearInterval(interval)
+    }
+  }, [])
+
+  const handleRestrictedClick = () => {
+    if (!isLoggedIn) {
+      setShowLoginPrompt(true)
+      setTimeout(() => setShowLoginPrompt(false), 3000)
+    }
+  }
 
         {/* Main Headline */}
         <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
@@ -55,23 +78,48 @@ export function Hero() {
 
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <Link href="/catalog">
+          {isLoggedIn ? (
+            <Link href="/catalog">
+              <Button
+                size="lg"
+                className="bg-primary hover:bg-primary/90 text-white rounded-lg text-base font-semibold px-8"
+              >
+                View Products
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          ) : (
             <Button
               size="lg"
-              className="bg-primary hover:bg-primary/90 text-white rounded-lg text-base font-semibold px-8"
+              disabled
+              className="bg-foreground/20 text-foreground/50 cursor-not-allowed rounded-lg text-base font-semibold px-8"
+              onClick={handleRestrictedClick}
             >
               View Products
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-          </Link>
+          )}
           <Button
             size="lg"
+            disabled={!isLoggedIn}
             variant="outline"
-            className="border-foreground/30 hover:bg-foreground/5 rounded-lg text-base font-semibold bg-transparent"
+            className={`rounded-lg text-base font-semibold ${
+              isLoggedIn
+                ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
+                : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
+            }`}
+            onClick={!isLoggedIn ? handleRestrictedClick : undefined}
           >
             Request for Quotation
           </Button>
         </div>
+
+        {/* Login Required Popup */}
+        {showLoginPrompt && (
+          <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-destructive/90 text-white px-6 py-3 rounded-lg shadow-lg z-40 animate-pulse">
+            Please log in first!
+          </div>
+        )}
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">

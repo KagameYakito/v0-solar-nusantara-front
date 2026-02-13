@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, LogOut } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, LogOut, Box } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
 
@@ -37,8 +37,13 @@ export function Navbar() {
   }
 
   const handleLoginSubmit = (email: string, password: string) => {
-    // Simulate login - always show error as per requirements
-    // In real app, this would call an API
+    // Accept any credentials and log user in (dummy mode)
+    setUserEmail(email)
+    setIsLoggedIn(true)
+    setIsLoginModalOpen(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('isLoggedIn', 'true')
+    }
   }
 
   const handleRegisterSubmit = (data: RegistrationData) => {
@@ -46,6 +51,9 @@ export function Navbar() {
     setUserEmail(data.email)
     setIsLoggedIn(true)
     setIsRegisterModalOpen(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('isLoggedIn', 'true')
+    }
   }
 
   const handleSignOut = () => {
@@ -53,6 +61,9 @@ export function Navbar() {
     setUserEmail('')
     setIsLoginModalOpen(false)
     setIsRegisterModalOpen(false)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('isLoggedIn', 'false')
+    }
   }
 
   const maskEmail = (email: string) => {
@@ -122,10 +133,11 @@ export function Navbar() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setIsRegisterModalOpen(true)}
-                  className="bg-primary hover:bg-primary/90 text-white rounded-full"
+                  disabled
+                  className="text-foreground/50 hover:text-foreground/70 cursor-not-allowed"
                 >
-                  Register
+                  <Box className="h-4 w-4 mr-2" />
+                  Dashboard
                 </Button>
               </>
             ) : (
@@ -135,9 +147,16 @@ export function Navbar() {
                 </span>
                 <Button
                   size="sm"
+                  className="bg-primary hover:bg-primary/90 text-white rounded-lg"
+                >
+                  <Box className="h-4 w-4 mr-2" />
+                  Dashboard
+                </Button>
+                <Button
+                  size="sm"
                   onClick={handleSignOut}
                   variant="outline"
-                  className="border-primary text-primary hover:bg-primary/10 rounded-full bg-transparent"
+                  className="border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground"
                 >
                   Sign Out
                 </Button>
@@ -185,52 +204,63 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <div className="px-4 pt-4 flex space-x-2">
+            <div className="px-4 pt-4 space-y-2">
               {!isLoggedIn ? (
                 <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsLoginModalOpen(true)
-                      setIsOpen(false)
-                    }}
-                    className="flex-1 text-foreground/80"
-                  >
-                    Log In
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setIsRegisterModalOpen(true)
-                      setIsOpen(false)
-                    }}
-                    className="flex-1 bg-primary text-white"
-                  >
-                    Register
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsLoginModalOpen(true)
+                        setIsOpen(false)
+                      }}
+                      className="flex-1 text-foreground/80"
+                    >
+                      Log In
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled
+                      className="flex-1 text-foreground/50 cursor-not-allowed"
+                    >
+                      <Box className="h-4 w-4 mr-1" />
+                      Dashboard
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled
-                    className="flex-1 text-foreground/60 cursor-default"
-                  >
-                    {maskEmail(userEmail)}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      handleSignOut()
-                      setIsOpen(false)
-                    }}
-                    variant="outline"
-                    className="flex-1 border-primary text-primary"
-                  >
-                    Sign Out
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled
+                      className="flex-1 text-foreground/60 cursor-default text-xs"
+                    >
+                      {maskEmail(userEmail)}
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-primary hover:bg-primary/90 text-white text-xs"
+                    >
+                      <Box className="h-4 w-4 mr-1" />
+                      Dashboard
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        handleSignOut()
+                        setIsOpen(false)
+                      }}
+                      variant="outline"
+                      className="flex-1 border-foreground/30 text-foreground"
+                    >
+                      Sign Out
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
