@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ProductCard } from './product-card'
+import { ProductDetailModal } from './product-detail-modal'
 import { Button } from '@/components/ui/button'
 import type { Product } from '@/data/categories'
 
@@ -16,6 +17,7 @@ const ITEMS_PER_PAGE = 28 // 4 columns × 7 rows
 
 export function ProductGrid({ products, searchTerm, onSearchChange }: ProductGridProps) {
   const [currentPage, setCurrentPage] = useState(1)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
 
   // Filter products based on search term (multi-keyword, case-insensitive, order-insensitive)
   const filteredProducts = useMemo(() => {
@@ -82,7 +84,11 @@ export function ProductGrid({ products, searchTerm, onSearchChange }: ProductGri
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {paginatedProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                onSelectProduct={setSelectedProduct}
+              />
             ))}
           </div>
 
@@ -167,6 +173,12 @@ export function ProductGrid({ products, searchTerm, onSearchChange }: ProductGri
           )}
         </>
       )}
+
+      {/* Product Detail Modal */}
+      <ProductDetailModal
+        product={selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+      />
     </div>
   )
 }
