@@ -13,20 +13,15 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(initialIsLoggedIn ?? false)
 
-  // Listen for localStorage changes to sync login state
+  // Sync login state from localStorage
   useEffect(() => {
     const syncLoginState = () => {
       const loggedIn = localStorage.getItem('isLoggedIn') === 'true'
       setIsLoggedIn(loggedIn)
     }
 
-    // Initial sync
     syncLoginState()
-
-    // Listen to storage changes (from other tabs/windows)
     window.addEventListener('storage', syncLoginState)
-
-    // Also check periodically in case the navbar updated without storage event
     const interval = setInterval(syncLoginState, 500)
 
     return () => {
@@ -42,6 +37,12 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
     }
   }
 
+  return (
+    <section
+      id="home"
+      className="relative min-h-screen flex items-center justify-center pt-32 px-4 pb-12"
+    >
+      <div className="max-w-5xl mx-auto text-center w-full">
         {/* Main Headline */}
         <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
           <span className="block text-foreground">Powering Indonesia's</span>
@@ -53,7 +54,7 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
           Enterprise-grade solar energy solutions designed for businesses. Reduce operational costs, maximize energy efficiency, and accelerate your sustainable growth.
         </p>
 
-        {/* Search Bar - Prominently Below Headline */}
+        {/* Search Bar */}
         <div className="mb-12 max-w-2xl mx-auto">
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-primary to-secondary rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition duration-300" />
@@ -77,7 +78,7 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+        <div className as="flex flex-col sm:flex-row gap-4 justify-center mb-16">
           {isLoggedIn ? (
             <Link href="/catalog">
               <Button
@@ -103,11 +104,10 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
             size="lg"
             disabled={!isLoggedIn}
             variant="outline"
-            className={`rounded-lg text-base font-semibold ${
-              isLoggedIn
+            className={`rounded-lg text-base font-semibold ${isLoggedIn
                 ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
                 : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
-            }`}
+              }`}
             onClick={!isLoggedIn ? handleRestrictedClick : undefined}
           >
             Request for Quotation
