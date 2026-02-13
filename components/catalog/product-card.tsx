@@ -9,7 +9,10 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onSelectProduct }: ProductCardProps) {
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | undefined | null) => {
+    if (price == null || typeof price !== 'number') {
+      return 'Rp. —'
+    }
     return price.toLocaleString('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -41,7 +44,7 @@ export function ProductCard({ product, onSelectProduct }: ProductCardProps) {
         </h3>
 
         {/* Price Display */}
-        {product.discountedPrice ? (
+        {product.discountedPrice != null ? (
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs text-foreground/50 line-through">
               {formatPrice(product.price)}
