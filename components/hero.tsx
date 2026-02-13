@@ -5,15 +5,11 @@ import Link from 'next/link'
 import { ArrowRight, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-interface HeroProps {
-  isLoggedIn?: boolean
-}
-
-export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
+export function Hero() {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(initialIsLoggedIn ?? false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // Sync login state from localStorage
+  // Sync login state from localStorage after mount
   useEffect(() => {
     const syncLoginState = () => {
       const loggedIn = localStorage.getItem('isLoggedIn') === 'true'
@@ -105,8 +101,8 @@ export function Hero({ isLoggedIn: initialIsLoggedIn }: HeroProps) {
             disabled={!isLoggedIn}
             variant="outline"
             className={`rounded-lg text-base font-semibold ${isLoggedIn
-              ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
-              : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
+                ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
+                : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
               }`}
             onClick={!isLoggedIn ? handleRestrictedClick : undefined}
           >
