@@ -1,36 +1,67 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { ArrowRight, Search } from 'lucide-react'
+import { useRouter } from 'next/navigation' // 1. Import Router untuk navigasi manual
+import { ArrowRight, Search, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/utils/supabaseClient'
 
 export function Hero() {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter() // 2. Inisialisasi Router
 
-  // Sync login state from localStorage after mount
+  // Sinkronisasi Status Login dengan Supabase Auth
   useEffect(() => {
-    const syncLoginState = () => {
-      const loggedIn = localStorage.getItem('isLoggedIn') === 'true'
-      setIsLoggedIn(loggedIn)
-    }
+    // Cek session saat pertama kali load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session)
+      setLoading(false)
+    })
 
-    syncLoginState()
-    window.addEventListener('storage', syncLoginState)
-    const interval = setInterval(syncLoginState, 500)
+    // Dengarkan perubahan auth real-time (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session)
+      setLoading(false)
+    })
 
-    return () => {
-      window.removeEventListener('storage', syncLoginState)
-      clearInterval(interval)
-    }
+    return () => subscription.unsubscribe()
   }, [])
 
-  const handleRestrictedClick = () => {
-    if (!isLoggedIn) {
-      setShowLoginPrompt(true)
-      setTimeout(() => setShowLoginPrompt(false), 3000)
+  // 3. FUNGSI PENJAGA GERBANG (GATEKEEPER)
+  // Fungsi ini mengecek sesi LANGSUNG ke server setiap kali tombol diklik
+  const handleViewProductsClick = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    console.log("🔴 TOMBOL DIKLIK! Starting check...") // <--- TAMBAHKAN INI
+    
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        console.error("❌ Error getting session:", error)
+      }
+
+      if (!session) {
+        console.log("⛔ NO SESSION. Access Denied.")
+        setShowLoginPrompt(true)
+        setTimeout(() => setShowLoginPrompt(false), 3000)
+      } else {
+        console.log("✅ SESSION VALID. Redirecting...")
+        router.push('/catalog')
+      }
+    } catch (err) {
+      console.error("💥 CRITICAL ERROR IN CLICK HANDLER:", err)
     }
+  }
+
+  // Tampilkan loading spinner jika masih cek session
+  if (loading) {
+    return (
+      <section className="relative min-h-screen flex items-center justify-center pt-32 px-4 pb-12">
+        <div className="text-primary animate-pulse font-bold text-xl">Checking Access...</div>
+      </section>
+    )
   }
 
   return (
@@ -75,45 +106,48 @@ export function Hero() {
 
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          {isLoggedIn ? (
-            <Link href="/catalog">
-              <Button
-                size="lg"
-                className="bg-primary hover:bg-primary/90 text-white rounded-lg text-base font-semibold px-8"
-              >
-                View Products
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-          ) : (
-            <Button
-              size="lg"
-              disabled
-              className="bg-foreground/20 text-foreground/50 cursor-not-allowed rounded-lg text-base font-semibold px-8"
-              onClick={handleRestrictedClick}
-            >
-              View Products
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          )}
+          
+          {/* TOMBOL VIEW PRODUCTS (VERSI AMAN & DIPERKERAS) */}
+          {/* Menggunakan <button> biasa agar bisa kontrol penuh event onClick */}
+          <button
+            onClick={handleViewProductsClick}
+            // HAPUS: disabled={!isLoggedIn}
+            // GANTI CLASS: Hapus logika kondisi, paksa selalu biru (bg-primary)
+            className="inline-flex items-center justify-center rounded-lg text-base font-semibold px-8 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 hover:scale-105 transition-all cursor-pointer"
+          >
+            View Products
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </button>
+
+          {/* TOMBOL RFQ */}
           <Button
             size="lg"
             disabled={!isLoggedIn}
             variant="outline"
-            className={`rounded-lg text-base font-semibold ${isLoggedIn
-                ? 'border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground'
-                : 'border-foreground/15 bg-transparent text-foreground/50 cursor-not-allowed'
-              }`}
-            onClick={!isLoggedIn ? handleRestrictedClick : undefined}
+            className={`rounded-lg text-base font-semibold transition-all ${
+              isLoggedIn
+                ? 'border-primary/50 text-primary hover:bg-primary/10 hover:scale-105'
+                : 'border-foreground/10 bg-transparent text-foreground/40 cursor-not-allowed'
+            }`}
+            onClick={() => {
+              // Logika keamanan serupa untuk tombol RFQ
+              if (!isLoggedIn) {
+                setShowLoginPrompt(true)
+                setTimeout(() => setShowLoginPrompt(false), 3000)
+              } else {
+                router.push('/dashboard') // Atau halaman RFQ lainnya
+              }
+            }}
           >
             Request for Quotation
           </Button>
         </div>
 
-        {/* Login Required Popup */}
+        {/* POPUP PERINGATAN (SATPAM BERBICARA) */}
         {showLoginPrompt && (
-          <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-destructive/90 text-white px-6 py-3 rounded-lg shadow-lg z-40 animate-pulse">
-            Please log in first!
+          <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-red-600/90 backdrop-blur-sm text-white px-8 py-4 rounded-xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-3 border border-red-400/30">
+            <Lock className="h-6 w-6" />
+            <span className="font-bold">Access Denied: Session Expired or Not Logged In!</span>
           </div>
         )}
 

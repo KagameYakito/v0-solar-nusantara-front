@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Menu, X, Moon, Sun, Zap, LogOut, Box } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
+import { supabase } from '@/utils/supabaseClient'
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -23,6 +24,29 @@ export function Navbar() {
     setIsDark(isDarkMode)
   }, [])
 
+  useEffect(() => {
+    // Cek session saat pertama kali load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setIsLoggedIn(true)
+        setUserEmail(session.user.email || '')
+      }
+    })
+
+    // Listen perubahan auth (login/logout real-time)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setIsLoggedIn(true)
+        setUserEmail(session.user.email || '')
+      } else {
+        setIsLoggedIn(false)
+        setUserEmail('')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   const toggleTheme = () => {
     const newDarkMode = !isDark
     setIsDark(newDarkMode)
@@ -36,14 +60,20 @@ export function Navbar() {
     }
   }
 
-  const handleLoginSubmit = (email: string, password: string) => {
-    // Accept any credentials and log user in (dummy mode)
-    setUserEmail(email)
-    setIsLoggedIn(true)
-    setIsLoginModalOpen(false)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('isLoggedIn', 'true')
+  const handleLoginSubmit = async () => {
+    // Langsung panggil Google OAuth, tidak perlu input email/password manual lagi
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`, // Setelah login, kembali ke Home
+      },
+    })
+
+    if (error) {
+      alert('Login failed: ' + error.message)
     }
+    // Jika sukses, user akan diarahkan ke halaman Google Login otomatis
+    // State isLoggedIn akan diupdate setelah redirect kembali (perlu useEffect listener session)
   }
 
   const handleRegisterSubmit = (data: RegistrationData) => {
@@ -56,14 +86,23 @@ export function Navbar() {
     }
   }
 
-  const handleSignOut = () => {
+    const handleSignOut = async () => {
+    // 1. PENTING: Panggil signOut dari Supabase untuk menghapus cookie sesi
+    await supabase.auth.signOut()
+    
+    // 2. Baru update state lokal UI
     setIsLoggedIn(false)
     setUserEmail('')
     setIsLoginModalOpen(false)
     setIsRegisterModalOpen(false)
+    
+    // 3. Bersihkan localStorage (opsional, tapi bagus untuk kerapian)
     if (typeof window !== 'undefined') {
-      localStorage.setItem('isLoggedIn', 'false')
+      localStorage.removeItem('isLoggedIn')
     }
+
+    // 4. Paksa refresh halaman agar semua state reset total dan navbar ter-update
+    window.location.href = '/'
   }
 
   const maskEmail = (email: string) => {
@@ -126,7 +165,7 @@ export function Navbar() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsLoginModalOpen(true)}
+                  onClick={handleLoginSubmit} // Langsung panggil fungsi Google Login
                   className="text-foreground/80 hover:text-foreground"
                 >
                   Log In
@@ -212,8 +251,8 @@ export function Navbar() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        setIsLoginModalOpen(true)
-                        setIsOpen(false)
+                        handleLoginSubmit() // Panggil fungsi login
+                        setIsOpen(false)    // Tutup menu mobile
                       }}
                       className="flex-1 text-foreground/80"
                     >

@@ -1,20 +1,65 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CategorySidebar } from '@/components/catalog/category-sidebar'
 import { ProductGrid } from '@/components/catalog/product-grid'
 import { categoriesData } from '@/data/categories'
+import { supabase } from '@/utils/supabaseClient'
 
 export default function CatalogPage() {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  
+  // State untuk keamanan
+  const [loading, setLoading] = useState(true)
+  const [isAuthorized, setIsAuthorized] = useState(false)
+  const router = useRouter()
 
-  // Get products for selected subcategory or all products
+  // --- SATPAM LOKAL (CLIENT-SIDE GUARD) ---
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Cek sesi langsung ke Supabase
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        // TIDAK ADA SESI? USIR PAKSA!
+        console.warn("⛔ UNAUTHORIZED ACCESS ATTEMPT BLOCKED.")
+        alert("Access Denied: Please log in to view the catalog.")
+        router.push('/')
+      } else {
+        // ADA SESI? SILAKAN MASUK.
+        console.log("✅ ACCESS GRANTED.")
+        setIsAuthorized(true)
+        setLoading(false)
+      }
+    }
+
+    checkAuth()
+  }, [router])
+
+  // TAMPILAN SAAT CEK SESI (LOADING)
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0f172a] text-white">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-lg font-medium">Verifying Access...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // JIKA TIDAK AUTHORIZED (JAGA-JAGA), JANGAN RENDER APA-APA
+  if (!isAuthorized) {
+    return null
+  }
+
+  // --- KONTEN HALAMAN (HANYA MUNCUL JIKA LOGIN) ---
   const getSelectedProducts = () => {
-    // Return ALL products when no subcategory selected
     if (!selectedSubcategory) {
       const allProducts: any[] = []
       categoriesData.forEach((category) => {
@@ -24,8 +69,6 @@ export default function CatalogPage() {
       })
       return allProducts
     }
-
-    // Existing subcategory logic
     for (const category of categoriesData) {
       for (const subcategory of category.subcategories) {
         if (subcategory.name === selectedSubcategory) {
@@ -41,7 +84,10 @@ export default function CatalogPage() {
       {/* Header */}
       <header className="border-b border-foreground/15 bg-card/50 backdrop-blur p-4 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">Product Catalog</h1>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Lock className="h-5 w-5 text-primary" />
+            Exclusive Product Catalog
+          </h1>
           <Link href="/">
             <Button
               variant="outline"
@@ -57,7 +103,6 @@ export default function CatalogPage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto p-4">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar - 25% width on desktop */}
           <div className="lg:col-span-1">
             <CategorySidebar
               categories={categoriesData}
@@ -65,8 +110,6 @@ export default function CatalogPage() {
               onSelectSubcategory={setSelectedSubcategory}
             />
           </div>
-
-          {/* Product Grid - 75% width on desktop */}
           <div className="lg:col-span-3">
             <ProductGrid
               products={getSelectedProducts()}
