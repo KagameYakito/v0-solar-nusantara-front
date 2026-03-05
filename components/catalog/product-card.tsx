@@ -1,7 +1,8 @@
+// components/catalog/product-card.tsx
 'use client'
 
 import Image from 'next/image'
-import type { Product } from '@/data/categories'
+import type { Product } from '@/hooks/useProducts'
 
 interface ProductCardProps {
   product: Product
@@ -23,13 +24,13 @@ export function ProductCard({ product, onSelectProduct }: ProductCardProps) {
 
   return (
     <div
-      className="bg-card/50 border border-foreground/15 rounded-lg overflow-hidden transition-all duration-200 hover:-translate-y-1 cursor-pointer"
       onClick={() => onSelectProduct(product)}
+      className="bg-card/50 border border-foreground/15 rounded-lg overflow-hidden transition-all duration-200 hover:-translate-y-1 cursor-pointer flex flex-col h-full"
     >
-      {/* Product Image */}
-      <div className="aspect-square bg-background/50 border-b border-foreground/15 flex items-center justify-center relative overflow-hidden">
+      {/* Gambar dengan rasio tetap */}
+      <div className="aspect-square bg-background/50 border-b border-foreground/15 relative overflow-hidden">
         <Image
-          src={product.image || '/placeholder.svg'}
+          src={product.image_url || '/placeholder.svg'}
           alt={`${product.name} - Solar Nusantara`}
           fill
           className="object-cover"
@@ -37,34 +38,19 @@ export function ProductCard({ product, onSelectProduct }: ProductCardProps) {
         />
       </div>
 
-      {/* Product Info */}
-      <div className="p-4">
-        <h3 className="text-sm font-medium text-foreground line-clamp-2">
+      {/* Konten Produk */}
+      <div className="p-3 flex flex-col flex-1">
+        <h3 className="text-sm font-medium text-foreground line-clamp-2 mb-1">
           {product.name}
         </h3>
 
-        {/* Price Display */}
-        {product.discountedPrice != null ? (
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs text-foreground/50 line-through">
-              {formatPrice(product.price)}
-            </span>
-            <span className="text-sm font-semibold text-primary">
-              {formatPrice(product.discountedPrice)}
-            </span>
-          </div>
-        ) : (
-          <div className="text-sm font-semibold text-primary mt-2">
-            {formatPrice(product.price)}
-          </div>
-        )}
+        <div className="text-sm font-semibold text-primary mt-auto">
+          {formatPrice(product.price)}
+        </div>
 
-        {/* Description */}
-        {product.description && (
-          <p className="text-xs text-foreground/60 mt-2 line-clamp-2">
-            {product.description}
-          </p>
-        )}
+        <p className="text-xs text-foreground/60 mt-1 line-clamp-1">
+          {product.stock} Unit Stok
+        </p>
       </div>
     </div>
   )

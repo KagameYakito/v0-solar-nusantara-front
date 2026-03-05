@@ -1,74 +1,58 @@
+// components/catalog/category-sidebar.tsx
 'use client'
 
-import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
-import type { Category } from '@/data/categories'
+import type { CategoryCount } from '@/hooks/useProducts'
 
 interface CategorySidebarProps {
-  categories: Category[]
-  selectedSubcategory: string | null
-  onSelectSubcategory: (subcategory: string) => void
+  categories: CategoryCount[] 
+  selectedCategory: string | null
+  onSelectCategory: (category: string | null) => void
+  totalCount?: number // <--- TAMBAHKAN PROP INI (untuk menerima angka total dari database)
 }
 
 export function CategorySidebar({
   categories,
-  selectedSubcategory,
-  onSelectSubcategory,
+  selectedCategory,
+  onSelectCategory,
+  totalCount, // <--- TERIMA PROP INI
 }: CategorySidebarProps) {
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
-
-  const toggleCategory = (categoryName: string) => {
-    setExpandedCategory(expandedCategory === categoryName ? null : categoryName)
-  }
 
   return (
     <div className="bg-card/50 border border-foreground/15 rounded-lg p-4">
-      <h2 className="text-lg font-semibold text-foreground mb-4">Categories</h2>
+      <h2 className="text-lg font-semibold text-foreground mb-4">Kategori</h2>
 
-      {/* Semua Button - View All Products */}
+      {/* Tombol Semua */}
       <button
-        onClick={() => onSelectSubcategory(null)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left rounded-lg hover:bg-foreground/10 transition-colors text-foreground text-sm font-medium mb-4 border border-primary/30 bg-primary/5"
-        aria-label="View all products"
+        onClick={() => onSelectCategory(null)}
+        className={`w-full flex items-center justify-between px-3 py-2 text-left rounded-lg transition-colors text-sm font-medium mb-4 ${
+          selectedCategory === null
+            ? 'border border-primary/30 bg-primary/5 text-foreground'
+            : 'hover:bg-foreground/10 text-foreground/70'
+        }`}
       >
-        <span className="font-semibold">Semua</span>
+        <span>Semua</span>
+        <span className="text-xs bg-foreground/10 px-2 py-0.5 rounded">
+          {/* ✅ LOGIKA BARU: Pakai totalCount jika ada, jika tidak fallback ke 0 */}
+          {totalCount ?? 0}
+        </span>
       </button>
 
       <div className="space-y-2">
         {categories.map((category) => (
-          <div key={category.name}>
-            {/* Main Category Button */}
-            <button
-              onClick={() => toggleCategory(category.name)}
-              className="w-full flex items-center justify-between px-3 py-2 text-left rounded-lg hover:bg-foreground/10 transition-colors text-foreground text-sm font-medium"
-            >
-              <span>{category.name}</span>
-              <ChevronDown
-                className={`h-4 w-4 transition-transform duration-200 ${
-                  expandedCategory === category.name ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-
-            {/* Subcategories */}
-            {expandedCategory === category.name && (
-              <div className="mt-2 ml-4 space-y-1 border-l border-foreground/10 pl-3">
-                {category.subcategories.map((subcategory) => (
-                  <button
-                    key={subcategory.name}
-                    onClick={() => onSelectSubcategory(subcategory.name)}
-                    className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-colors ${
-                      selectedSubcategory === subcategory.name
-                        ? 'bg-primary/20 text-primary border border-primary/30'
-                        : 'text-foreground/70 hover:bg-foreground/10 hover:text-foreground'
-                    }`}
-                  >
-                    {subcategory.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            key={category.name}
+            onClick={() => onSelectCategory(category.name)}
+            className={`w-full flex items-center justify-between px-3 py-2 text-left rounded-lg transition-colors text-sm ${
+              selectedCategory === category.name
+                ? 'bg-primary/20 text-primary border border-primary/30 font-medium'
+                : 'text-foreground/70 hover:bg-foreground/10 hover:text-foreground'
+            }`}
+          >
+            <span>{category.name}</span>
+            <span className="text-xs bg-foreground/10 px-2 py-0.5 rounded">
+              {category.count}
+            </span>
+          </button>
         ))}
       </div>
     </div>

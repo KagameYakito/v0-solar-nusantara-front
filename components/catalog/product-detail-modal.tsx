@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Product } from '@/data/categories'
+import type { Product } from '@/hooks/useProducts'
 
 interface ProductDetailModalProps {
   product: Product | null
@@ -24,67 +24,49 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      {/* Backdrop - close on click */}
       <div
         className="absolute inset-0"
         onClick={onClose}
         role="presentation"
       />
 
-      {/* Modal */}
       <div className="bg-card rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative z-10">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 hover:bg-foreground/10 rounded-lg transition-colors z-10"
-          aria-label="Close modal"
+          aria-label="Tutup"
         >
           <X className="h-5 w-5 text-foreground/60" />
         </button>
 
-        {/* Product Image */}
         <div className="aspect-video bg-background/50 border-b border-foreground/15 relative overflow-hidden">
           <Image
-            src={product.image || '/placeholder.svg'}
-            alt={`${product.name} - Solar Nusantara`}
+            src={product.image_url || '/placeholder.svg'}
+            alt={`${product.name}`}
             fill
             className="object-cover"
             unoptimized
           />
         </div>
 
-        {/* Modal Content */}
         <div className="p-6 space-y-4">
-          {/* Product Name */}
           <h2 className="text-2xl font-bold text-foreground">{product.name}</h2>
 
-          {/* Price Section */}
-          <div>
-            {product.discountedPrice ? (
-              <div className="flex items-center gap-3">
-                <span className="text-lg text-foreground/50 line-through">
-                  {formatPrice(product.price)}
-                </span>
-                <span className="text-2xl font-bold text-primary">
-                  {formatPrice(product.discountedPrice)}
-                </span>
-              </div>
-            ) : (
-              <div className="text-2xl font-bold text-primary">
-                {formatPrice(product.price)}
-              </div>
-            )}
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-foreground/60">Harga:</span>
+            <span className="text-2xl font-bold text-primary">
+              {formatPrice(product.price)}
+            </span>
           </div>
 
-          {/* Description */}
-          {product.description && (
-            <p className="text-foreground/80 text-base leading-relaxed">
-              {product.description}
-            </p>
-          )}
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-foreground/60">Stok Tersedia:</span>
+            <span className="text-lg font-semibold text-foreground">
+              {product.stock} Unit
+            </span>
+          </div>
 
-          {/* Specifications */}
-          {product.specifications && (
+          {Object.keys(product.specifications).length > 0 && (
             <div className="mt-6 pt-6 border-t border-foreground/15">
               <h3 className="text-sm font-semibold text-foreground mb-3">
                 Spesifikasi:
@@ -96,14 +78,13 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
                     className="flex justify-between py-2 border-b border-foreground/10 last:border-0"
                   >
                     <span className="font-medium">{key}</span>
-                    <span className="text-foreground/60">{value}</span>
+                    <span className="text-foreground/60 text-right">{value}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
             <Button
               className="flex-1 bg-primary hover:bg-primary/90 text-white rounded-lg font-semibold"
