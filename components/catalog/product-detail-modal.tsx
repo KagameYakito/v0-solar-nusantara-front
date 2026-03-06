@@ -52,10 +52,20 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         <div className="p-6 space-y-4">
           <h2 className="text-2xl font-bold text-foreground">{product.name}</h2>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-sm text-foreground/60">Harga:</span>
+          <div className="flex flex-col gap-1">
+            {/* Label Baru */}
+            <span className="text-sm text-foreground/60 font-medium">
+              Harga dimulai dari:
+            </span>
+            
+            {/* Harga Tetap Format Rupiah */}
             <span className="text-2xl font-bold text-primary">
               {formatPrice(product.price)}
+            </span>
+
+            {/* Disclaimer Penting (Perlindungan Bisnis) */}
+            <span className="text-[10px] text-foreground/40 italic leading-tight">
+              *Harga dapat berubah sesuai ketersediaan pasar. Hubungi kami untuk penawaran final.
             </span>
           </div>
 
