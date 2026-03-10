@@ -261,7 +261,6 @@ export default function SuperAdminDashboard() {
                           <option value="admin_logistik">Admin Logistik</option>
                           <option value="admin_sales">Admin Sales</option>
                           <option value="admin_data">Admin Data</option>
-                          <option value="super_admin">Super Admin</option>
                         </select>
                       </td>
                     </tr>
