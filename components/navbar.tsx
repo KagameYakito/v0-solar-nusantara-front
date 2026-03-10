@@ -2,18 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, LogOut, Box } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, LogOut, Box, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
 import { supabase } from '@/utils/supabaseClient'
+import { useRouter } from 'next/navigation' // Import Router
 
 export function Navbar() {
+  const router = useRouter() // Inisialisasi Router
   const [isOpen, setIsOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [userRole, setUserRole] = useState<string | null>(null) // State untuk Role
+  const [isLoadingRole, setIsLoadingRole] = useState(false) // State Loading Role
 
   useEffect(() => {
     // Set initial theme
@@ -26,26 +30,52 @@ export function Navbar() {
 
   useEffect(() => {
     // Cek session saat pertama kali load
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         setIsLoggedIn(true)
         setUserEmail(session.user.email || '')
+        await fetchUserRole(session.user.id) // Ambil role jika sudah login
       }
-    })
+    }
+    
+    checkSession()
 
     // Listen perubahan auth (login/logout real-time)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
         setIsLoggedIn(true)
         setUserEmail(session.user.email || '')
+        await fetchUserRole(session.user.id) // Ambil role saat login baru
       } else {
         setIsLoggedIn(false)
         setUserEmail('')
+        setUserRole(null) // Reset role saat logout
       }
     })
 
     return () => subscription.unsubscribe()
   }, [])
+
+  // Fungsi Baru: Mengambil Role User dari Database
+  const fetchUserRole = async (userId: string) => {
+    setIsLoadingRole(true)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+      
+      if (error) throw error
+      setUserRole(data?.role || 'user')
+    } catch (error) {
+      console.error("Gagal mengambil role user:", error)
+      setUserRole('user') // Fallback ke user biasa jika error
+    } finally {
+      setIsLoadingRole(false)
+    }
+  }
 
   const toggleTheme = () => {
     const newDarkMode = !isDark
@@ -61,23 +91,19 @@ export function Navbar() {
   }
 
   const handleLoginSubmit = async () => {
-    // Langsung panggil Google OAuth, tidak perlu input email/password manual lagi
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/`, // Setelah login, kembali ke Home
+        redirectTo: `${window.location.origin}/`, 
       },
     })
 
     if (error) {
       alert('Login failed: ' + error.message)
     }
-    // Jika sukses, user akan diarahkan ke halaman Google Login otomatis
-    // State isLoggedIn akan diupdate setelah redirect kembali (perlu useEffect listener session)
   }
 
   const handleRegisterSubmit = (data: RegistrationData) => {
-    // Auto-login after successful registration
     setUserEmail(data.email)
     setIsLoggedIn(true)
     setIsRegisterModalOpen(false)
@@ -86,24 +112,45 @@ export function Navbar() {
     }
   }
 
-    const handleSignOut = async () => {
-    // 1. PENTING: Panggil signOut dari Supabase untuk menghapus cookie sesi
+  const handleSignOut = async () => {
     await supabase.auth.signOut()
-    
-    // 2. Baru update state lokal UI
     setIsLoggedIn(false)
     setUserEmail('')
+    setUserRole(null)
     setIsLoginModalOpen(false)
     setIsRegisterModalOpen(false)
-    
-    // 3. Bersihkan localStorage (opsional, tapi bagus untuk kerapian)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('isLoggedIn')
     }
-
-    // 4. Paksa refresh halaman agar semua state reset total dan navbar ter-update
     window.location.href = '/'
   }
+
+  // FUNGSI PINTAR: SMART DASHBOARD REDIRECT
+  const handleDashboardClick = () => {
+    if (isLoadingRole || !userRole) return; // Cegah klik saat masih loading role
+
+    switch (userRole) {
+      case 'super_admin':
+        router.push('/dashboard/super-admin');
+        break;
+      case 'admin_sales':
+        // Nanti kita buat halaman ini
+        router.push('/dashboard/sales'); 
+        break;
+      case 'admin_logistik':
+        // Nanti kita buat halaman ini
+        router.push('/dashboard/logistik'); 
+        break;
+      case 'admin_data':
+        // Nanti kita buat halaman ini
+        router.push('/dashboard/data'); 
+        break;
+      default:
+        // Untuk user biasa, bisa arahkan ke profil atau home
+        router.push('/dashboard/user'); 
+        break;
+    }
+  };
 
   const maskEmail = (email: string) => {
     if (!email) return ''
@@ -165,7 +212,7 @@ export function Navbar() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleLoginSubmit} // Langsung panggil fungsi Google Login
+                  onClick={handleLoginSubmit}
                   className="text-foreground/80 hover:text-foreground"
                 >
                   Log In
@@ -184,13 +231,24 @@ export function Navbar() {
                 <span className="text-sm text-foreground/70 font-medium">
                   {maskEmail(userEmail)}
                 </span>
+                
+                {/* TOMBOL DASHBOARD PINTAR */}
                 <Button
                   size="sm"
-                  className="bg-primary hover:bg-primary/90 text-white rounded-lg"
+                  onClick={handleDashboardClick}
+                  disabled={isLoadingRole}
+                  className="bg-primary hover:bg-primary/90 text-white rounded-lg min-w-[120px]"
                 >
-                  <Box className="h-4 w-4 mr-2" />
-                  Dashboard
+                  {isLoadingRole ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Box className="h-4 w-4 mr-2" />
+                      Dashboard
+                    </>
+                  )}
                 </Button>
+
                 <Button
                   size="sm"
                   onClick={handleSignOut}
@@ -251,8 +309,8 @@ export function Navbar() {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        handleLoginSubmit() // Panggil fungsi login
-                        setIsOpen(false)    // Tutup menu mobile
+                        handleLoginSubmit()
+                        setIsOpen(false)
                       }}
                       className="flex-1 text-foreground/80"
                     >
@@ -281,12 +339,24 @@ export function Navbar() {
                     </Button>
                   </div>
                   <div className="flex gap-2">
+                    {/* TOMBOL DASHBOARD PINTAR (MOBILE) */}
                     <Button
                       size="sm"
+                      onClick={() => {
+                        handleDashboardClick()
+                        setIsOpen(false)
+                      }}
+                      disabled={isLoadingRole}
                       className="flex-1 bg-primary hover:bg-primary/90 text-white text-xs"
                     >
-                      <Box className="h-4 w-4 mr-1" />
-                      Dashboard
+                       {isLoadingRole ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <>
+                          <Box className="h-3 w-3 mr-1" />
+                          Dashboard
+                        </>
+                      )}
                     </Button>
                     <Button
                       size="sm"

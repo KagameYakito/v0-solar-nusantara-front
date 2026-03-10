@@ -32,7 +32,7 @@ export default function Home() {
         <Navbar />
 
         {/* Hero Section - Pass login state */}
-        <Hero isLoggedIn={loginState} />
+        <Hero />
 
         {/* Products Section */}
         <Products />
