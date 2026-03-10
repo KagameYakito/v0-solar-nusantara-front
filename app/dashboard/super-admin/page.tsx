@@ -68,6 +68,7 @@ export default function SuperAdminDashboard() {
         
         if (!isMounted) return
         
+        // JIKA TIDAK ADA SESSION: Langsung tendang ke login
         if (sessionResponse.error || !sessionResponse.data.session) {
           console.log("⚠️ Tidak ada session, redirect ke login")
           router.push('/auth/signin')
@@ -85,18 +86,21 @@ export default function SuperAdminDashboard() {
 
         if (!isMounted) return
 
+        // JIKA GAGAL AMBIL DATA PROFIL: Anggap user tidak punya akses, tendang ke home
         if (profileResponse.error) {
           console.error("❌ Error mengambil profile:", profileResponse.error)
-          alert("Error mengambil data profil pengguna.")
-          router.push('/')
+          // Jangan alert dulu biar gak nyangkut, langsung redirect aja
+          router.push('/') 
           return
         }
 
         const profile = profileResponse.data
 
+        // JIKA BUKAN SUPER ADMIN: Tendang ke home
         if (!profile || profile.role !== 'super_admin') {
           console.log("🚫 Akses Ditolak: Bukan Super Admin")
-          alert("Akses Ditolak! Halaman ini khusus Super Admin.")
+          // Opsional: Bisa kasih alert singkat sebelum redirect
+          // alert("Akses Ditolak! Halaman ini khusus Super Admin.")
           router.push('/')
           return
         }
@@ -109,10 +113,11 @@ export default function SuperAdminDashboard() {
         }
 
       } catch (err: any) {
+        // JIKA ADA ERROR TAK TERDUGA: Cegah loading selamanya dengan set error state
+        console.error("💥 Error sistem tak terduga:", err)
         if (isMounted) {
-          console.error("💥 Error sistem tak terduga:", err)
-          setError("Terjadi kesalahan sistem: " + err.message)
-          setLoading(false)
+            setError("Terjadi kesalahan koneksi. Silakan refresh halaman.")
+            setLoading(false) // Paksa berhenti loading
         }
       }
     }
