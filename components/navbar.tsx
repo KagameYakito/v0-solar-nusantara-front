@@ -141,29 +141,61 @@ export function Navbar() {
   }
 
   // FUNGSI PINTAR: SMART DASHBOARD REDIRECT
-  const handleDashboardClick = () => {
-    if (isLoadingRole || !userRole) return; // Cegah klik saat masih loading role
+  const handleDashboardClick = async () => {
+    // Cegah klik ganda jika sedang loading
+    if (isLoadingRole) return;
 
-    switch (userRole) {
-      case 'super_admin':
-        router.push('/dashboard/super-admin');
-        break;
-      case 'admin_sales':
-        // Nanti kita buat halaman ini
-        router.push('/dashboard/sales'); 
-        break;
-      case 'admin_logistik':
-        // Nanti kita buat halaman ini
-        router.push('/dashboard/logistik'); 
-        break;
-      case 'admin_data':
-        // Nanti kita buat halaman ini
-        router.push('/dashboard/data'); 
-        break;
-      default:
-        // Untuk user biasa, bisa arahkan ke profil atau home
-        router.push('/dashboard/user'); 
-        break;
+    setIsLoadingRole(true); // Tampilkan spinner di tombol
+
+    try {
+      // 1. Ambil session TERBARU langsung dari Supabase (bukan dari state lama yang mungkin expired)
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error || !session) {
+        // Jika session mati/error, langsung tendang ke login
+        window.location.href = '/auth/signin';
+        return;
+      }
+
+      // 2. Ambil role terbaru dari database berdasarkan session segar ini
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        // Jika gagal ambil profil, amanannya ke home
+        window.location.href = '/';
+        return;
+      }
+
+      const role = profile.role || 'user';
+
+      // 3. Redirect berdasarkan role segar
+      switch (role) {
+        case 'super_admin':
+          router.push('/dashboard/super-admin');
+          break;
+        case 'admin_sales':
+          router.push('/dashboard/sales');
+          break;
+        case 'admin_logistik':
+          router.push('/dashboard/logistik');
+          break;
+        case 'admin_data':
+          router.push('/dashboard/data');
+          break;
+        default:
+          router.push('/dashboard/user');
+          break;
+      }
+    } catch (err) {
+      console.error("Error redirecting dashboard:", err);
+      // Jika error apa pun, amanannya ke home
+      window.location.href = '/';
+    } finally {
+      setIsLoadingRole(false); // Matikan spinner
     }
   };
 
@@ -174,10 +206,8 @@ export function Navbar() {
   }
 
   const navLinks = [
-    { href: '#home', label: 'Home' },
     { href: '#products', label: 'Products' },
-    { href: '#solutions', label: 'Solutions' },
-    { href: '#about', label: 'About' },
+    { href: '#solutions', label: 'Auctions' },
     { href: '#contact', label: 'Contact' },
   ]
 
