@@ -58,75 +58,73 @@ export default function SuperAdminDashboard() {
   }, [])
 
   // Efek utama: Cek Auth & Load Data
-  useEffect(() => {
+    useEffect(() => {
     let isMounted = true
+    let timeoutId: NodeJS.Timeout | null = null
 
     const checkAuthAndLoad = async () => {
       try {
-        // 1. Cek Session
-        const sessionResponse = await supabase.auth.getSession()
-        
+        // Buat promise timeout 5 detik
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Session check timeout')), 5000)
+        })
+
+        // Race antara getSession dan timeout
+        const sessionResponse: any = await Promise.race([
+          supabase.auth.getSession(),
+          timeoutPromise
+        ])
+
+        if (timeoutId) clearTimeout(timeoutId)
         if (!isMounted) return
         
-        // JIKA TIDAK ADA SESSION: Langsung tendang ke login
+        // Jika session invalid/expired, HARD redirect ke login
         if (sessionResponse.error || !sessionResponse.data.session) {
-          console.log("⚠️ Tidak ada session, redirect ke login")
-          router.push('/auth/signin')
+          console.warn("⚠️ Session invalid/expired, hard redirect to login...")
+          window.location.href = '/auth/signin'
           return
         }
 
         const session = sessionResponse.data.session
 
-        // 2. Cek Role Super Admin
-        const profileResponse = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
+        const profileResponse = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
 
         if (!isMounted) return
 
-        // JIKA GAGAL AMBIL DATA PROFIL: Anggap user tidak punya akses, tendang ke home
         if (profileResponse.error) {
-          console.error("❌ Error mengambil profile:", profileResponse.error)
-          // Jangan alert dulu biar gak nyangkut, langsung redirect aja
-          router.push('/') 
+          console.error("❌ Profile fetch failed:", profileResponse.error)
+          window.location.href = '/'
           return
         }
 
         const profile = profileResponse.data
 
-        // JIKA BUKAN SUPER ADMIN: Tendang ke home
         if (!profile || profile.role !== 'super_admin') {
-          console.log("🚫 Akses Ditolak: Bukan Super Admin")
-          // Opsional: Bisa kasih alert singkat sebelum redirect
-          // alert("Akses Ditolak! Halaman ini khusus Super Admin.")
-          router.push('/')
+          console.warn("🚫 Access Denied: Not Super Admin")
+          window.location.href = '/'
           return
         }
 
-        // 3. Jika Oke, Set Authorized & Ambil Data
         if (isMounted) {
-          console.log("✅ Akses diberikan sebagai SUPER_ADMIN")
           setIsAuthorized(true)
           await fetchUsers()
         }
 
       } catch (err: any) {
-        // JIKA ADA ERROR TAK TERDUGA: Cegah loading selamanya dengan set error state
-        console.error("💥 Error sistem tak terduga:", err)
+        console.error("💥 Critical Auth Error:", err.message)
         if (isMounted) {
-            setError("Terjadi kesalahan koneksi. Silakan refresh halaman.")
-            setLoading(false) // Paksa berhenti loading
+          setLoading(false)
+          // Hard redirect ke login jika ada error kritis/timeout
+          window.location.href = '/auth/signin'
         }
       }
     }
 
     checkAuthAndLoad()
 
-    // Cleanup function
     return () => {
       isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [router, fetchUsers])
 

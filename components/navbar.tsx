@@ -112,17 +112,32 @@ export function Navbar() {
     }
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    setIsLoggedIn(false)
-    setUserEmail('')
-    setUserRole(null)
-    setIsLoginModalOpen(false)
-    setIsRegisterModalOpen(false)
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('isLoggedIn')
+    const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+    } catch (error) {
+      console.warn("Sign out error (mungkin sesi expired):", error)
+    } finally {
+      // Pastikan state lokal dibersihkan apapun yang terjadi
+      setIsLoggedIn(false)
+      setUserEmail('')
+      setUserRole(null)
+      setIsLoginModalOpen(false)
+      setIsRegisterModalOpen(false)
+      
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('isLoggedIn')
+        // Hapus manual token Supabase yang mungkin nyangkut (prefix 'sb-')
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('sb-')) {
+            localStorage.removeItem(key)
+          }
+        })
+      }
+
+      // Hard redirect untuk reset total state browser
+      window.location.href = '/'
     }
-    window.location.href = '/'
   }
 
   // FUNGSI PINTAR: SMART DASHBOARD REDIRECT
