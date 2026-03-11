@@ -28,6 +28,7 @@ export default function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAuthorized, setIsAuthorized] = useState(false)
+  const [isPageVisible, setIsPageVisible] = useState(true);
 
   // Fungsi untuk mengambil data user
   const fetchUsers = useCallback(async () => {
@@ -127,6 +128,27 @@ export default function SuperAdminDashboard() {
       if (timeoutId) clearTimeout(timeoutId)
     }
   }, [router, fetchUsers])
+
+    // Efek untuk menangani visibility change (tab switch)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsPageVisible(false);
+        console.log("Page hidden - pausing operations");
+      } else {
+        setIsPageVisible(true);
+        console.log("Page visible - resuming operations");
+        // Optional: Refresh data saat tab dibuka kembali
+        // fetchUsers(); 
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Fungsi Ganti Role
   const handleRoleChange = async (userId: string, newRole: string) => {

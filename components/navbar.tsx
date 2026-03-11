@@ -18,6 +18,8 @@ export function Navbar() {
   const [userEmail, setUserEmail] = useState('')
   const [userRole, setUserRole] = useState<string | null>(null) // State untuk Role
   const [isLoadingRole, setIsLoadingRole] = useState(false) // State Loading Role
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
+  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
 
   useEffect(() => {
     // Set initial theme
@@ -38,6 +40,29 @@ export function Navbar() {
         await fetchUserRole(session.user.id) // Ambil role jika sudah login
       }
     }
+
+      // Efek untuk menangani window focus/blur
+  useEffect(() => {
+    const handleFocus = () => {
+      setIsWindowFocused(true);
+      setLastActiveTime(Date.now());
+      // Jangan fetch ulang role saat focus kembali untuk menghindari konflik
+      console.log("Window focused - skipping auto refresh to prevent conflicts");
+    };
+
+    const handleBlur = () => {
+      setIsWindowFocused(false);
+      console.log("Window blurred");
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
     
     checkSession()
 
@@ -143,54 +168,65 @@ export function Navbar() {
   // FUNGSI PINTAR: SMART DASHBOARD REDIRECT
     const handleDashboardClick = async () => {
     try {
-      // Langsung ambil session fresh tanpa tergantung state
-      const { data: { session }, error } = await supabase.auth.getSession();
+      // 1. Ambil session fresh
+      const { data, error } = await supabase.auth.getSession();
       
-      // Jika tidak ada session atau error, langsung ke login
-      if (error || !session) {
+      // Cek jika ada error atau tidak ada session
+      if (error || !data?.session) {
         window.location.href = '/auth/signin';
         return;
       }
 
-      // Ambil role dari database
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
+      const session = data.session;
 
-      // Jika gagal ambil profile, ke home
-      if (profileError || !profile) {
+      // 2. Ambil role dari database dengan timeout manual (3 detik)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); 
+
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        clearTimeout(timeoutId);
+
+        // Jika gagal ambil profile, amanannya kembali ke home
+        if (profileError || !profileData) {
+          window.location.href = '/';
+          return;
+        }
+
+        const role = profileData.role || 'user';
+
+        // 3. Hard redirect berdasarkan role
+        switch (role) {
+          case 'super_admin':
+            window.location.href = '/dashboard/super-admin';
+            break;
+          case 'admin_sales':
+            window.location.href = '/dashboard/sales';
+            break;
+          case 'admin_logistik':
+            window.location.href = '/dashboard/logistik';
+            break;
+          case 'admin_data':
+            window.location.href = '/dashboard/data';
+            break;
+          default:
+            window.location.href = '/dashboard/user';
+            break;
+        }
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.error("Profile fetch failed:", fetchError);
         window.location.href = '/';
-        return;
-      }
-
-      const role = profile.role || 'user';
-
-      // Redirect berdasarkan role - gunakan window.location untuk hard redirect
-      switch (role) {
-        case 'super_admin':
-          window.location.href = '/dashboard/super-admin';
-          break;
-        case 'admin_sales':
-          window.location.href = '/dashboard/sales';
-          break;
-        case 'admin_logistik':
-          window.location.href = '/dashboard/logistik';
-          break;
-        case 'admin_data':
-          window.location.href = '/dashboard/data';
-          break;
-        default:
-          window.location.href = '/dashboard/user';
-          break;
       }
     } catch (err) {
       console.error("Dashboard click error:", err);
-      // Fallback ke home jika ada error tak terduga
       window.location.href = '/';
     }
-    // Tidak perlu setIsLoadingRole(false) karena kita tidak pakai spinner lagi
   };
 
   const maskEmail = (email: string) => {
