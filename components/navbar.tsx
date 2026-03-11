@@ -141,62 +141,56 @@ export function Navbar() {
   }
 
   // FUNGSI PINTAR: SMART DASHBOARD REDIRECT
-  const handleDashboardClick = async () => {
-    // Cegah klik ganda jika sedang loading
-    if (isLoadingRole) return;
-
-    setIsLoadingRole(true); // Tampilkan spinner di tombol
-
+    const handleDashboardClick = async () => {
     try {
-      // 1. Ambil session TERBARU langsung dari Supabase (bukan dari state lama yang mungkin expired)
+      // Langsung ambil session fresh tanpa tergantung state
       const { data: { session }, error } = await supabase.auth.getSession();
-
+      
+      // Jika tidak ada session atau error, langsung ke login
       if (error || !session) {
-        // Jika session mati/error, langsung tendang ke login
         window.location.href = '/auth/signin';
         return;
       }
 
-      // 2. Ambil role terbaru dari database berdasarkan session segar ini
+      // Ambil role dari database
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
         .single();
 
+      // Jika gagal ambil profile, ke home
       if (profileError || !profile) {
-        // Jika gagal ambil profil, amanannya ke home
         window.location.href = '/';
         return;
       }
 
       const role = profile.role || 'user';
 
-      // 3. Redirect berdasarkan role segar
+      // Redirect berdasarkan role - gunakan window.location untuk hard redirect
       switch (role) {
         case 'super_admin':
-          router.push('/dashboard/super-admin');
+          window.location.href = '/dashboard/super-admin';
           break;
         case 'admin_sales':
-          router.push('/dashboard/sales');
+          window.location.href = '/dashboard/sales';
           break;
         case 'admin_logistik':
-          router.push('/dashboard/logistik');
+          window.location.href = '/dashboard/logistik';
           break;
         case 'admin_data':
-          router.push('/dashboard/data');
+          window.location.href = '/dashboard/data';
           break;
         default:
-          router.push('/dashboard/user');
+          window.location.href = '/dashboard/user';
           break;
       }
     } catch (err) {
-      console.error("Error redirecting dashboard:", err);
-      // Jika error apa pun, amanannya ke home
+      console.error("Dashboard click error:", err);
+      // Fallback ke home jika ada error tak terduga
       window.location.href = '/';
-    } finally {
-      setIsLoadingRole(false); // Matikan spinner
     }
+    // Tidak perlu setIsLoadingRole(false) karena kita tidak pakai spinner lagi
   };
 
   const maskEmail = (email: string) => {
