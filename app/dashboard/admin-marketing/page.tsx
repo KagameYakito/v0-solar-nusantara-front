@@ -38,6 +38,12 @@ export default function AdminMarketingDashboard() {
   const [editPrice, setEditPrice] = useState<string>('')
   
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedTerm, setDebouncedTerm] = useState('')
+
+  const debouncedSearch = useCallback((term: string) => {
+    setSearchTerm(term)
+    setCurrentPage(1)
+  }, [])
 
   // Fetch Products
   const fetchProducts = useCallback(async () => {
@@ -49,7 +55,6 @@ export default function AdminMarketingDashboard() {
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
       
-      // Search by nama_produk
       if (searchTerm) {
         query = query.ilike('nama_produk', `%${searchTerm}%`)
       }
@@ -147,6 +152,18 @@ export default function AdminMarketingDashboard() {
     }
   }, [currentPage, searchTerm, isAuthorized, fetchProducts])
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Hanya update searchTerm jika debouncedTerm berubah
+      // Ini akan memicu fetchProducts lewat useEffect di atas
+      setSearchTerm(debouncedTerm)
+      setCurrentPage(1)
+    }, 300) // Tunggu 300ms setelah user berhenti mengetik
+    
+    // Cleanup: batalkan timer jika user mengetik lagi sebelum 300ms
+    return () => clearTimeout(timer)
+  }, [debouncedTerm])
+
   // Handle Price Update - UPDATE KOLOM 'harga'
   const handlePriceUpdate = async (productId: string, newPrice: number) => {
     if (isNaN(newPrice) || newPrice < 0) {
@@ -236,25 +253,33 @@ export default function AdminMarketingDashboard() {
       {/* SEARCH BAR */}
       <Card className="bg-slate-900 border-slate-800">
         <CardContent className="pt-6">
-          <div className="flex gap-4">
+            <div className="flex gap-4">
+            {/* GUNAKAN debouncedTerm, BUKAN searchTerm */}
             <input
-              type="text"
-              placeholder="Cari produk..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="flex-1 bg-slate-800 border border-slate-700 rounded px-4 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:border-green-500"
+                type="text"
+                placeholder="Cari produk..."
+                value={debouncedTerm} 
+                onChange={(e) => setDebouncedTerm(e.target.value)}
+                className="flex-1 bg-slate-800 border border-slate-700 rounded px-4 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:border-green-500"
             />
-            {searchTerm && (
-              <Button variant="outline" onClick={() => setSearchTerm('')} className="border-slate-700">
+            
+            {/* Clear button mereset debouncedTerm */}
+            {debouncedTerm && (
+                <Button 
+                variant="outline" 
+                onClick={() => {
+                    setDebouncedTerm('')
+                    setSearchTerm('')
+                    setCurrentPage(1)
+                }} 
+                className="border-slate-700"
+                >
                 Clear
-              </Button>
+                </Button>
             )}
-          </div>
+            </div>
         </CardContent>
-      </Card>
+        </Card>
 
       {/* PRODUCTS TABLE */}
       <Card className="bg-slate-900 border-slate-800">
