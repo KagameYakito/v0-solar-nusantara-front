@@ -18,11 +18,12 @@ export function Navbar() {
   const [userEmail, setUserEmail] = useState('')
   const [userRole, setUserRole] = useState<string | null>(null) // State untuk Role
   const [isLoadingRole, setIsLoadingRole] = useState(false) // State Loading Role
+  
+  // State tambahan untuk handle focus window (opsional)
   const [isWindowFocused, setIsWindowFocused] = useState(true);
-  const [lastActiveTime, setLastActiveTime] = useState(Date.now());
 
+  // 1. Efek untuk Theme Initialization
   useEffect(() => {
-    // Set initial theme
     const isDarkMode =
       localStorage.theme === 'dark' ||
       (!('theme' in localStorage) &&
@@ -30,23 +31,10 @@ export function Navbar() {
     setIsDark(isDarkMode)
   }, [])
 
-  useEffect(() => {
-    // Cek session saat pertama kali load
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        setIsLoggedIn(true)
-        setUserEmail(session.user.email || '')
-        await fetchUserRole(session.user.id) // Ambil role jika sudah login
-      }
-    }
-
-      // Efek untuk menangani window focus/blur
+  // 2. Efek untuk Window Focus/Blur (Mencegah konflik saat switch tab)
   useEffect(() => {
     const handleFocus = () => {
       setIsWindowFocused(true);
-      setLastActiveTime(Date.now());
-      // Jangan fetch ulang role saat focus kembali untuk menghindari konflik
       console.log("Window focused - skipping auto refresh to prevent conflicts");
     };
 
@@ -63,7 +51,20 @@ export function Navbar() {
       window.removeEventListener('blur', handleBlur);
     };
   }, []);
+
+  // 3. Efek Utama: Cek Session & Auth Listener
+  useEffect(() => {
+    // Fungsi lokal untuk cek session awal
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setIsLoggedIn(true)
+        setUserEmail(session.user.email || '')
+        await fetchUserRole(session.user.id) // Ambil role jika sudah login
+      }
+    }
     
+    // Jalankan cek session
     checkSession()
 
     // Listen perubahan auth (login/logout real-time)
@@ -137,7 +138,7 @@ export function Navbar() {
     }
   }
 
-    const handleSignOut = async () => {
+  const handleSignOut = async () => {
     try {
       await supabase.auth.signOut()
     } catch (error) {
@@ -165,10 +166,12 @@ export function Navbar() {
     }
   }
 
-  // FUNGSI PINTAR: SMART DASHBOARD REDIRECT
-    const handleDashboardClick = async () => {
+  // FUNGSI PINTAR: SMART DASHBOARD REDIRECT (Versi Stabil)
+  const handleDashboardClick = async () => {
+    if (isLoadingRole) return; // Cegah klik ganda saat loading
+    
     try {
-      // 1. Ambil session fresh
+      // 1. Ambil session fresh langsung dari Supabase
       const { data, error } = await supabase.auth.getSession();
       
       // Cek jika ada error atau tidak ada session
@@ -179,52 +182,42 @@ export function Navbar() {
 
       const session = data.session;
 
-      // 2. Ambil role dari database dengan timeout manual (3 detik)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); 
+      // 2. Ambil role dari database
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
 
-      try {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        clearTimeout(timeoutId);
-
-        // Jika gagal ambil profile, amanannya kembali ke home
-        if (profileError || !profileData) {
-          window.location.href = '/';
-          return;
-        }
-
-        const role = profileData.role || 'user';
-
-        // 3. Hard redirect berdasarkan role
-        switch (role) {
-          case 'super_admin':
-            window.location.href = '/dashboard/super-admin';
-            break;
-          case 'admin_sales':
-            window.location.href = '/dashboard/sales';
-            break;
-          case 'admin_logistik':
-            window.location.href = '/dashboard/logistik';
-            break;
-          case 'admin_data':
-            window.location.href = '/dashboard/data';
-            break;
-          default:
-            window.location.href = '/dashboard/user';
-            break;
-        }
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        console.error("Profile fetch failed:", fetchError);
+      // Jika gagal ambil profile, amanannya kembali ke home
+      if (profileError || !profileData) {
         window.location.href = '/';
+        return;
+      }
+
+      const role = profileData.role || 'user';
+
+      // 3. Hard redirect berdasarkan role
+      switch (role) {
+        case 'super_admin':
+          window.location.href = '/dashboard/super-admin';
+          break;
+        case 'admin_sales':
+          window.location.href = '/dashboard/sales';
+          break;
+        case 'admin_logistik':
+          window.location.href = '/dashboard/logistik';
+          break;
+        case 'admin_data':
+          window.location.href = '/dashboard/data';
+          break;
+        default:
+          window.location.href = '/dashboard/user';
+          break;
       }
     } catch (err) {
       console.error("Dashboard click error:", err);
+      // Fallback ke home jika ada error tak terduga
       window.location.href = '/';
     }
   };
