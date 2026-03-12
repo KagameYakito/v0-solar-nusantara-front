@@ -356,7 +356,7 @@ export default function AdminMarketingDashboard() {
                             </div>
                           ) : (
                             <span className="text-white font-mono">
-                              Rp {product.price.toLocaleString('id-ID')}
+                              Rp {(product.price || 0).toLocaleString('id-ID')}
                             </span>
                           )}
                         </td>
@@ -368,7 +368,7 @@ export default function AdminMarketingDashboard() {
                                 size="sm"
                                 onClick={() => {
                                   setEditingId(product.id)
-                                  setEditPrice(product.price.toString())
+                                  setEditPrice((product.price || 0).toString())
                                 }}
                                 className="bg-blue-600 hover:bg-blue-700 text-xs"
                               >
