@@ -260,7 +260,7 @@ export default function SuperAdminDashboard() {
                       <td className="px-4 py-3">
                         <Badge className={
                           user.role === 'super_admin' ? 'bg-blue-600' : 
-                          user.role === 'admin_sales' ? 'bg-green-600' :
+                          user.role === 'admin_marketing' ? 'bg-green-600' :
                           user.role === 'admin_logistik' ? 'bg-orange-600' :
                           user.role === 'admin_data' ? 'bg-purple-600' : 'bg-slate-600'
                         }>
@@ -279,7 +279,7 @@ export default function SuperAdminDashboard() {
                         >
                           <option value="user">User Biasa</option>
                           <option value="admin_logistik">Admin Logistik</option>
-                          <option value="admin_sales">Admin Sales</option>
+                          <option value="admin_marketing">Admin Marketing</option>
                           <option value="admin_data">Admin Data</option>
                         </select>
                       </td>
