@@ -4,28 +4,24 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Package, ArrowLeft, AlertCircle, Loader2, BadgeCheck } from 'lucide-react'
+import { Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 
-// Interface Product
+// Interface disesuaikan dengan nama kolom database
 interface Product {
   id: string
-  name: string
-  price: number
+  nama_produk: string | null
+  harga: number | null
   created_at: string
-  // Tambahkan field lain jika perlu
 }
 
-// Initialize Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Pagination Config
 const ITEMS_PER_PAGE = 100
 
 export default function AdminMarketingDashboard() {
@@ -35,34 +31,29 @@ export default function AdminMarketingDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [isAuthorized, setIsAuthorized] = useState(false)
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
   
-  // Editing State
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState<string>('')
   
-  // Search State
   const [searchTerm, setSearchTerm] = useState('')
 
-  // Fetch Products with Pagination
+  // Fetch Products
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
       
-      // Build query
       let query = supabase
         .from('products')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
       
-      // Add search filter if exists
+      // Search by nama_produk
       if (searchTerm) {
-        query = query.ilike('name', `%${searchTerm}%`)
+        query = query.ilike('nama_produk', `%${searchTerm}%`)
       }
       
-      // Add pagination
       const start = (currentPage - 1) * ITEMS_PER_PAGE
       const end = start + ITEMS_PER_PAGE - 1
       query = query.range(start, end)
@@ -82,14 +73,13 @@ export default function AdminMarketingDashboard() {
     }
   }, [currentPage, searchTerm])
 
-  // Check Auth & Load Data
+  // Check Auth
   useEffect(() => {
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
 
     const checkAuthAndLoad = async () => {
       try {
-        // Timeout promise
         const timeoutPromise = new Promise((_, reject) => {
           timeoutId = setTimeout(() => reject(new Error('Session check timeout')), 5000)
         })
@@ -103,14 +93,12 @@ export default function AdminMarketingDashboard() {
         if (!isMounted) return
         
         if (sessionResponse.error || !sessionResponse.data.session) {
-          console.warn("Session invalid/expired, redirect to login")
           window.location.href = '/auth/signin'
           return
         }
 
         const session = sessionResponse.data.session
 
-        // Check role
         const profileResponse = await supabase
           .from('profiles')
           .select('role')
@@ -120,23 +108,19 @@ export default function AdminMarketingDashboard() {
         if (!isMounted) return
 
         if (profileResponse.error) {
-          console.error("Profile fetch failed:", profileResponse.error)
           window.location.href = '/'
           return
         }
 
         const profile = profileResponse.data
 
-        // Check if admin_marketing or super_admin
         if (!profile || (profile.role !== 'admin_marketing' && profile.role !== 'super_admin')) {
-          console.warn("Access Denied: Not Admin Marketing")
           window.location.href = '/'
           return
         }
 
         if (isMounted) {
           setIsAuthorized(true)
-          await fetchProducts()
         }
 
       } catch (err: any) {
@@ -154,16 +138,16 @@ export default function AdminMarketingDashboard() {
       isMounted = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [fetchProducts])
+  }, [])
 
-  // Refetch when page or search changes
+  // Fetch products when authorized
   useEffect(() => {
     if (isAuthorized) {
       fetchProducts()
     }
   }, [currentPage, searchTerm, isAuthorized, fetchProducts])
 
-  // Handle Price Update
+  // Handle Price Update - UPDATE KOLOM 'harga'
   const handlePriceUpdate = async (productId: string, newPrice: number) => {
     if (isNaN(newPrice) || newPrice < 0) {
       alert("Harga tidak valid!")
@@ -173,42 +157,36 @@ export default function AdminMarketingDashboard() {
     try {
       const { error } = await supabase
         .from('products')
-        .update({ price: newPrice })
+        .update({ harga: newPrice })  // <-- Update kolom 'harga'
         .eq('id', productId)
 
       if (error) throw error
 
       // Update local state
       setProducts(products.map(p => 
-        p.id === productId ? { ...p, price: newPrice } : p
+        p.id === productId ? { ...p, harga: newPrice } : p
       ))
       
       setEditingId(null)
       alert("✅ Harga berhasil diubah!")
       
     } catch (err: any) {
-      console.error("Failed to update price:", err)
       alert("❌ Gagal mengubah harga: " + err.message)
     }
   }
 
-  // Handle Set to Auction (DISABLED FOR NOW)
-  const handleSetToAuction = (productId: string, productName: string) => {
-    alert("⚠️ Fitur Auction belum tersedia. Fitur ini akan segera hadir!")
-    // TODO: Implement auction logic later
+  const handleSetToAuction = () => {
+    alert("⚠️ Fitur Auction belum tersedia.")
   }
 
-  // Pagination Helpers
   const totalPages = Math.ceil(totalProducts / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1
   const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, totalProducts)
 
-  // --- RENDERING ---
-
   if (loading && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-green-500" />
         <span className="ml-2">Memuat Data Produk...</span>
       </div>
     )
@@ -234,30 +212,24 @@ export default function AdminMarketingDashboard() {
       {/* HEADER */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div className="flex items-center gap-4">
-          {/* Back Button */}
-          <Link 
-            href="/" 
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors group"
-          >
-            <div className="bg-slate-800 p-2 rounded-lg group-hover:bg-slate-700 transition-colors border border-slate-700">
+          <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors group">
+            <div className="bg-slate-800 p-2 rounded-lg group-hover:bg-slate-700 border border-slate-700">
               <ArrowLeft className="h-5 w-5" />
             </div>
             <span className="text-sm font-medium hidden sm:inline">Back to Home</span>
           </Link>
 
-          {/* Title */}
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2 text-green-500">
               <Package className="h-8 w-8" />
               Admin Marketing Dashboard
             </h1>
-            <p className="text-slate-400 mt-1">Kelola harga produk dan kelola auction.</p>
+            <p className="text-slate-400 mt-1">Kelola harga produk.</p>
           </div>
         </div>
 
-        {/* Badge */}
         <Badge variant="outline" className="text-green-400 border-green-400 px-4 py-2 bg-green-900/20 hidden md:flex">
-          Logged in as: ADMIN_MARKETING
+          ADMIN_MARKETING
         </Badge>
       </div>
 
@@ -265,22 +237,18 @@ export default function AdminMarketingDashboard() {
       <Card className="bg-slate-900 border-slate-800">
         <CardContent className="pt-6">
           <div className="flex gap-4">
-            <Input
+            <input
               type="text"
-              placeholder="Cari produk berdasarkan nama..."
+              placeholder="Cari produk..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value)
-                setCurrentPage(1) // Reset to page 1 on search
+                setCurrentPage(1)
               }}
-              className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+              className="flex-1 bg-slate-800 border border-slate-700 rounded px-4 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:border-green-500"
             />
             {searchTerm && (
-              <Button 
-                variant="outline" 
-                onClick={() => setSearchTerm('')}
-                className="border-slate-700"
-              >
+              <Button variant="outline" onClick={() => setSearchTerm('')} className="border-slate-700">
                 Clear
               </Button>
             )}
@@ -289,7 +257,7 @@ export default function AdminMarketingDashboard() {
       </Card>
 
       {/* PRODUCTS TABLE */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl">
+      <Card className="bg-slate-900 border-slate-800">
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-white">
             <div className="flex items-center gap-2">
@@ -297,14 +265,14 @@ export default function AdminMarketingDashboard() {
               Daftar Produk
             </div>
             <span className="text-sm text-slate-400">
-              Menampilkan {startIndex}-{endIndex} dari {totalProducts} produk
+              {startIndex}-{endIndex} dari {totalProducts}
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {products.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
-              {searchTerm ? "Tidak ada produk yang sesuai pencarian." : "Belum ada produk terdaftar."}
+              {searchTerm ? "Tidak ada produk yang sesuai." : "Belum ada produk."}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -323,19 +291,20 @@ export default function AdminMarketingDashboard() {
                     const isEditing = editingId === product.id
                     
                     return (
-                      <tr key={product.id} className="hover:bg-slate-800/50 transition-colors">
+                      <tr key={product.id} className="hover:bg-slate-800/50">
                         <td className="px-4 py-3 text-slate-400">{globalIndex}</td>
+                        {/* Gunakan nama_produk */}
                         <td className="px-4 py-3 font-medium text-white">
-                          {product.name}
+                          {product.nama_produk || 'Produk Tanpa Nama'}
                         </td>
                         <td className="px-4 py-3">
                           {isEditing ? (
                             <div className="flex items-center gap-2">
-                              <Input
+                              <input
                                 type="number"
                                 value={editPrice}
                                 onChange={(e) => setEditPrice(e.target.value)}
-                                className="w-32 bg-slate-800 border-slate-600 text-white h-8"
+                                className="w-32 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white"
                                 autoFocus
                               />
                               <Button
@@ -343,7 +312,7 @@ export default function AdminMarketingDashboard() {
                                 onClick={() => handlePriceUpdate(product.id, parseInt(editPrice) || 0)}
                                 className="h-8 bg-green-600 hover:bg-green-700"
                               >
-                                <BadgeCheck className="h-4 w-4" />
+                                <Check className="h-4 w-4" />
                               </Button>
                               <Button
                                 size="sm"
@@ -351,40 +320,38 @@ export default function AdminMarketingDashboard() {
                                 onClick={() => setEditingId(null)}
                                 className="h-8 border-slate-600"
                               >
-                                Batal
+                                <X className="h-4 w-4" />
                               </Button>
                             </div>
                           ) : (
+                            // Gunakan harga dengan fallback 0
                             <span className="text-white font-mono">
-                              Rp {(product.price || 0).toLocaleString('id-ID')}
+                              Rp {(product.harga || 0).toLocaleString('id-ID')}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            {/* Edit Price Button */}
                             {!isEditing && (
                               <Button
                                 size="sm"
                                 onClick={() => {
                                   setEditingId(product.id)
-                                  setEditPrice((product.price || 0).toString())
+                                  setEditPrice((product.harga || 0).toString())
                                 }}
                                 className="bg-blue-600 hover:bg-blue-700 text-xs"
                               >
-                                Edit Harga
+                                <Edit2 className="h-3 w-3 mr-1" />
+                                Edit
                               </Button>
                             )}
-                            
-                            {/* Set to Auction Button (DISABLED) */}
                             <Button
                               size="sm"
-                              onClick={() => handleSetToAuction(product.id, product.name)}
+                              onClick={handleSetToAuction}
                               disabled
                               className="bg-slate-700 text-slate-400 cursor-not-allowed text-xs"
-                              title="Fitur auction akan segera hadir"
                             >
-                              Set to Auction
+                              Auction
                             </Button>
                           </div>
                         </td>
@@ -405,13 +372,9 @@ export default function AdminMarketingDashboard() {
                 disabled={currentPage === 1}
                 className="border-slate-700 disabled:opacity-50"
               >
-                ← Previous
+                ← Prev
               </Button>
-              
-              <span className="text-slate-400 text-sm">
-                Page {currentPage} of {totalPages}
-              </span>
-              
+              <span className="text-slate-400 text-sm">Page {currentPage} / {totalPages}</span>
               <Button
                 variant="outline"
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
