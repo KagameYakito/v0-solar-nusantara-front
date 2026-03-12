@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, LogOut, Box, Loader2 } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, Box, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
 import { supabase } from '@/utils/supabaseClient'
@@ -10,99 +10,133 @@ import { useRouter } from 'next/navigation' // Import Router
 
 export function Navbar() {
   const router = useRouter() // Inisialisasi Router
+  
+  // State untuk UI Mobile Menu
   const [isOpen, setIsOpen] = useState(false)
+  
+  // State untuk Theme (Dark/Light)
   const [isDark, setIsDark] = useState(false)
+  
+  // State untuk Modals Auth
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  
+  // State untuk Status Login User
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [userRole, setUserRole] = useState<string | null>(null) // State untuk Role
-  const [isLoadingRole, setIsLoadingRole] = useState(false) // State Loading Role
   
-  // State tambahan untuk handle focus window (opsional)
-  const [isWindowFocused, setIsWindowFocused] = useState(true);
+  // State untuk Loading Indicator (Ganti nama dari isLoadingRole jadi isChecking agar lebih umum)
+  const [isChecking, setIsChecking] = useState(false)
 
-  // 1. Efek untuk Theme Initialization
+  // =========================================================================
+  // 1. EFEK INISIALISASI TEMA (DARK MODE)
+  // =========================================================================
   useEffect(() => {
     const isDarkMode =
       localStorage.theme === 'dark' ||
       (!('theme' in localStorage) &&
         window.matchMedia('(prefers-color-scheme: dark)').matches)
+    
     setIsDark(isDarkMode)
   }, [])
 
-  // 2. Efek untuk Window Focus/Blur (Mencegah konflik saat switch tab)
+  // =========================================================================
+  // 2. EFEK UTAMA: AUTHENTICATION & PAGE SHOW LISTENER
+  // =========================================================================
   useEffect(() => {
-    const handleFocus = () => {
-      setIsWindowFocused(true);
-      console.log("Window focused - skipping auto refresh to prevent conflicts");
-    };
+    
+    // Fungsi Internal: Refresh Session Data secara Manual
+    // Dipanggil saat load pertama kali ATAU saat halaman di-restore dari cache
+    const refreshSessionData = async () => {
+      try {
+        console.log("🔄 Memulai refresh session data...")
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        // Cek jika ada error atau session tidak ditemukan (expired/invalid)
+        if (error || !session) {
+          console.warn("⚠️ Session invalid atau expired. Resetting state.")
+          setIsLoggedIn(false)
+          setUserEmail('')
+          setUserRole(null)
+          return
+        }
 
-    const handleBlur = () => {
-      setIsWindowFocused(false);
-      console.log("Window blurred");
-    };
-
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
-
-  // 3. Efek Utama: Cek Session & Auth Listener
-  useEffect(() => {
-    // Fungsi lokal untuk cek session awal
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
+        // Jika session valid, update state UI
+        console.log("✅ Session valid. Updating user state.")
         setIsLoggedIn(true)
         setUserEmail(session.user.email || '')
-        await fetchUserRole(session.user.id) // Ambil role jika sudah login
+        
+        // Ambil role terbaru dari database profiles
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (profileError) {
+          console.error("❌ Gagal mengambil role:", profileError)
+          setUserRole('user') // Fallback
+        } else {
+          setUserRole(profile?.role || 'user')
+        }
+
+      } catch (err) {
+        console.error("💥 Error saat refresh session:", err)
+        setIsLoggedIn(false)
       }
     }
-    
-    // Jalankan cek session
-    checkSession()
 
-    // Listen perubahan auth (login/logout real-time)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
+    // A. Jalankan cek session awal saat komponen pertama kali mount
+    refreshSessionData()
+
+    // B. Listen perubahan auth real-time (Login / Logout otomatis)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("📡 Auth Event Detected:", event)
+
+      if (event === 'SIGNED_IN' && session) {
         setIsLoggedIn(true)
         setUserEmail(session.user.email || '')
-        await fetchUserRole(session.user.id) // Ambil role saat login baru
-      } else {
+        // Fetch role async setelah login
+        supabase.from('profiles').select('role').eq('id', session.user.id).single()
+          .then(({ data }) => setUserRole(data?.role || 'user'))
+      
+      } else if (event === 'SIGNED_OUT') {
         setIsLoggedIn(false)
         setUserEmail('')
-        setUserRole(null) // Reset role saat logout
+        setUserRole(null)
+      
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log("🔄 Token berhasil di-refresh otomatis oleh Supabase")
       }
     })
 
-    return () => subscription.unsubscribe()
-  }, [])
-
-  // Fungsi Baru: Mengambil Role User dari Database
-  const fetchUserRole = async (userId: string) => {
-    setIsLoadingRole(true)
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single()
-      
-      if (error) throw error
-      setUserRole(data?.role || 'user')
-    } catch (error) {
-      console.error("Gagal mengambil role user:", error)
-      setUserRole('user') // Fallback ke user biasa jika error
-    } finally {
-      setIsLoadingRole(false)
+    // C. [PENTING] Handle Page Show Event (Saat user kembali dari tab lain/back button)
+    // Ini adalah kunci perbaikan bug "stuck session" saat switch tab
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        console.log("🚀 Halaman di-restore dari BFCache! Memicu refresh session manual...")
+        // Paksa refresh session karena koneksi JS mungkin stale meski halaman muncul instan
+        refreshSessionData()
+      }
     }
-  }
 
+    // Daftarkan event listener pageshow
+    window.addEventListener('pageshow', handlePageShow)
+
+    // Cleanup function saat komponen unmount
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('pageshow', handlePageShow)
+    }
+
+  }, []) // Dependency array kosong agar hanya jalan sekali saat mount
+
+  // =========================================================================
+  // FUNGSI UTILITAS & HANDLERS
+  // =========================================================================
+
+  // Toggle Dark/Light Mode
   const toggleTheme = () => {
     const newDarkMode = !isDark
     setIsDark(newDarkMode)
@@ -116,6 +150,7 @@ export function Navbar() {
     }
   }
 
+  // Handle Login Submit (Google OAuth)
   const handleLoginSubmit = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -129,6 +164,7 @@ export function Navbar() {
     }
   }
 
+  // Handle Register Submit (Mockup logic)
   const handleRegisterSubmit = (data: RegistrationData) => {
     setUserEmail(data.email)
     setIsLoggedIn(true)
@@ -138,13 +174,14 @@ export function Navbar() {
     }
   }
 
+  // Handle Sign Out
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut()
     } catch (error) {
-      console.warn("Sign out error (mungkin sesi expired):", error)
+      console.warn("Sign out error:", error)
     } finally {
-      // Pastikan state lokal dibersihkan apapun yang terjadi
+      // Bersihkan state lokal apapun yang terjadi
       setIsLoggedIn(false)
       setUserEmail('')
       setUserRole(null)
@@ -166,79 +203,91 @@ export function Navbar() {
     }
   }
 
-  // FUNGSI PINTAR: SMART DASHBOARD REDIRECT (Versi Stabil)
+  // Handle Dashboard Click (Smart Redirect dengan Fresh Check)
   const handleDashboardClick = async () => {
-    if (isLoadingRole) return; // Cegah klik ganda saat loading
+    // Cegah klik ganda jika sedang proses checking
+    if (isChecking) return
+    
+    setIsChecking(true)
     
     try {
       // 1. Ambil session fresh langsung dari Supabase
-      const { data, error } = await supabase.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession()
       
       // Cek jika ada error atau tidak ada session
-      if (error || !data?.session) {
-        window.location.href = '/auth/signin';
-        return;
+      if (error || !session) {
+        console.warn("⚠️ Tidak ada session valid saat klik dashboard. Redirect to login.")
+        window.location.href = '/auth/signin'
+        return
       }
 
-      const session = data.session;
-
       // 2. Ambil role dari database
-      const { data: profileData, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
-        .single();
+        .single()
 
       // Jika gagal ambil profile, amanannya kembali ke home
-      if (profileError || !profileData) {
-        window.location.href = '/';
-        return;
+      if (profileError || !profile) {
+        console.error("❌ Gagal mengambil profile user. Redirect to home.")
+        window.location.href = '/'
+        return
       }
 
-      const role = profileData.role || 'user';
+      const role = profile.role || 'user'
+      console.log("🎯 Redirecting user with role:", role)
 
       // 3. Hard redirect berdasarkan role
       switch (role) {
         case 'super_admin':
-          window.location.href = '/dashboard/super-admin';
-          break;
+          window.location.href = '/dashboard/super-admin'
+          break
         case 'admin_sales':
-          window.location.href = '/dashboard/sales';
-          break;
+          window.location.href = '/dashboard/sales'
+          break
         case 'admin_logistik':
-          window.location.href = '/dashboard/logistik';
-          break;
+          window.location.href = '/dashboard/logistik'
+          break
         case 'admin_data':
-          window.location.href = '/dashboard/data';
-          break;
+          window.location.href = '/dashboard/data'
+          break
         default:
-          window.location.href = '/dashboard/user';
-          break;
+          window.location.href = '/dashboard/user'
+          break
       }
     } catch (err) {
-      console.error("Dashboard click error:", err);
+      console.error("💥 Dashboard click error:", err)
       // Fallback ke home jika ada error tak terduga
-      window.location.href = '/';
+      window.location.href = '/'
+    } finally {
+      setIsChecking(false)
     }
-  };
+  }
 
+  // Masking Email untuk Tampilan
   const maskEmail = (email: string) => {
     if (!email) return ''
     const [localPart, domain] = email.split('@')
     return `${localPart.charAt(0)}***@***.${domain.split('.')[1]}`
   }
 
+  // Definisi Link Navigasi
   const navLinks = [
     { href: '#products', label: 'Products' },
     { href: '#solutions', label: 'Auctions' },
     { href: '#contact', label: 'Contact' },
   ]
 
+  // =========================================================================
+  // RENDERING COMPONENT
+  // =========================================================================
   return (
     <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
-          {/* Logo */}
+          
+          {/* Logo Section */}
           <Link href="#" className="flex items-center space-x-2 group">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
               <Zap className="h-6 w-6 text-white" />
@@ -248,7 +297,7 @@ export function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center space-x-1">
             {navLinks.map((link) => (
               <Link
@@ -261,8 +310,10 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Right Side Actions */}
+          {/* Right Side Actions (Theme, User, Dashboard, Logout) */}
           <div className="hidden md:flex items-center space-x-4">
+            
+            {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
               className="p-2 hover:bg-secondary/10 rounded-lg transition-colors"
@@ -275,6 +326,7 @@ export function Navbar() {
               )}
             </button>
 
+            {/* Conditional Rendering: Logged Out vs Logged In */}
             {!isLoggedIn ? (
               <>
                 <Button
@@ -296,18 +348,19 @@ export function Navbar() {
               </>
             ) : (
               <>
+                {/* User Email Display */}
                 <span className="text-sm text-foreground/70 font-medium">
                   {maskEmail(userEmail)}
                 </span>
                 
-                {/* TOMBOL DASHBOARD PINTAR */}
+                {/* Smart Dashboard Button */}
                 <Button
                   size="sm"
                   onClick={handleDashboardClick}
-                  disabled={isLoadingRole}
+                  disabled={isChecking}
                   className="bg-primary hover:bg-primary/90 text-white rounded-lg min-w-[120px]"
                 >
-                  {isLoadingRole ? (
+                  {isChecking ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
@@ -317,6 +370,7 @@ export function Navbar() {
                   )}
                 </Button>
 
+                {/* Sign Out Button */}
                 <Button
                   size="sm"
                   onClick={handleSignOut}
@@ -329,7 +383,7 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Button (Hamburger) */}
           <div className="md:hidden flex items-center space-x-2">
             <button
               onClick={toggleTheme}
@@ -356,7 +410,7 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu Dropdown */}
         {isOpen && (
           <div className="md:hidden pb-4 space-y-2">
             {navLinks.map((link) => (
@@ -369,7 +423,8 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <div className="px-4 pt-4 space-y-2">
+            
+            <div className="px-4 pt-4 space-y-2 border-t border-border mt-2">
               {!isLoggedIn ? (
                 <>
                   <div className="flex gap-2">
@@ -401,23 +456,23 @@ export function Navbar() {
                       variant="ghost"
                       size="sm"
                       disabled
-                      className="flex-1 text-foreground/60 cursor-default text-xs"
+                      className="flex-1 text-foreground/60 cursor-default text-xs justify-start"
                     >
                       {maskEmail(userEmail)}
                     </Button>
                   </div>
                   <div className="flex gap-2">
-                    {/* TOMBOL DASHBOARD PINTAR (MOBILE) */}
+                    {/* Mobile Dashboard Button */}
                     <Button
                       size="sm"
                       onClick={() => {
                         handleDashboardClick()
                         setIsOpen(false)
                       }}
-                      disabled={isLoadingRole}
+                      disabled={isChecking}
                       className="flex-1 bg-primary hover:bg-primary/90 text-white text-xs"
                     >
-                       {isLoadingRole ? (
+                       {isChecking ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <>
@@ -433,7 +488,7 @@ export function Navbar() {
                         setIsOpen(false)
                       }}
                       variant="outline"
-                      className="flex-1 border-foreground/30 text-foreground"
+                      className="flex-1 border-foreground/30 text-foreground text-xs"
                     >
                       Sign Out
                     </Button>
@@ -445,7 +500,7 @@ export function Navbar() {
         )}
       </div>
 
-      {/* Auth Modals */}
+      {/* Auth Modals Component */}
       <AuthModals
         isLoginOpen={isLoginModalOpen}
         isRegisterOpen={isRegisterModalOpen}
