@@ -282,23 +282,25 @@ export function Navbar() {
   // =========================================================================
   // RENDERING COMPONENT
   // =========================================================================
-  return (
+    return (
     <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
+        <div className="flex justify-between items-center h-20 relative">
           
-          {/* Logo Section */}
-          <Link href="#" className="flex items-center space-x-2 group">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <Zap className="h-6 w-6 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent hidden sm:inline">
-              Solar Nusantara
-            </span>
-          </Link>
+          {/* LOGO - Fixed di kiri */}
+          <div className="flex-shrink-0">
+            <Link href="#" className="flex items-center space-x-2 group">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <Zap className="h-6 w-6 text-white" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent hidden sm:inline">
+                Solar Nusantara
+              </span>
+            </Link>
+          </div>
 
-          {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center space-x-1">
+          {/* NAV LINKS - Centered absolute */}
+          <div className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 items-center space-x-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -310,81 +312,77 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Right Side Actions (Theme, User, Dashboard, Logout) */}
-          <div className="hidden md:flex items-center space-x-4">
-            
-            {/* Theme Toggle Button */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 hover:bg-secondary/10 rounded-lg transition-colors"
-              aria-label="Toggle theme"
-            >
-              {isDark ? (
-                <Sun className="h-5 w-5 text-foreground" />
+          {/* RIGHT ACTIONS - Fixed di kanan */}
+          <div className="flex-shrink-0">
+            <div className="hidden md:flex items-center space-x-4">
+              <button
+                onClick={toggleTheme}
+                className="p-2 hover:bg-secondary/10 rounded-lg transition-colors"
+                aria-label="Toggle theme"
+              >
+                {isDark ? (
+                  <Sun className="h-5 w-5 text-foreground" />
+                ) : (
+                  <Moon className="h-5 w-5 text-foreground" />
+                )}
+              </button>
+
+              {!isLoggedIn ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLoginSubmit}
+                    className="text-foreground/80 hover:text-foreground"
+                  >
+                    Log In
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled
+                    className="text-foreground/50 hover:text-foreground/70 cursor-not-allowed"
+                  >
+                    <Box className="h-4 w-4 mr-2" />
+                    Dashboard
+                  </Button>
+                </>
               ) : (
-                <Moon className="h-5 w-5 text-foreground" />
+                <>
+                  <span className="text-sm text-foreground/70 font-medium min-w-[100px] text-right">
+                    {maskEmail(userEmail)}
+                  </span>
+                  
+                  <Button
+                    size="sm"
+                    onClick={handleDashboardClick}
+                    disabled={isChecking}
+                    className="bg-primary hover:bg-primary/90 text-white rounded-lg min-w-[120px]"
+                  >
+                    {isChecking ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Box className="h-4 w-4 mr-2" />
+                        Dashboard
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    onClick={handleSignOut}
+                    variant="outline"
+                    className="border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground"
+                  >
+                    Sign Out
+                  </Button>
+                </>
               )}
-            </button>
-
-            {/* Conditional Rendering: Logged Out vs Logged In */}
-            {!isLoggedIn ? (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLoginSubmit}
-                  className="text-foreground/80 hover:text-foreground"
-                >
-                  Log In
-                </Button>
-                <Button
-                  size="sm"
-                  disabled
-                  className="text-foreground/50 hover:text-foreground/70 cursor-not-allowed"
-                >
-                  <Box className="h-4 w-4 mr-2" />
-                  Dashboard
-                </Button>
-              </>
-            ) : (
-              <>
-                {/* User Email Display */}
-                <span className="text-sm text-foreground/70 font-medium">
-                  {maskEmail(userEmail)}
-                </span>
-                
-                {/* Smart Dashboard Button */}
-                <Button
-                  size="sm"
-                  onClick={handleDashboardClick}
-                  disabled={isChecking}
-                  className="bg-primary hover:bg-primary/90 text-white rounded-lg min-w-[120px]"
-                >
-                  {isChecking ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Box className="h-4 w-4 mr-2" />
-                      Dashboard
-                    </>
-                  )}
-                </Button>
-
-                {/* Sign Out Button */}
-                <Button
-                  size="sm"
-                  onClick={handleSignOut}
-                  variant="outline"
-                  className="border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground"
-                >
-                  Sign Out
-                </Button>
-              </>
-            )}
+            </div>
           </div>
 
-          {/* Mobile Menu Button (Hamburger) */}
-          <div className="md:hidden flex items-center space-x-2">
+          {/* Mobile Menu Button */}
+          <div className="md:hidden flex items-center space-x-2 absolute right-4">
             <button
               onClick={toggleTheme}
               className="p-2 hover:bg-secondary/10 rounded-lg transition-colors"
@@ -410,7 +408,7 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Menu Dropdown */}
+        {/* Mobile Menu */}
         {isOpen && (
           <div className="md:hidden pb-4 space-y-2">
             {navLinks.map((link) => (
@@ -423,32 +421,29 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            
             <div className="px-4 pt-4 space-y-2 border-t border-border mt-2">
               {!isLoggedIn ? (
-                <>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        handleLoginSubmit()
-                        setIsOpen(false)
-                      }}
-                      className="flex-1 text-foreground/80"
-                    >
-                      Log In
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled
-                      className="flex-1 text-foreground/50 cursor-not-allowed"
-                    >
-                      <Box className="h-4 w-4 mr-1" />
-                      Dashboard
-                    </Button>
-                  </div>
-                </>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      handleLoginSubmit()
+                      setIsOpen(false)
+                    }}
+                    className="flex-1 text-foreground/80"
+                  >
+                    Log In
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled
+                    className="flex-1 text-foreground/50 cursor-not-allowed"
+                  >
+                    <Box className="h-4 w-4 mr-1" />
+                    Dashboard
+                  </Button>
+                </div>
               ) : (
                 <>
                   <div className="flex gap-2">
@@ -462,7 +457,6 @@ export function Navbar() {
                     </Button>
                   </div>
                   <div className="flex gap-2">
-                    {/* Mobile Dashboard Button */}
                     <Button
                       size="sm"
                       onClick={() => {
@@ -472,7 +466,7 @@ export function Navbar() {
                       disabled={isChecking}
                       className="flex-1 bg-primary hover:bg-primary/90 text-white text-xs"
                     >
-                       {isChecking ? (
+                      {isChecking ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <>
@@ -499,16 +493,6 @@ export function Navbar() {
           </div>
         )}
       </div>
-
-      {/* Auth Modals Component */}
-      <AuthModals
-        isLoginOpen={isLoginModalOpen}
-        isRegisterOpen={isRegisterModalOpen}
-        onLoginClose={() => setIsLoginModalOpen(false)}
-        onRegisterClose={() => setIsRegisterModalOpen(false)}
-        onLoginSubmit={handleLoginSubmit}
-        onRegisterSubmit={handleRegisterSubmit}
-      />
     </nav>
   )
 }
