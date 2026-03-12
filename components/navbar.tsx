@@ -243,8 +243,8 @@ export function Navbar() {
         case 'super_admin':
           window.location.href = '/dashboard/super-admin'
           break
-        case 'admin_sales':
-          window.location.href = '/dashboard/sales'
+        case 'admin_marketing':
+          window.location.href = '/dashboard/marketing'
           break
         case 'admin_logistik':
           window.location.href = '/dashboard/logistik'
