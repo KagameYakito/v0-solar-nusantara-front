@@ -1,11 +1,21 @@
 'use client'
 
 import Image from 'next/image'
-import { X, ShoppingCart, Minus, Plus, CheckCircle } from 'lucide-react'
+import { X, ShoppingCart, Minus, Plus, CheckCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import type { Product } from '@/hooks/useProducts'
 import { useState, useEffect } from 'react'
+
+// ✅ IMPORT SUPABASE & ROUTER
+import { createClient } from '@supabase/supabase-js'
+import { useRouter } from 'next/navigation'
+
+// ✅ INISIALISASI SUPABASE CLIENT
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 interface ProductDetailModalProps {
   product: Product | null
@@ -15,17 +25,22 @@ interface ProductDetailModalProps {
 interface WishlistItem {
   product_id: string
   product_name: string
+  product_image_url?: string | null
   price: number
   quantity: number
   added_date: string
 }
 
 export function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
+  // ✅ INIT ROUTER
+  const router = useRouter()
+  
   const [quantity, setQuantity] = useState(1)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [wishlist, setWishlist] = useState<WishlistItem[]>([])
+  const [isAdding, setIsAdding] = useState(false)
 
-  // Load wishlist from localStorage
+  // Load wishlist from localStorage (Fallback only)
   useEffect(() => {
     const savedWishlist = localStorage.getItem('sonushub_wishlist')
     if (savedWishlist) {
@@ -36,12 +51,6 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       }
     }
   }, [])
-
-  // Save wishlist to localStorage
-  const saveWishlist = (newWishlist: WishlistItem[]) => {
-    setWishlist(newWishlist)
-    localStorage.setItem('sonushub_wishlist', JSON.stringify(newWishlist))
-  }
 
   if (!product) return null
 
@@ -55,35 +64,99 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
 
   const estimatedTotal = product.price * quantity
 
-  const handleAddToWishlist = () => {
+  // ✅ SAVE TO DATABASE (BUKAN LOCALSTORAGE)
+  const handleAddToWishlist = async () => {
     if (!product) return
 
-    const newItem: WishlistItem = {
-      product_id: product.id,
-      product_name: product.name,
-      price: product.price,
-      quantity: quantity,
-      added_date: new Date().toISOString()
-    }
+    try {
+      setIsAdding(true)
+      
+      // Cek session user
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        alert("❌ Silakan login dulu untuk menambahkan permintaan!")
+        router.push('/auth/signin')
+        return
+      }
 
-    // Check if product already in wishlist
-    const existingIndex = wishlist.findIndex(item => item.product_id === product.id)
-    
-    let newWishlist: WishlistItem[]
-    if (existingIndex >= 0) {
-      // Update quantity if already exists
-      newWishlist = wishlist.map((item, index) => 
-        index === existingIndex 
-          ? { ...item, quantity: item.quantity + quantity }
-          : item
-      )
-    } else {
-      // Add new item
-      newWishlist = [...wishlist, newItem]
-    }
+      // 1. Cek apakah produk sudah ada di wishlist user ini di Database
+      const { data: existingItem, error: fetchError } = await supabase
+        .from('wishlists')
+        .select('id, quantity')
+        .eq('user_id', session.user.id)
+        .eq('product_id', product.id)
+        .eq('status', 'active')
+        .single()
 
-    saveWishlist(newWishlist)
-    setShowConfirmModal(true)
+      let error
+      
+      if (existingItem) {
+        // Update quantity jika sudah ada
+        const newQty = existingItem.quantity + quantity
+        ;({ error } = await supabase
+          .from('wishlists')
+          .update({ 
+            quantity: newQty,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingItem.id))
+      } else {
+        // Insert baru ke Database
+        ;({ error } = await supabase
+          .from('wishlists')
+          .insert({
+            user_id: session.user.id,
+            product_id: product.id,
+            product_name: product.name,
+            product_image_url: product.image_url || null,
+            price: product.price,
+            quantity: quantity,
+            status: 'active',
+            created_at: new Date().toISOString()
+          }))
+      }
+
+      if (error) throw error
+
+      // 2. Update Local State (untuk UI langsung responsif)
+      const newItem: WishlistItem = {
+        product_id: product.id,
+        product_name: product.name,
+        product_image_url: product.image_url,
+        price: product.price,
+        quantity: quantity,
+        added_date: new Date().toISOString()
+      }
+
+      const existingIndex = wishlist.findIndex(item => item.product_id === product.id)
+      let newWishlist: WishlistItem[]
+      
+      if (existingIndex >= 0) {
+        newWishlist = wishlist.map((item, index) => 
+          index === existingIndex 
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        )
+      } else {
+        newWishlist = [...wishlist, newItem]
+      }
+      setWishlist(newWishlist)
+      
+      // Simpan ke localStorage juga sebagai backup/cache
+      localStorage.setItem('sonushub_wishlist', JSON.stringify(newWishlist))
+
+      // 3. Dispatch event untuk notify dashboard
+      window.dispatchEvent(new Event('wishlist-updated'))
+
+      setShowConfirmModal(true)
+
+    } catch (err: any) {
+      console.error("Failed to add to wishlist:", err)
+      alert("❌ Gagal menambahkan ke wishlist: " + err.message)
+    } finally {
+      setIsAdding(false)
+    }
   }
 
   const handleCloseConfirm = () => {
@@ -199,9 +272,19 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
               <Button
                 className="flex-1 bg-primary hover:bg-primary/90 text-white rounded-lg font-semibold"
                 onClick={handleAddToWishlist}
+                disabled={isAdding}
               >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                Request Item
+                {isAdding ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Request Item
+                  </>
+                )}
               </Button>
               <Button
                 variant="outline"

@@ -319,6 +319,63 @@ export default function UserDashboard() {
     setShowConfirmModal(true)
   }
 
+  const fetchWishlist = useCallback(async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { data, error } = await supabase
+      .from('wishlists')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    setWishlist(data || [])
+  } catch (err: any) {
+    console.error("Failed to fetch wishlist:", err)
+  }
+}, [])
+
+// Load wishlist saat component mount
+useEffect(() => {
+  fetchWishlist()
+}, [fetchWishlist])
+
+// ✅ REALTIME SUBSCRIPTION - Auto refresh saat ada perubahan
+useEffect(() => {
+  const channel = supabase
+    .channel('wishlist-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wishlists',
+        filter: `user_id=eq.${profile?.id}`
+      },
+      () => {
+        fetchWishlist() // Auto-refresh saat ada perubahan
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [profile?.id])
+
+// ✅ LISTEN untuk event dari ProductDetailModal
+useEffect(() => {
+  const handleWishlistUpdated = () => {
+    fetchWishlist()
+  }
+
+  window.addEventListener('wishlist-updated', handleWishlistUpdated)
+  return () => window.removeEventListener('wishlist-updated', handleWishlistUpdated)
+}, [])
+
   const confirmSubmitRequest = async () => {
     if (selectedItems.size === 0) {
       alert("❌ Pilih item yang mau di-request!")
