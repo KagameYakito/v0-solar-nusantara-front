@@ -216,25 +216,75 @@ export default function UserDashboard() {
     setIsEditing(false)
   }
 
-  // Wishlist Functions
-  const updateQuantity = (productId: string, delta: number) => {
-    setWishlist(prev => prev.map(item => {
-      if (item.product_id === productId) {
-        const newQty = Math.max(1, item.quantity + delta)
-        return { ...item, quantity: newQty }
-      }
-      return item
-    }))
-  }
+// ✅ GANTI FUNGSI removeItem DENGAN INI
+const removeItem = async (productId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert("❌ Session expired. Silakan login ulang.")
+      return
+    }
 
-  const removeItem = (productId: string) => {
+    // DELETE DARI DATABASE
+    const { error } = await supabase
+      .from('wishlists')
+      .delete()
+      .eq('user_id', session.user.id)
+      .eq('product_id', productId)
+
+    if (error) throw error
+
+    // UPDATE LOCAL STATE
     setWishlist(prev => prev.filter(item => item.product_id !== productId))
     setSelectedItems(prev => {
       const next = new Set(prev)
       next.delete(productId)
       return next
     })
+
+  } catch (err: any) {
+    console.error("Failed to remove item:", err)
+    alert("❌ Gagal menghapus item: " + err.message)
   }
+}
+
+// ✅ UPDATE QUANTITY JUGA HARUS SYNC KE DATABASE
+const updateQuantity = async (productId: string, delta: number) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    // Find current item
+    const currentItem = wishlist.find(item => item.product_id === productId)
+    if (!currentItem) return
+
+    const newQty = Math.max(1, currentItem.quantity + delta)
+
+    // UPDATE DATABASE
+    const { error } = await supabase
+      .from('wishlists')
+      .update({ 
+        quantity: newQty,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', session.user.id)
+      .eq('product_id', productId)
+
+    if (error) throw error
+
+    // UPDATE LOCAL STATE
+    setWishlist(prev => prev.map(item => {
+      if (item.product_id === productId) {
+        return { ...item, quantity: newQty }
+      }
+      return item
+    }))
+
+  } catch (err: any) {
+    console.error("Failed to update quantity:", err)
+    alert("❌ Gagal update quantity: " + err.message)
+  }
+}
 
   // Toggle item selection
   const toggleItemSelection = (productId: string) => {
