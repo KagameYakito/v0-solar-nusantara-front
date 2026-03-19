@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink } from 'lucide-react'
+import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, MessageSquare } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,17 +29,39 @@ interface Profile {
 interface WishlistItem {
   product_id: string
   product_name: string
+  product_image_url?: string | null
   price: number
   quantity: number
   added_date: string
 }
 
+interface RequestItem {
+  id?: string
+  product_id: string
+  product_name: string
+  product_image_url?: string | null
+  unit_price: number
+  quantity: number
+  subtotal: number
+  status: 'wishlist' | 'pending' | 'approved' | 'rejected' | 'fulfilled'
+  admin_notes?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
 interface ProductRequest {
   id: string
+  request_number: string
   user_id: string
-  items: WishlistItem[]
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'reviewed' | 'approved' | 'rejected' | 'fulfilled'
+  notes?: string | null
+  admin_notes?: string | null
+  total_items: number
+  estimated_total: number
   created_at: string
+  updated_at: string
+  reviewed_at?: string | null
+  items?: RequestItem[]
 }
 
 const supabase = createClient(
@@ -61,8 +83,11 @@ export default function UserDashboard() {
   
   // Wishlist & Modal State
   const [showRequestModal, setShowRequestModal] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [wishlist, setWishlist] = useState<WishlistItem[]>([])
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [submittingRequest, setSubmittingRequest] = useState(false)
+  const [fetchingRequests, setFetchingRequests] = useState(false)
 
   // Form State
   const [formData, setFormData] = useState({
@@ -90,9 +115,6 @@ export default function UserDashboard() {
   useEffect(() => {
     localStorage.setItem('sonushub_wishlist', JSON.stringify(wishlist))
   }, [wishlist])
-
-  // Calculate total estimated price
-  const totalEstimate = wishlist.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -207,11 +229,99 @@ export default function UserDashboard() {
 
   const removeItem = (productId: string) => {
     setWishlist(prev => prev.filter(item => item.product_id !== productId))
+    setSelectedItems(prev => {
+      const next = new Set(prev)
+      next.delete(productId)
+      return next
+    })
+  }
+
+  // Toggle item selection
+  const toggleItemSelection = (productId: string) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(productId)) {
+        next.delete(productId)
+      } else {
+        next.add(productId)
+      }
+      return next
+    })
+  }
+
+  // Select all items
+  const selectAllItems = () => {
+    if (selectedItems.size === wishlist.length) {
+      setSelectedItems(new Set())
+    } else {
+      setSelectedItems(new Set(wishlist.map(item => item.product_id)))
+    }
+  }
+
+  // Calculate selected items total
+  const getSelectedItemsTotal = () => {
+    return wishlist
+      .filter(item => selectedItems.has(item.product_id))
+      .reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  }
+
+  const getSelectedItemsCount = () => {
+    return wishlist.filter(item => selectedItems.has(item.product_id)).length
+  }
+
+  const getTotalQuantity = () => {
+    return wishlist
+      .filter(item => selectedItems.has(item.product_id))
+      .reduce((sum, item) => sum + item.quantity, 0)
+  }
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'wishlist':
+        return 'bg-blue-600'
+      case 'pending':
+        return 'bg-orange-600'
+      case 'approved':
+        return 'bg-green-600'
+      case 'rejected':
+        return 'bg-red-600'
+      case 'fulfilled':
+        return 'bg-purple-600'
+      default:
+        return 'bg-slate-600'
+    }
+  }
+
+  const getStatusBadgeText = (status: string) => {
+    switch (status) {
+      case 'wishlist':
+        return 'Wishlist'
+      case 'pending':
+        return 'Menunggu Review'
+      case 'approved':
+        return 'Disetujui'
+      case 'rejected':
+        return 'Ditolak'
+      case 'fulfilled':
+        return 'Terpenuhi'
+      default:
+        return status
+    }
   }
 
   const submitRequest = async () => {
-    if (wishlist.length === 0) {
-      alert("❌ Wishlist kosong! Tambahkan produk dulu.")
+    if (selectedItems.size === 0) {
+      alert("❌ Pilih item yang mau di-request!")
+      return
+    }
+
+    // Show confirmation modal first
+    setShowConfirmModal(true)
+  }
+
+  const confirmSubmitRequest = async () => {
+    if (selectedItems.size === 0) {
+      alert("❌ Pilih item yang mau di-request!")
       return
     }
 
@@ -224,23 +334,57 @@ export default function UserDashboard() {
         return
       }
 
-      // Insert request to database
-      const { data, error } = await supabase
+      // Get selected items from wishlist
+      const selectedWishlistItems = wishlist.filter(item => selectedItems.has(item.product_id))
+      
+      // Calculate totals
+      const totalItems = selectedWishlistItems.length
+      const estimatedTotal = selectedWishlistItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+      // Insert request to product_requests table
+      const { data: requestData, error: requestError } = await supabase
         .from('product_requests')
         .insert({
           user_id: session.user.id,
-          items: wishlist,
           status: 'pending',
+          total_items: totalItems,
+          estimated_total: estimatedTotal,
+          notes: 'Request dari User Dashboard',
           created_at: new Date().toISOString()
         })
         .select()
         .single()
 
-      if (error) throw error
+      if (requestError) throw requestError
 
-      // Clear wishlist after successful submission
-      setWishlist([])
+      // Insert each item to request_items table
+      const requestItems = selectedWishlistItems.map(item => ({
+        request_id: requestData.id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_image_url: item.product_image_url || null,
+        unit_price: item.price,
+        quantity: item.quantity,
+        subtotal: item.price * item.quantity,
+        status: 'pending' as const,
+        created_at: new Date().toISOString()
+      }))
+
+      const { error: itemsError } = await supabase
+        .from('request_items')
+        .insert(requestItems)
+
+      if (itemsError) throw itemsError
+
+      // Remove submitted items from wishlist
+      const remainingWishlist = wishlist.filter(item => !selectedItems.has(item.product_id))
+      setWishlist(remainingWishlist)
+      
+      // Clear selection
+      setSelectedItems(new Set())
+      setShowConfirmModal(false)
       setShowRequestModal(false)
+      
       alert("✅ Permintaan produk berhasil dikirim! Tim kami akan segera memverifikasi.")
 
       // Refresh requests list
@@ -256,16 +400,36 @@ export default function UserDashboard() {
 
   const fetchProductRequests = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      setFetchingRequests(true)
+      
+      // Fetch requests with items
+      const { data: requests, error } = await supabase
         .from('product_requests')
-        .select('*')
+        .select(`
+          *,
+          items:request_items (
+            id,
+            product_id,
+            product_name,
+            product_image_url,
+            unit_price,
+            quantity,
+            subtotal,
+            status,
+            admin_notes,
+            created_at,
+            updated_at
+          )
+        `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setProductRequests(data || [])
+      setProductRequests(requests || [])
     } catch (err: any) {
       console.error("Failed to fetch requests:", err)
+    } finally {
+      setFetchingRequests(false)
     }
   }
 
@@ -308,6 +472,9 @@ export default function UserDashboard() {
   if (!isAuthorized) return null
 
   const completionPercentage = getCompletionPercentage()
+  const selectedTotal = getSelectedItemsTotal()
+  const selectedCount = getSelectedItemsCount()
+  const totalQuantity = getTotalQuantity()
 
   return (
     <div className="p-8 space-y-6 bg-slate-950 min-h-screen text-slate-100">
@@ -658,7 +825,7 @@ export default function UserDashboard() {
           </Card>
         </TabsContent>
 
-        {/* TAB 4: PERMINTAAN PRODUK (RFQ) */}
+        {/* TAB 4: PERMINTAAN PRODUK (RFQ) - UPDATED WITH TABLE FORMAT */}
         <TabsContent value="requests" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
@@ -669,7 +836,10 @@ export default function UserDashboard() {
                 </div>
                 <Button 
                   size="sm" 
-                  onClick={() => setShowRequestModal(true)}
+                  onClick={() => {
+                    setShowRequestModal(true)
+                    fetchProductRequests(profile?.id || '')
+                  }}
                   className="bg-orange-600 hover:bg-orange-700"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -681,7 +851,12 @@ export default function UserDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {productRequests.length === 0 ? (
+              {fetchingRequests ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-orange-400" />
+                  <span className="ml-2 text-slate-400">Memuat data permintaan...</span>
+                </div>
+              ) : productRequests.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p className="text-lg font-medium">Belum ada permintaan produk.</p>
@@ -707,24 +882,115 @@ export default function UserDashboard() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-6">
                   {productRequests.map((request) => (
-                    <div key={request.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <div>
-                        <p className="text-white font-medium">
-                          {request.items?.length || 0} Produk Diminta
-                        </p>
-                        <p className="text-slate-400 text-sm">
-                          {new Date(request.created_at).toLocaleDateString('id-ID')}
-                        </p>
+                    <div key={request.id} className="border border-slate-700 rounded-lg overflow-hidden">
+                      {/* Request Header */}
+                      <div className="bg-slate-800/50 p-4 flex items-center justify-between border-b border-slate-700">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="text-white font-bold text-lg">{request.request_number}</p>
+                            <p className="text-slate-400 text-sm">
+                              {new Date(request.created_at).toLocaleDateString('id-ID', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="text-slate-400 text-xs">Total Item</p>
+                            <p className="text-white font-mono">{request.total_items} produk</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-slate-400 text-xs">Estimasi Total</p>
+                            <p className="text-orange-400 font-bold">{formatPrice(request.estimated_total)}</p>
+                          </div>
+                          <Badge className={`${getStatusBadgeColor(request.status)} text-white px-4 py-2`}>
+                            {getStatusBadgeText(request.status)}
+                          </Badge>
+                        </div>
                       </div>
-                      <Badge className={
-                        request.status === 'pending' ? 'bg-orange-600' :
-                        request.status === 'approved' ? 'bg-green-600' : 'bg-red-600'
-                      }>
-                        {request.status === 'pending' ? 'Pending' :
-                         request.status === 'approved' ? 'Approved' : 'Rejected'}
-                      </Badge>
+
+                      {/* Request Items Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-slate-800 text-slate-300">
+                            <tr>
+                              <th className="px-4 py-3 w-16">Gambar</th>
+                              <th className="px-4 py-3">Nama Produk</th>
+                              <th className="px-4 py-3 text-right">Harga Satuan</th>
+                              <th className="px-4 py-3 text-center">Jumlah</th>
+                              <th className="px-4 py-3 text-right">Subtotal</th>
+                              <th className="px-4 py-3 text-center">Status</th>
+                              <th className="px-4 py-3 text-center">Tanggal</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800">
+                            {request.items?.map((item) => (
+                              <tr key={item.id} className="hover:bg-slate-800/30">
+                                <td className="px-4 py-3">
+                                  {item.product_image_url ? (
+                                    <img 
+                                      src={item.product_image_url} 
+                                      alt={item.product_name}
+                                      className="w-12 h-12 object-cover rounded-lg border border-slate-600"
+                                    />
+                                  ) : (
+                                    <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
+                                      <ImageIcon className="h-5 w-5 text-slate-500" />
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-white font-medium">
+                                  {item.product_name}
+                                  {item.admin_notes && (
+                                    <p className="text-slate-500 text-xs mt-1">
+                                      <MessageSquare className="h-3 w-3 inline mr-1" />
+                                      {item.admin_notes}
+                                    </p>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-300 font-mono">
+                                  {formatPrice(item.unit_price)}
+                                </td>
+                                <td className="px-4 py-3 text-center text-white font-mono">
+                                  {item.quantity}
+                                </td>
+                                <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
+                                  {formatPrice(item.subtotal)}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Badge className={`${getStatusBadgeColor(item.status)} text-white text-xs`}>
+                                    {getStatusBadgeText(item.status)}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-center text-slate-400 text-xs">
+                                  <Clock className="h-3 w-3 inline mr-1" />
+                                  {new Date(item.created_at || '').toLocaleDateString('id-ID')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Request Footer */}
+                      {request.admin_notes && (
+                        <div className="bg-slate-800/30 p-4 border-t border-slate-700">
+                          <div className="flex items-start gap-2">
+                            <Eye className="h-4 w-4 text-slate-400 mt-0.5" />
+                            <div>
+                              <p className="text-slate-400 text-xs font-medium">Catatan dari Admin:</p>
+                              <p className="text-slate-300 text-sm mt-1">{request.admin_notes}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -734,16 +1000,16 @@ export default function UserDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* MODAL WISHLIST & REQUEST */}
+      {/* MODAL WISHLIST & REQUEST - UPDATED WITH CHECKBOX TABLE */}
       <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-orange-400" />
               Buat Permintaan Produk
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Review produk di wishlist Anda dan ajukan permintaan.
+              Pilih produk dari wishlist Anda dan ajukan permintaan.
             </DialogDescription>
           </DialogHeader>
           
@@ -768,70 +1034,139 @@ export default function UserDashboard() {
                 </div>
               </div>
             ) : (
-              // WISHLIST ITEMS
-              <div className="space-y-4">
-                {wishlist.map((item) => (
-                  <div key={item.product_id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <div className="flex-1">
-                      <p className="text-white font-medium">{item.product_name}</p>
-                      <div className="flex items-center gap-4 mt-1">
-                        <p className="text-slate-400 text-xs">
-                          Ditambahkan: {new Date(item.added_date).toLocaleDateString('id-ID')}
-                        </p>
-                        <p className="text-primary text-sm font-semibold">
-                          {formatPrice(item.price)} / unit
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2">
+              // WISHLIST ITEMS TABLE WITH CHECKBOXES
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-800 text-slate-300 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 w-12">
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => updateQuantity(item.product_id, -1)}
-                          className="h-8 w-8 p-0 border-slate-600"
+                          variant="ghost"
+                          onClick={selectAllItems}
+                          className="h-8 w-8 p-0 hover:bg-slate-700"
                         >
-                          <Minus className="h-3 w-3" />
+                          {selectedItems.size === wishlist.length ? (
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                          ) : (
+                            <div className="h-4 w-4 border-2 border-slate-500 rounded" />
+                          )}
                         </Button>
-                        <span className="text-white font-mono w-12 text-center">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateQuantity(item.product_id, 1)}
-                          className="h-8 w-8 p-0 border-slate-600"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => removeItem(item.product_id)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                      </th>
+                      <th className="px-4 py-3 w-16">Gambar</th>
+                      <th className="px-4 py-3">Nama Produk</th>
+                      <th className="px-4 py-3 text-right">Harga Satuan</th>
+                      <th className="px-4 py-3 text-center">Jumlah</th>
+                      <th className="px-4 py-3 text-right">Subtotal</th>
+                      <th className="px-4 py-3 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {wishlist.map((item) => (
+                      <tr key={item.product_id} className="hover:bg-slate-800/30">
+                        <td className="px-4 py-3">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleItemSelection(item.product_id)}
+                            className="h-8 w-8 p-0 hover:bg-slate-700"
+                          >
+                            {selectedItems.has(item.product_id) ? (
+                              <CheckCircle className="h-4 w-4 text-green-400" />
+                            ) : (
+                              <div className="h-4 w-4 border-2 border-slate-500 rounded" />
+                            )}
+                          </Button>
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.product_image_url ? (
+                            <img 
+                              src={item.product_image_url} 
+                              alt={item.product_name}
+                              className="w-12 h-12 object-cover rounded-lg border border-slate-600"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
+                              <ImageIcon className="h-5 w-5 text-slate-500" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-white font-medium">
+                          {item.product_name}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-300 font-mono">
+                          {formatPrice(item.price)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateQuantity(item.product_id, -1)}
+                              className="h-8 w-8 p-0 border-slate-600"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="text-white font-mono w-12 text-center">
+                              {item.quantity}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateQuantity(item.product_id, 1)}
+                              className="h-8 w-8 p-0 border-slate-600"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
+                          {formatPrice(item.price * item.quantity)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => removeItem(item.product_id)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
           
           {wishlist.length > 0 && (
             <div className="border-t border-slate-700 pt-4 flex-shrink-0">
-              {/* TOTAL ESTIMATE - POJOK KIRI BAWAH */}
-              <div className="mb-4 bg-primary/10 rounded-lg p-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-primary">Estimasi Harga Total:</span>
-                  <span className="text-2xl font-bold text-primary">
-                    {formatPrice(totalEstimate)}
-                  </span>
+              {/* SELECTED ITEMS INFO & TOTAL ESTIMATE */}
+              <div className="mb-4 bg-slate-800/50 rounded-lg p-4">
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <span className="text-slate-400 text-sm">Item Dipilih:</span>
+                      <p className="text-white font-bold text-lg">{selectedCount} dari {wishlist.length} produk</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-sm">Total Quantity:</span>
+                      <p className="text-white font-bold text-lg">{totalQuantity} unit</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 text-sm">Estimasi Harga Total:</span>
+                    <p className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</p>
+                  </div>
                 </div>
+                {selectedCount === 0 && (
+                  <p className="text-orange-400 text-sm mt-2 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Pilih minimal 1 item untuk melanjutkan
+                  </p>
+                )}
               </div>
 
               <DialogFooter className="gap-2">
@@ -857,17 +1192,17 @@ export default function UserDashboard() {
                   <Button
                     onClick={submitRequest}
                     className="bg-orange-600 hover:bg-orange-700"
-                    disabled={submittingRequest}
+                    disabled={submittingRequest || selectedCount === 0}
                   >
                     {submittingRequest ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Mengirim...
+                        Memproses...
                       </>
                     ) : (
                       <>
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Kirim Permintaan ({wishlist.length} Produk)
+                        Lanjut ke Konfirmasi ({selectedCount} Item)
                       </>
                     )}
                   </Button>
@@ -875,6 +1210,90 @@ export default function UserDashboard() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL KONFIRMASI SEBELUM KIRIM */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-400">
+              <CheckCircle className="h-6 w-6" />
+              Konfirmasi Permintaan
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Review kembali permintaan Anda sebelum dikirim ke tim kami.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <p className="text-slate-400 text-sm">Total Produk</p>
+                <p className="text-white font-bold text-2xl">{selectedCount}</p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <p className="text-slate-400 text-sm">Total Quantity</p>
+                <p className="text-white font-bold text-2xl">{totalQuantity}</p>
+              </div>
+            </div>
+
+            {/* Selected Items List */}
+            <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700 max-h-60 overflow-y-auto">
+              <p className="text-slate-400 text-sm mb-3 font-medium">Produk yang Dipilih:</p>
+              <div className="space-y-2">
+                {wishlist
+                  .filter(item => selectedItems.has(item.product_id))
+                  .map((item) => (
+                    <div key={item.product_id} className="flex justify-between items-center text-sm">
+                      <span className="text-white truncate flex-1">{item.product_name}</span>
+                      <span className="text-slate-400 mx-2">×{item.quantity}</span>
+                      <span className="text-orange-400 font-mono">{formatPrice(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Total Estimate */}
+            <div className="bg-orange-900/20 rounded-lg p-4 border border-orange-700">
+              <div className="flex justify-between items-center">
+                <span className="text-orange-300 font-medium">Estimasi Total Harga:</span>
+                <span className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</span>
+              </div>
+              <p className="text-orange-300/60 text-xs mt-2">
+                *Harga dapat berubah sesuai penawaran dari supplier
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmModal(false)}
+              className="border-slate-600"
+              disabled={submittingRequest}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={confirmSubmitRequest}
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={submittingRequest}
+            >
+              {submittingRequest ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Mengirim...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  ✅ Ya, Kirim Permintaan
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
