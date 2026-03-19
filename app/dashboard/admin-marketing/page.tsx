@@ -211,45 +211,45 @@ export default function AdminMarketingDashboard() {
     setShowEditPriceModal(true)
   }
 
-  const handleSavePrice = async () => {
-    if (!editingProductId) return
-    
-    const newPrice = parseInt(editingPrice)
-    
-    if (isNaN(newPrice) || newPrice <= 0) {
-      alert("❌ Harga harus valid dan lebih dari 0!")
-      return
-    }
-    
-    try {
-      setPriceSaving(true)
-      
-      const { error } = await supabase
-        .from('products')
-        .update({ 
-          harga: newPrice
-        })
-        .eq('id', editingProductId)
-      
-      if (error) throw error
-      
-      // Update local state
-      setProducts(products.map(p => 
-        p.id === editingProductId ? { ...p, harga: newPrice } : p
-      ))
-      
-      setShowEditPriceModal(false)
-      setEditingProductId(null)
-      setEditingPrice('')
-      
-      alert("✅ Harga produk berhasil diupdate!")
-    } catch (err: any) {
-      console.error("Failed to update price:", err)
-      alert("❌ Gagal update harga: " + err.message)
-    } finally {
-      setPriceSaving(false)
-    }
+const handleSavePrice = async () => {
+  if (!editingProductId) return
+  
+  const newPrice = parseInt(editingPrice)
+  
+  if (isNaN(newPrice) || newPrice <= 0) {
+    alert("❌ Harga harus valid dan lebih dari 0!")
+    return
   }
+  
+  try {
+    setPriceSaving(true)
+    
+    // ✅ UPDATE KE DATABASE
+    const { error } = await supabase
+      .from('products')
+      .update({ 
+        harga: newPrice
+        // HAPUS updated_at karena kolom ini tidak ada
+      })
+      .eq('id', editingProductId)
+    
+    if (error) throw error
+    
+    // ✅ REFRESH DATA DARI DATABASE (BUKAN CUMA UPDATE STATE LOKAL)
+    await fetchProducts()
+    
+    setShowEditPriceModal(false)
+    setEditingProductId(null)
+    setEditingPrice('')
+    
+    alert("✅ Harga produk berhasil diupdate di database!")
+  } catch (err: any) {
+    console.error("Failed to update price:", err)
+    alert("❌ Gagal update harga: " + err.message)
+  } finally {
+    setPriceSaving(false)
+  }
+}
 
   // Dual Countdown Timer State (Auction End + Bid Deadline)
   const [timeRemaining, setTimeRemaining] = useState<Record<string, { auction: string; bidDeadline: string }>>({})
