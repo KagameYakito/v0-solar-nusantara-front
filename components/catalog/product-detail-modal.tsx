@@ -147,7 +147,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       localStorage.setItem('sonushub_wishlist', JSON.stringify(newWishlist))
 
       // 3. Dispatch event untuk notify dashboard
-      window.dispatchEvent(new Event('wishlist-updated'))
+      window.dispatchEvent(new CustomEvent('wishlist-updated'))
 
       setShowConfirmModal(true)
 

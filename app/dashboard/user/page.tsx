@@ -319,7 +319,10 @@ export default function UserDashboard() {
     setShowConfirmModal(true)
   }
 
-  const fetchWishlist = useCallback(async () => {
+// HAPUS useEffect localStorage yang lama
+// GANTI dengan fetch dari database + realtime subscription
+
+const fetchWishlist = useCallback(async () => {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
@@ -350,10 +353,10 @@ useEffect(() => {
     .on(
       'postgres_changes',
       {
-        event: '*',
+        event: '*', // Listen semua event: INSERT, UPDATE, DELETE
         schema: 'public',
         table: 'wishlists',
-        filter: `user_id=eq.${profile?.id}`
+        filter: `user_id=eq.${profile?.id}` // Hanya untuk user ini
       },
       () => {
         fetchWishlist() // Auto-refresh saat ada perubahan
@@ -366,7 +369,7 @@ useEffect(() => {
   }
 }, [profile?.id])
 
-// ✅ LISTEN untuk event dari ProductDetailModal
+// ✅ LISTEN untuk event dari ProductDetailModal (jika masih pakai localStorage fallback)
 useEffect(() => {
   const handleWishlistUpdated = () => {
     fetchWishlist()
