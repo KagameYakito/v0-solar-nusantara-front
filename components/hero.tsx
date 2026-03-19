@@ -202,7 +202,7 @@ export function Hero() {
           {/* TOMBOL 1: VIEW PRODUCTS (Gatekeeper Active + Ukuran Besar) */}
           <button
             onClick={handleViewProductsClick}
-            className="inline-flex items-center justify-center rounded-lg text-lg font-bold px-8 py-4 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 hover:scale-105 transition-all cursor-pointer min-w-[200px]"
+            className="inline-flex items-center justify-center rounded-lg text-lg font-bold px-7 py-3 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 hover:scale-105 transition-all cursor-pointer min-w-[200px]"
           >
             View Products
             <ArrowRight className="ml-3 h-6 w-6" />
@@ -211,7 +211,7 @@ export function Hero() {
           {/* TOMBOL 2: REQUEST FOR QUOTATION (Gatekeeper + Modal RFQ + Ukuran Besar) */}
           <button
             onClick={handleRFQClick}
-            className="inline-flex items-center justify-center rounded-lg text-lg font-bold px-8 py-4 border-2 border-primary/50 text-primary hover:bg-primary/10 hover:scale-105 transition-all cursor-pointer bg-transparent min-w-[240px]"
+            className="inline-flex items-center justify-center rounded-lg text-lg font-bold px-7 py-3 border-2 border-primary/50 text-primary hover:bg-primary/10 hover:scale-105 transition-all cursor-pointer bg-transparent min-w-[240px]"
           >
             Request for Quotation
           </button>
@@ -267,13 +267,6 @@ export function Hero() {
                   Yuk pilih produk dari katalog kami dan tambahkan ke wishlist!
                 </p>
                 <div className="flex gap-3 justify-center">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRFQModal(false)}
-                    className="border-slate-600"
-                  >
-                    Batal
-                  </Button>
                   <Link href="/catalog">
                     <Button className="bg-green-600 hover:bg-green-700">
                       <ExternalLink className="h-4 w-4 mr-2" />

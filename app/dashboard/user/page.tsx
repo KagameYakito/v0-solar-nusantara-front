@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, CreditCard, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink } from 'lucide-react'
+import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,9 +27,9 @@ interface Profile {
 }
 
 interface WishlistItem {
-  id: string
   product_id: string
   product_name: string
+  price: number
   quantity: number
   added_date: string
 }
@@ -90,6 +90,17 @@ export default function UserDashboard() {
   useEffect(() => {
     localStorage.setItem('sonushub_wishlist', JSON.stringify(wishlist))
   }, [wishlist])
+
+  // Calculate total estimated price
+  const totalEstimate = wishlist.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(price)
+  }
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -725,8 +736,8 @@ export default function UserDashboard() {
 
       {/* MODAL WISHLIST & REQUEST */}
       <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-orange-400" />
               Buat Permintaan Produk
@@ -736,7 +747,7 @@ export default function UserDashboard() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4">
+          <div className="py-4 flex-1 overflow-y-auto">
             {wishlist.length === 0 ? (
               // EMPTY STATE - WISHLIST KOSONG
               <div className="text-center py-12">
@@ -758,14 +769,19 @@ export default function UserDashboard() {
               </div>
             ) : (
               // WISHLIST ITEMS
-              <div className="space-y-4 max-h-[400px] overflow-y-auto">
+              <div className="space-y-4">
                 {wishlist.map((item) => (
                   <div key={item.product_id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                     <div className="flex-1">
                       <p className="text-white font-medium">{item.product_name}</p>
-                      <p className="text-slate-400 text-xs">
-                        Ditambahkan: {new Date(item.added_date).toLocaleDateString('id-ID')}
-                      </p>
+                      <div className="flex items-center gap-4 mt-1">
+                        <p className="text-slate-400 text-xs">
+                          Ditambahkan: {new Date(item.added_date).toLocaleDateString('id-ID')}
+                        </p>
+                        <p className="text-primary text-sm font-semibold">
+                          {formatPrice(item.price)} / unit
+                        </p>
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-3">
@@ -807,8 +823,18 @@ export default function UserDashboard() {
           </div>
           
           {wishlist.length > 0 && (
-            <DialogFooter className="border-t border-slate-700 pt-4">
-              <div className="flex justify-between w-full">
+            <div className="border-t border-slate-700 pt-4 flex-shrink-0">
+              {/* TOTAL ESTIMATE - POJOK KIRI BAWAH */}
+              <div className="mb-4 bg-primary/10 rounded-lg p-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-primary">Estimasi Harga Total:</span>
+                  <span className="text-2xl font-bold text-primary">
+                    {formatPrice(totalEstimate)}
+                  </span>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setShowRequestModal(false)}
@@ -846,8 +872,8 @@ export default function UserDashboard() {
                     )}
                   </Button>
                 </div>
-              </div>
-            </DialogFooter>
+              </DialogFooter>
+            </div>
           )}
         </DialogContent>
       </Dialog>
