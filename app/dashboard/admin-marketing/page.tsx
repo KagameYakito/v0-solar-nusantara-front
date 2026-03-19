@@ -227,8 +227,7 @@ export default function AdminMarketingDashboard() {
       const { error } = await supabase
         .from('products')
         .update({ 
-          harga: newPrice,
-          updated_at: new Date().toISOString()
+          harga: newPrice
         })
         .eq('id', editingProductId)
       
