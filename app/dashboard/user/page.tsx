@@ -825,7 +825,7 @@ export default function UserDashboard() {
           </Card>
         </TabsContent>
 
-        {/* TAB 4: PERMINTAAN PRODUK (RFQ) - UPDATED WITH TABLE FORMAT */}
+        {/* TAB 4: PERMINTAAN PRODUK (RFQ) - FIXED TO SHOW WISHLIST */}
         <TabsContent value="requests" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
@@ -836,70 +836,224 @@ export default function UserDashboard() {
                 </div>
                 <Button 
                   size="sm" 
-                  onClick={() => {
-                    setShowRequestModal(true)
-                    fetchProductRequests(profile?.id || '')
-                  }}
+                  onClick={submitRequest}
                   className="bg-orange-600 hover:bg-orange-700"
+                  disabled={wishlist.length === 0 || submittingRequest}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Buat Permintaan
+                  {submittingRequest ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Mengirim...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Kirim Permintaan ({wishlist.length} Item)
+                    </>
+                  )}
                 </Button>
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Ajukan permintaan produk yang Anda butuhkan. Tim kami akan mencarikan supplier terbaik.
+                Review produk di wishlist Anda sebelum mengajukan permintaan ke tim kami.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {fetchingRequests ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-orange-400" />
-                  <span className="ml-2 text-slate-400">Memuat data permintaan...</span>
-                </div>
-              ) : productRequests.length === 0 ? (
+              {wishlist.length === 0 ? (
+                // EMPTY STATE - WISHLIST KOSONG
                 <div className="text-center py-12 text-slate-500">
                   <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-lg font-medium">Belum ada permintaan produk.</p>
+                  <p className="text-lg font-medium">Belum ada produk di wishlist.</p>
                   <p className="text-sm mt-2">
-                    Buat permintaan produk yang Anda butuhkan, dan tim SonusHUB akan membantu mencarikannya.
+                    Tambahkan produk dari katalog untuk membuat permintaan.
                   </p>
                   <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
                     <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                       <FileText className="h-6 w-6 text-orange-400 mx-auto mb-2" />
-                      <p className="text-sm text-slate-300">1. Ajukan Produk</p>
-                      <p className="text-xs text-slate-500 mt-1">Pilih produk dari wishlist</p>
+                      <p className="text-sm text-slate-300">1. Pilih Produk</p>
+                      <p className="text-xs text-slate-500 mt-1">Dari katalog kami</p>
                     </div>
                     <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <CheckCircle className="h-6 w-6 text-green-400 mx-auto mb-2" />
-                      <p className="text-sm text-slate-300">2. Verifikasi</p>
-                      <p className="text-xs text-slate-500 mt-1">Tim kami verifikasi permintaan</p>
+                      <ShoppingCart className="h-6 w-6 text-green-400 mx-auto mb-2" />
+                      <p className="text-sm text-slate-300">2. Masukkan Wishlist</p>
+                      <p className="text-xs text-slate-500 mt-1">Klik "Request Item"</p>
                     </div>
                     <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <Package className="h-6 w-6 text-blue-400 mx-auto mb-2" />
-                      <p className="text-sm text-slate-300">3. Penawaran</p>
-                      <p className="text-xs text-slate-500 mt-1">Dapatkan penawaran dari supplier</p>
+                      <CheckCircle className="h-6 w-6 text-blue-400 mx-auto mb-2" />
+                      <p className="text-sm text-slate-300">3. Kirim Permintaan</p>
+                      <p className="text-xs text-slate-500 mt-1">Tim kami akan verifikasi</p>
                     </div>
                   </div>
+                  <Link href="/catalog" className="mt-6 inline-block">
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Buka Katalog Produk
+                    </Button>
+                  </Link>
                 </div>
               ) : (
-                <div className="space-y-6">
+                // WISHLIST ITEMS TABLE
+                <div className="space-y-4">
+                  {/* Table Header with Select All */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-800 text-slate-300">
+                        <tr>
+                          <th className="px-4 py-3 w-12">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={selectAllItems}
+                              className="h-8 w-8 p-0 hover:bg-slate-700"
+                            >
+                              {selectedItems.size === wishlist.length ? (
+                                <CheckCircle className="h-4 w-4 text-green-400" />
+                              ) : (
+                                <div className="h-4 w-4 border-2 border-slate-500 rounded" />
+                              )}
+                            </Button>
+                          </th>
+                          <th className="px-4 py-3 w-16">Gambar</th>
+                          <th className="px-4 py-3">Nama Produk</th>
+                          <th className="px-4 py-3 text-right">Harga Satuan</th>
+                          <th className="px-4 py-3 text-center">Jumlah</th>
+                          <th className="px-4 py-3 text-right">Subtotal</th>
+                          <th className="px-4 py-3 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {wishlist.map((item) => (
+                          <tr key={item.product_id} className="hover:bg-slate-800/30">
+                            <td className="px-4 py-3">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => toggleItemSelection(item.product_id)}
+                                className="h-8 w-8 p-0 hover:bg-slate-700"
+                              >
+                                {selectedItems.has(item.product_id) ? (
+                                  <CheckCircle className="h-4 w-4 text-green-400" />
+                                ) : (
+                                  <div className="h-4 w-4 border-2 border-slate-500 rounded" />
+                                )}
+                              </Button>
+                            </td>
+                            <td className="px-4 py-3">
+                              {item.product_image_url ? (
+                                <img 
+                                  src={item.product_image_url} 
+                                  alt={item.product_name}
+                                  className="w-12 h-12 object-cover rounded-lg border border-slate-600"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
+                                  <ImageIcon className="h-5 w-5 text-slate-500" />
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-white font-medium">
+                              {item.product_name}
+                            </td>
+                            <td className="px-4 py-3 text-right text-slate-300 font-mono">
+                              {formatPrice(item.price)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateQuantity(item.product_id, -1)}
+                                  className="h-8 w-8 p-0 border-slate-600"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-white font-mono w-12 text-center">
+                                  {item.quantity}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateQuantity(item.product_id, 1)}
+                                  className="h-8 w-8 p-0 border-slate-600"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
+                              {formatPrice(item.price * item.quantity)}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removeItem(item.product_id)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary Footer */}
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                    <div className="flex justify-between items-center flex-wrap gap-4">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <span className="text-slate-400 text-sm">Item Dipilih:</span>
+                          <p className="text-white font-bold text-lg">{selectedCount} dari {wishlist.length} produk</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 text-sm">Total Quantity:</span>
+                          <p className="text-white font-bold text-lg">{totalQuantity} unit</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-slate-400 text-sm">Estimasi Harga Total:</span>
+                        <p className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</p>
+                      </div>
+                    </div>
+                    {selectedCount === 0 && wishlist.length > 0 && (
+                      <p className="text-orange-400 text-sm mt-2 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Pilih minimal 1 item untuk mengirim permintaan
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* RIWAYAT PERMINTAAN YANG SUDAH DISUBMIT */}
+          {productRequests.length > 0 && (
+            <Card className="bg-slate-900 border-slate-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <History className="h-5 w-5 text-blue-400" />
+                  Riwayat Permintaan
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Daftar permintaan yang sudah dikirim ke tim kami.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   {productRequests.map((request) => (
                     <div key={request.id} className="border border-slate-700 rounded-lg overflow-hidden">
-                      {/* Request Header */}
                       <div className="bg-slate-800/50 p-4 flex items-center justify-between border-b border-slate-700">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="text-white font-bold text-lg">{request.request_number}</p>
-                            <p className="text-slate-400 text-sm">
-                              {new Date(request.created_at).toLocaleDateString('id-ID', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </p>
-                          </div>
+                        <div>
+                          <p className="text-white font-bold">{request.request_number || `RFQ-${request.id.slice(0, 8)}`}</p>
+                          <p className="text-slate-400 text-sm">
+                            {new Date(request.created_at).toLocaleDateString('id-ID', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </p>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-right">
@@ -915,88 +1069,30 @@ export default function UserDashboard() {
                           </Badge>
                         </div>
                       </div>
-
-                      {/* Request Items Table */}
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                          <thead className="bg-slate-800 text-slate-300">
-                            <tr>
-                              <th className="px-4 py-3 w-16">Gambar</th>
-                              <th className="px-4 py-3">Nama Produk</th>
-                              <th className="px-4 py-3 text-right">Harga Satuan</th>
-                              <th className="px-4 py-3 text-center">Jumlah</th>
-                              <th className="px-4 py-3 text-right">Subtotal</th>
-                              <th className="px-4 py-3 text-center">Status</th>
-                              <th className="px-4 py-3 text-center">Tanggal</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800">
-                            {request.items?.map((item) => (
-                              <tr key={item.id} className="hover:bg-slate-800/30">
-                                <td className="px-4 py-3">
-                                  {item.product_image_url ? (
-                                    <img 
-                                      src={item.product_image_url} 
-                                      alt={item.product_name}
-                                      className="w-12 h-12 object-cover rounded-lg border border-slate-600"
-                                    />
-                                  ) : (
-                                    <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
-                                      <ImageIcon className="h-5 w-5 text-slate-500" />
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-white font-medium">
-                                  {item.product_name}
-                                  {item.admin_notes && (
-                                    <p className="text-slate-500 text-xs mt-1">
-                                      <MessageSquare className="h-3 w-3 inline mr-1" />
-                                      {item.admin_notes}
-                                    </p>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-300 font-mono">
-                                  {formatPrice(item.unit_price)}
-                                </td>
-                                <td className="px-4 py-3 text-center text-white font-mono">
-                                  {item.quantity}
-                                </td>
-                                <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
-                                  {formatPrice(item.subtotal)}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <Badge className={`${getStatusBadgeColor(item.status)} text-white text-xs`}>
-                                    {getStatusBadgeText(item.status)}
-                                  </Badge>
-                                </td>
-                                <td className="px-4 py-3 text-center text-slate-400 text-xs">
-                                  <Clock className="h-3 w-3 inline mr-1" />
-                                  {new Date(item.created_at || '').toLocaleDateString('id-ID')}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Request Footer */}
-                      {request.admin_notes && (
-                        <div className="bg-slate-800/30 p-4 border-t border-slate-700">
-                          <div className="flex items-start gap-2">
-                            <Eye className="h-4 w-4 text-slate-400 mt-0.5" />
-                            <div>
-                              <p className="text-slate-400 text-xs font-medium">Catatan dari Admin:</p>
-                              <p className="text-slate-300 text-sm mt-1">{request.admin_notes}</p>
+                      {request.items && request.items.length > 0 && (
+                        <div className="p-4 space-y-2">
+                          {request.items.slice(0, 3).map((item) => (
+                            <div key={item.id} className="flex items-center justify-between text-sm">
+                              <span className="text-white">{item.product_name}</span>
+                              <span className="text-slate-400">×{item.quantity}</span>
+                              <Badge className={`${getStatusBadgeColor(item.status)} text-xs`}>
+                                {getStatusBadgeText(item.status)}
+                              </Badge>
                             </div>
-                          </div>
+                          ))}
+                          {request.items.length > 3 && (
+                            <p className="text-slate-500 text-xs text-center">
+                              +{request.items.length - 3} produk lainnya
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
