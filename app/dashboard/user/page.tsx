@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, MessageSquare } from 'lucide-react'
+import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink, Image as ImageIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -318,30 +318,61 @@ export default function UserDashboard() {
     setShowConfirmModal(true)
   }
 
+  // ✅ FIX: FETCH WISHLIST - SIMPLE DULU, TANPA JOIN YANG KOMPLEKS
   const fetchWishlist = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const { data, error } = await supabase
+      if (!session) {
+        console.log('❌ No session')
+        return
+      }
+      
+      console.log('🔍 Fetching wishlist for user:', session.user.id)
+      
+      // STEP 1: Fetch wishlist dulu (tanpa JOIN products)
+      const { data: wishlistData, error: wishlistError } = await supabase
         .from('wishlists')
-        .select(`
-          *,
-          products (
-            id,
-            nama_produk,
-            harga,
-            sku,
-            gambar_url,
-            stok
-          )
-        `)
+        .select('*')
         .eq('user_id', session.user.id)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
-      if (error) throw error
-      setWishlist(data || [])
+      
+      if (wishlistError) {
+        console.error('❌ Wishlist fetch error:', wishlistError)
+        throw wishlistError
+      }
+      
+      console.log('✅ Wishlist data:', wishlistData)
+      
+      // STEP 2: Jika ada wishlist, fetch products data terpisah
+      let enrichedWishlist = wishlistData || []
+      
+      if (enrichedWishlist.length > 0) {
+        const productIds = enrichedWishlist.map(w => w.product_id)
+        
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('id, nama_produk, harga, sku, gambar_url, stok')
+          .in('id', productIds)
+        
+        if (productsError) {
+          console.error('⚠️ Products fetch error:', productsError)
+        } else {
+          console.log('✅ Products data:', productsData)
+          
+          // Merge products data ke wishlist
+          enrichedWishlist = enrichedWishlist.map(item => ({
+            ...item,
+            products: productsData?.find(p => p.id.toString() === item.product_id) || null
+          }))
+        }
+      }
+      
+      setWishlist(enrichedWishlist)
+      console.log('📦 Final wishlist:', enrichedWishlist)
+      
     } catch (err: any) {
-      console.error("Failed to fetch wishlist:", err)
+      console.error("❌ Failed to fetch wishlist:", err)
     }
   }, [])
 
@@ -349,7 +380,10 @@ export default function UserDashboard() {
     fetchWishlist()
   }, [fetchWishlist])
 
+  // Realtime subscription
   useEffect(() => {
+    if (!profile?.id) return
+    
     const channel = supabase
       .channel('wishlist-changes')
       .on(
@@ -358,17 +392,29 @@ export default function UserDashboard() {
           event: '*',
           schema: 'public',
           table: 'wishlists',
-          filter: `user_id=eq.${profile?.id}`
+          filter: `user_id=eq.${profile.id}`
         },
         () => {
+          console.log('🔄 Realtime update detected')
           fetchWishlist()
         }
       )
       .subscribe()
+    
     return () => {
       supabase.removeChannel(channel)
     }
   }, [profile?.id])
+
+  // Listen for wishlist-updated event
+  useEffect(() => {
+    const handleWishlistUpdated = () => {
+      console.log('📢 Wishlist updated event received')
+      fetchWishlist()
+    }
+    window.addEventListener('wishlist-updated', handleWishlistUpdated)
+    return () => window.removeEventListener('wishlist-updated', handleWishlistUpdated)
+  }, [])
 
   const confirmSubmitRequest = async () => {
     if (selectedItems.size === 0) {
@@ -385,6 +431,7 @@ export default function UserDashboard() {
       const selectedWishlistItems = wishlist.filter(item => selectedItems.has(item.product_id))
       const totalItems = selectedWishlistItems.length
       const estimatedTotal = selectedWishlistItems.reduce((sum, item) => sum + ((item.products?.harga ?? item.price ?? 0) * item.quantity), 0)
+      
       const { data: requestData, error: requestError } = await supabase
         .from('product_requests')
         .insert({
@@ -397,7 +444,9 @@ export default function UserDashboard() {
         })
         .select()
         .single()
+      
       if (requestError) throw requestError
+      
       const requestItems = selectedWishlistItems.map(item => ({
         request_id: requestData.id,
         product_id: item.product_id,
@@ -409,10 +458,13 @@ export default function UserDashboard() {
         status: 'pending' as const,
         created_at: new Date().toISOString()
       }))
+      
       const { error: itemsError } = await supabase
         .from('request_items')
         .insert(requestItems)
+      
       if (itemsError) throw itemsError
+      
       const remainingWishlist = wishlist.filter(item => !selectedItems.has(item.product_id))
       setWishlist(remainingWishlist)
       setSelectedItems(new Set())
@@ -815,8 +867,8 @@ export default function UserDashboard() {
                       <p className="text-xs text-slate-500 mt-1">Tim kami akan verifikasi</p>
                     </div>
                   </div>
-                  <Link href="/catalog" className="mt-6 inline-block">
-                    <Button className="bg-green-600 hover:bg-green-700">
+                  <Link href="/catalog">
+                    <Button className="mt-6 bg-green-600 hover:bg-green-700">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Buka Katalog Produk
                     </Button>
@@ -858,11 +910,8 @@ export default function UserDashboard() {
                               </Button>
                             </td>
                             <td className="px-4 py-3">
-                              {(item.products?.gambar_url ?? item.product_image_url) ? (
-                                <img 
-                                  src={item.products?.gambar_url ?? item.product_image_url ?? ''} 
-                                  alt={item.products?.nama_produk ?? item.product_name} 
-                                />
+                              {(item.products?.gambar_url || item.product_image_url) ? (
+                                <img src={item.products?.gambar_url || item.product_image_url || ''} alt={item.products?.nama_produk || item.product_name} className="w-12 h-12 object-cover rounded-lg border border-slate-600" />
                               ) : (
                                 <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
                                   <ImageIcon className="h-5 w-5 text-slate-500" />
@@ -870,10 +919,10 @@ export default function UserDashboard() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-white font-medium">
-                              {item.products?.nama_produk ?? item.product_name}
+                              {item.products?.nama_produk || item.product_name}
                             </td>
                             <td className="px-4 py-3 text-right text-slate-300 font-mono">
-                              {formatPrice(item.products?.harga ?? item.price ?? 0)}
+                              {formatPrice(item.products?.harga || item.price || 0)}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
@@ -887,7 +936,7 @@ export default function UserDashboard() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
-                              {formatPrice((item.products?.harga ?? item.price ?? 0) * item.quantity)}
+                              {formatPrice((item.products?.harga || item.price || 0) * item.quantity)}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <Button size="sm" variant="destructive" onClick={() => removeItem(item.product_id)} className="h-8 w-8 p-0">
@@ -987,234 +1036,6 @@ export default function UserDashboard() {
           )}
         </TabsContent>
       </Tabs>
-
-      {/* MODAL WISHLIST & REQUEST */}
-      <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-orange-400" />
-              Buat Permintaan Produk
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Pilih produk dari wishlist Anda dan ajukan permintaan.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 flex-1 overflow-y-auto">
-            {wishlist.length === 0 ? (
-              <div className="text-center py-12">
-                <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-slate-600" />
-                <h3 className="text-xl font-semibold text-white mb-2">Belum ada wishlist?</h3>
-                <p className="text-slate-400 mb-6">Yuk pilih produk dari katalog kami dan tambahkan ke wishlist!</p>
-                <div className="flex gap-3 justify-center">
-                  <Link href="/catalog">
-                    <Button className="bg-green-600 hover:bg-green-700">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Buka Katalog Produk
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-800 text-slate-300 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3 w-12">
-                        <Button size="sm" variant="ghost" onClick={selectAllItems} className="h-8 w-8 p-0 hover:bg-slate-700">
-                          {selectedItems.size === wishlist.length ? (
-                            <CheckCircle className="h-4 w-4 text-green-400" />
-                          ) : (
-                            <div className="h-4 w-4 border-2 border-slate-500 rounded" />
-                          )}
-                        </Button>
-                      </th>
-                      <th className="px-4 py-3 w-16">Gambar</th>
-                      <th className="px-4 py-3">Nama Produk</th>
-                      <th className="px-4 py-3 text-right">Harga Satuan</th>
-                      <th className="px-4 py-3 text-center">Jumlah</th>
-                      <th className="px-4 py-3 text-right">Subtotal</th>
-                      <th className="px-4 py-3 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {wishlist.map((item) => (
-                      <tr key={item.product_id} className="hover:bg-slate-800/30">
-                        <td className="px-4 py-3">
-                          <Button size="sm" variant="ghost" onClick={() => toggleItemSelection(item.product_id)} className="h-8 w-8 p-0 hover:bg-slate-700">
-                            {selectedItems.has(item.product_id) ? (
-                              <CheckCircle className="h-4 w-4 text-green-400" />
-                            ) : (
-                              <div className="h-4 w-4 border-2 border-slate-500 rounded" />
-                            )}
-                          </Button>
-                        </td>
-                        <td className="px-4 py-3">
-                          {(item.products?.gambar_url ?? item.product_image_url) ? (
-                            <img 
-                              src={item.products?.gambar_url ?? item.product_image_url ?? ''} 
-                              alt={item.products?.nama_produk ?? item.product_name} 
-                            />
-                          ) : (
-                            <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
-                              <ImageIcon className="h-5 w-5 text-slate-500" />
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-white font-medium">
-                          {item.products?.nama_produk ?? item.product_name}
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-300 font-mono">
-                          {formatPrice(item.products?.harga ?? item.price ?? 0)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <Button size="sm" variant="outline" onClick={() => updateQuantity(item.product_id, -1)} className="h-8 w-8 p-0 border-slate-600">
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="text-white font-mono w-12 text-center">{item.quantity}</span>
-                            <Button size="sm" variant="outline" onClick={() => updateQuantity(item.product_id, 1)} className="h-8 w-8 p-0 border-slate-600">
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
-                          {formatPrice((item.products?.harga ?? item.price ?? 0) * item.quantity)}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Button size="sm" variant="destructive" onClick={() => removeItem(item.product_id)} className="h-8 w-8 p-0">
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          {wishlist.length > 0 && (
-            <div className="border-t border-slate-700 pt-4 flex-shrink-0">
-              <div className="mb-4 bg-slate-800/50 rounded-lg p-4">
-                <div className="flex justify-between items-center flex-wrap gap-4">
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <span className="text-slate-400 text-sm">Item Dipilih:</span>
-                      <p className="text-white font-bold text-lg">{selectedCount} dari {wishlist.length} produk</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-sm">Total Quantity:</span>
-                      <p className="text-white font-bold text-lg">{totalQuantity} unit</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-400 text-sm">Estimasi Harga Total:</span>
-                    <p className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</p>
-                  </div>
-                </div>
-                {selectedCount === 0 && (
-                  <p className="text-orange-400 text-sm mt-2 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
-                    Pilih minimal 1 item untuk melanjutkan
-                  </p>
-                )}
-              </div>
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setShowRequestModal(false)} className="border-slate-600" disabled={submittingRequest}>
-                  Batal
-                </Button>
-                <div className="flex gap-2">
-                  <Link href="/catalog">
-                    <Button variant="outline" className="border-green-600 text-green-400" disabled={submittingRequest}>
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Tambah Produk
-                    </Button>
-                  </Link>
-                  <Button onClick={submitRequest} className="bg-orange-600 hover:bg-orange-700" disabled={submittingRequest || selectedCount === 0}>
-                    {submittingRequest ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Memproses...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Lanjut ke Konfirmasi ({selectedCount} Item)
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL KONFIRMASI */}
-      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-400">
-              <CheckCircle className="h-6 w-6" />
-              Konfirmasi Permintaan
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Review kembali permintaan Anda sebelum dikirim ke tim kami.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                <p className="text-slate-400 text-sm">Total Produk</p>
-                <p className="text-white font-bold text-2xl">{selectedCount}</p>
-              </div>
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                <p className="text-slate-400 text-sm">Total Quantity</p>
-                <p className="text-white font-bold text-2xl">{totalQuantity}</p>
-              </div>
-            </div>
-            <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700 max-h-60 overflow-y-auto">
-              <p className="text-slate-400 text-sm mb-3 font-medium">Produk yang Dipilih:</p>
-              <div className="space-y-2">
-                {wishlist
-                  .filter(item => selectedItems.has(item.product_id))
-                  .map((item) => (
-                    <div key={item.product_id} className="flex justify-between items-center text-sm">
-                      <span className="text-white truncate flex-1">{item.products?.nama_produk ?? item.product_name}</span>
-                      <span className="text-slate-400 mx-2">×{item.quantity}</span>
-                      <span className="text-orange-400 font-mono">{formatPrice((item.products?.harga ?? item.price ?? 0) * item.quantity)}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-            <div className="bg-orange-900/20 rounded-lg p-4 border border-orange-700">
-              <div className="flex justify-between items-center">
-                <span className="text-orange-300 font-medium">Estimasi Total Harga:</span>
-                <span className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</span>
-              </div>
-              <p className="text-orange-300/60 text-xs mt-2">*Harga dapat berubah sesuai penawaran dari supplier</p>
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowConfirmModal(false)} className="border-slate-600" disabled={submittingRequest}>
-              Batal
-            </Button>
-            <Button onClick={confirmSubmitRequest} className="bg-orange-600 hover:bg-orange-700" disabled={submittingRequest}>
-              {submittingRequest ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Mengirim...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Kirim Permintaan
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
