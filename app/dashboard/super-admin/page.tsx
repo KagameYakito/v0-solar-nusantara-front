@@ -1,13 +1,13 @@
-// app/dashboard/super-admin/page.tsx
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link' // <--- IMPORT BARU DITAMBAHKAN
-import { Users, Shield, AlertCircle, Loader2, ArrowLeft } from 'lucide-react' // <--- ArrowLeft ditambahkan
+import Link from 'next/link'
+import { Users, Shield, AlertCircle, Loader2, ArrowLeft, CheckCircle, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button' // ✅ Tambah import Button
 
 interface UserProfile {
   id: string
@@ -16,11 +16,19 @@ interface UserProfile {
   created_at: string
 }
 
-// PINDAHKAN SUPABASE CLIENT KE LUAR KOMPONEN AGAR STABIL
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
+
+// ✅ Opsi role yang tersedia (biar gampang update nanti)
+const ROLE_OPTIONS = [
+  { value: 'user', label: 'User Biasa', color: 'bg-slate-600' },
+  { value: 'admin_logistik', label: 'Admin Logistik', color: 'bg-orange-600' },
+  { value: 'admin_marketing', label: 'Admin Marketing', color: 'bg-green-600' },
+  { value: 'admin_data', label: 'Admin Data', color: 'bg-purple-600' },
+  { value: 'super_admin', label: 'Super Admin', color: 'bg-blue-600' },
+]
 
 export default function SuperAdminDashboard() {
   const router = useRouter()
@@ -28,49 +36,38 @@ export default function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAuthorized, setIsAuthorized] = useState(false)
-  const [isPageVisible, setIsPageVisible] = useState(true);
+  
+  // ✅ Tambah state untuk tracking role yang sedang diubah
+  const [changingRole, setChangingRole] = useState<string | null>(null)
+  const [roleChangeResult, setRoleChangeResult] = useState<{id: string, success: boolean} | null>(null)
 
-  // Fungsi untuk mengambil data user
   const fetchUsers = useCallback(async () => {
     try {
-      console.log("🔍 [DEBUG] Mulai mengambil data user dari database...");
-      
       const response = await supabase
         .from('profiles')
         .select('id, email, role, created_at')
         .order('created_at', { ascending: false })
       
-      if (response.error) {
-        console.error("❌ [DEBUG] Error dari Supabase:", response.error);
-        throw response.error;
-      }
-      
-      console.log("✅ [DEBUG] Data berhasil diambil!");
-      console.log("📊 [DEBUG] Jumlah user ditemukan:", response.data?.length);
-      console.log("📋 [DEBUG] Detail data user:", response.data); 
-      
+      if (response.error) throw response.error
       setUsers(response.data || [])
     } catch (err: any) {
-      console.error("❌ [DEBUG] Gagal mengambil data user:", err)
+      console.error("Failed to fetch users:", err)
       setError("Gagal memuat data dari database: " + err.message)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // Efek utama: Cek Auth & Load Data
-    useEffect(() => {
+  useEffect(() => {
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
 
     const checkAuthAndLoad = async () => {
       try {
-        // Buat promise timeout 5 detik
         const timeoutPromise = new Promise((_, reject) => {
           timeoutId = setTimeout(() => reject(new Error('Session check timeout')), 5000)
         })
 
-        // Race antara getSession dan timeout
         const sessionResponse: any = await Promise.race([
           supabase.auth.getSession(),
           timeoutPromise
@@ -79,29 +76,26 @@ export default function SuperAdminDashboard() {
         if (timeoutId) clearTimeout(timeoutId)
         if (!isMounted) return
         
-        // Jika session invalid/expired, HARD redirect ke login
         if (sessionResponse.error || !sessionResponse.data.session) {
-          console.warn("⚠️ Session invalid/expired, hard redirect to login...")
           window.location.href = '/auth/signin'
           return
         }
 
         const session = sessionResponse.data.session
-
-        const profileResponse = await supabase.from('profiles').select('role').eq('id', session.user.id).single()
+        const profileResponse = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
 
         if (!isMounted) return
-
         if (profileResponse.error) {
-          console.error("❌ Profile fetch failed:", profileResponse.error)
           window.location.href = '/'
           return
         }
 
         const profile = profileResponse.data
-
         if (!profile || profile.role !== 'super_admin') {
-          console.warn("🚫 Access Denied: Not Super Admin")
           window.location.href = '/'
           return
         }
@@ -110,12 +104,10 @@ export default function SuperAdminDashboard() {
           setIsAuthorized(true)
           await fetchUsers()
         }
-
       } catch (err: any) {
-        console.error("💥 Critical Auth Error:", err.message)
+        console.error("Critical Auth Error:", err.message)
         if (isMounted) {
           setLoading(false)
-          // Hard redirect ke login jika ada error kritis/timeout
           window.location.href = '/auth/signin'
         }
       }
@@ -127,46 +119,56 @@ export default function SuperAdminDashboard() {
       isMounted = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [router, fetchUsers])
+  }, [fetchUsers])
 
-    // Efek untuk menangani visibility change (tab switch)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setIsPageVisible(false);
-        console.log("Page hidden - pausing operations");
-      } else {
-        setIsPageVisible(true);
-        console.log("Page visible - resuming operations");
-        // Optional: Refresh data saat tab dibuka kembali
-        // fetchUsers(); 
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  // Fungsi Ganti Role
+  // ✅ FUNGSI GANTI ROLE - LEBIH ROBUST
   const handleRoleChange = async (userId: string, newRole: string) => {
-    if (!confirm(`Yakin ingin mengubah role user ini menjadi ${newRole}?`)) return;
+    const user = users.find(u => u.id === userId)
+    if (!confirm(`Yakin ingin mengubah role ${user?.email || 'user ini'} dari "${user?.role}" menjadi "${newRole}"?`)) {
+      // Reset dropdown ke role lama jika user cancel
+      fetchUsers()
+      return
+    }
+
+    setChangingRole(userId)
+    setRoleChangeResult(null)
 
     try {
       const response = await supabase
         .from('profiles')
-        .update({ role: newRole })
+        .update({ 
+          role: newRole,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', userId)
 
       if (response.error) throw response.error
 
-      alert("✅ Berhasil! Role user telah diubah.")
-      await fetchUsers() // Refresh data
+      setRoleChangeResult({ id: userId, success: true })
+      
+      // ✅ Refresh data setelah berhasil
+      await fetchUsers()
+      
+      // ✅ Clear notification setelah 3 detik
+      setTimeout(() => setRoleChangeResult(null), 3000)
+      
     } catch (err: any) {
+      console.error("Failed to update role:", err)
+      setRoleChangeResult({ id: userId, success: false })
       alert("❌ Gagal mengubah role: " + err.message)
+      
+      // Reset dropdown ke role lama jika gagal
+      setTimeout(() => fetchUsers(), 1000)
+      
+    } finally {
+      setChangingRole(null)
     }
+  }
+
+  // ✅ HELPER: Dapatkan warna badge berdasarkan role
+  const getRoleBadgeColor = (role: string) => {
+    const roleOption = ROLE_OPTIONS.find(r => r.value === role)
+    return roleOption?.color || 'bg-slate-600'
   }
 
   // --- RENDERING ---
@@ -197,11 +199,9 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="p-8 space-y-6 bg-slate-950 min-h-screen text-slate-100">
-      {/* HEADER YANG SUDAH DI-UPDATE DENGAN TOMBOL BACK */}
+      {/* HEADER */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div className="flex items-center gap-4">
-          
-          {/* TOMBOL BACK TO HOME */}
           <Link 
             href="/" 
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors group"
@@ -213,7 +213,6 @@ export default function SuperAdminDashboard() {
             <span className="text-sm font-medium hidden sm:inline">Back to Home</span>
           </Link>
 
-          {/* JUDUL DASHBOARD */}
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2 text-blue-500">
               <Shield className="h-8 w-8" />
@@ -223,11 +222,25 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        {/* BADGE LOGIN */}
         <Badge variant="outline" className="text-blue-400 border-blue-400 px-4 py-2 bg-blue-900/20 hidden md:flex">
           Logged in as: SUPER_ADMIN
         </Badge>
       </div>
+
+      {/* NOTIFIKASI HASIL GANTI ROLE */}
+      {roleChangeResult && roleChangeResult.success && (
+        <div className="bg-green-900/30 border border-green-700 text-green-400 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle className="h-5 w-5" />
+          <span>Role berhasil diubah!</span>
+        </div>
+      )}
+      
+      {roleChangeResult && !roleChangeResult.success && (
+        <div className="bg-red-900/30 border border-red-700 text-red-400 px-4 py-3 rounded-lg flex items-center gap-2">
+          <XCircle className="h-5 w-5" />
+          <span>Gagal mengubah role. Silakan coba lagi.</span>
+        </div>
+      )}
 
       {/* KONTEN UTAMA */}
       <Card className="bg-slate-900 border-slate-800 shadow-xl">
@@ -258,30 +271,36 @@ export default function SuperAdminDashboard() {
                     <tr key={user.id} className="hover:bg-slate-800/50 transition-colors">
                       <td className="px-4 py-3 font-medium text-white">{user.email}</td>
                       <td className="px-4 py-3">
-                        <Badge className={
-                          user.role === 'super_admin' ? 'bg-blue-600' : 
-                          user.role === 'admin_marketing' ? 'bg-green-600' :
-                          user.role === 'admin_logistik' ? 'bg-orange-600' :
-                          user.role === 'admin_data' ? 'bg-purple-600' : 'bg-slate-600'
-                        }>
+                        <Badge className={getRoleBadgeColor(user.role)}>
                           {user.role}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-slate-400">
-                        {new Date(user.created_at).toLocaleDateString()}
+                        {new Date(user.created_at).toLocaleDateString('id-ID', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <select
                           value={user.role}
                           onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                          disabled={user.role === 'super_admin'} 
-                          className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-blue-500 disabled:opacity-50 cursor-pointer hover:bg-slate-700"
+                          disabled={changingRole === user.id || user.role === 'super_admin'}
+                          className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-blue-500 disabled:opacity-50 cursor-pointer hover:bg-slate-700 transition-colors"
                         >
-                          <option value="user">User Biasa</option>
-                          <option value="admin_logistik">Admin Logistik</option>
-                          <option value="admin_marketing">Admin Marketing</option>
-                          <option value="admin_data">Admin Data</option>
+                          {ROLE_OPTIONS
+                            .filter(role => role.value !== 'super_admin') // User lain tidak bisa jadi super_admin dari dropdown
+                            .map(role => (
+                              <option key={role.value} value={role.value}>
+                                {role.label}
+                              </option>
+                            ))
+                          }
                         </select>
+                        {changingRole === user.id && (
+                          <Loader2 className="h-3 w-3 animate-spin text-blue-500 inline-block ml-2" />
+                        )}
                       </td>
                     </tr>
                   ))}
