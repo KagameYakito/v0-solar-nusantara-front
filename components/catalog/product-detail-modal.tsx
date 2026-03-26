@@ -22,13 +22,35 @@ interface ProductDetailModalProps {
   onClose: () => void
 }
 
+interface WishlistItem {
+  product_id: string
+  product_name: string
+  product_image_url?: string | null
+  price: number
+  quantity: number
+  added_date: string
+}
+
 export function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
   // ✅ INIT ROUTER
   const router = useRouter()
   
   const [quantity, setQuantity] = useState(1)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [wishlist, setWishlist] = useState<WishlistItem[]>([])
   const [isAdding, setIsAdding] = useState(false)
+
+  // Load wishlist from localStorage (Fallback only)
+  useEffect(() => {
+    const savedWishlist = localStorage.getItem('sonushub_wishlist')
+    if (savedWishlist) {
+      try {
+        setWishlist(JSON.parse(savedWishlist))
+      } catch (e) {
+        console.error("Failed to parse wishlist:", e)
+      }
+    }
+  }, [])
 
   if (!product) return null
 
@@ -42,7 +64,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
 
   const estimatedTotal = product.price * quantity
 
-  // ✅ SAVE TO DATABASE (TANPA KOLOM PRICE - SUDAH DIHAPUS)
+  // ✅ SAVE TO DATABASE (BUKAN LOCALSTORAGE)
   const handleAddToWishlist = async () => {
     if (!product) return
 
@@ -63,7 +85,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         .from('wishlists')
         .select('id, quantity')
         .eq('user_id', session.user.id)
-        .eq('product_id', product.id.toString())
+        .eq('product_id', product.id)
         .eq('status', 'active')
         .single()
 
@@ -80,14 +102,15 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
           })
           .eq('id', existingItem.id))
       } else {
-        // ✅ INSERT BARU KE DATABASE (TANPA PRICE!)
+        // Insert baru ke Database
         ;({ error } = await supabase
           .from('wishlists')
           .insert({
             user_id: session.user.id,
-            product_id: product.id.toString(),
+            product_id: product.id,
             product_name: product.name,
             product_image_url: product.image_url || null,
+            price: product.price,
             quantity: quantity,
             status: 'active',
             created_at: new Date().toISOString()
@@ -96,7 +119,34 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
 
       if (error) throw error
 
-      // 2. Dispatch event untuk notify dashboard (REALTIME)
+      // 2. Update Local State (untuk UI langsung responsif)
+      const newItem: WishlistItem = {
+        product_id: product.id,
+        product_name: product.name,
+        product_image_url: product.image_url,
+        price: product.price,
+        quantity: quantity,
+        added_date: new Date().toISOString()
+      }
+
+      const existingIndex = wishlist.findIndex(item => item.product_id === product.id)
+      let newWishlist: WishlistItem[]
+      
+      if (existingIndex >= 0) {
+        newWishlist = wishlist.map((item, index) => 
+          index === existingIndex 
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        )
+      } else {
+        newWishlist = [...wishlist, newItem]
+      }
+      setWishlist(newWishlist)
+      
+      // Simpan ke localStorage juga sebagai backup/cache
+      localStorage.setItem('sonushub_wishlist', JSON.stringify(newWishlist))
+
+      // 3. Dispatch event untuk notify dashboard
       window.dispatchEvent(new CustomEvent('wishlist-updated'))
 
       setShowConfirmModal(true)

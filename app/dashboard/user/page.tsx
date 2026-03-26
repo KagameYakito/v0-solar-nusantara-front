@@ -1,9 +1,10 @@
 'use client'
+
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink, Image as ImageIcon } from 'lucide-react'
+import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, MessageSquare } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,24 +27,12 @@ interface Profile {
 }
 
 interface WishlistItem {
-  id?: string
-  user_id?: string
   product_id: string
   product_name: string
   product_image_url?: string | null
-  price?: number
+  price: number
   quantity: number
-  status?: string
-  created_at?: string
-  updated_at?: string
-  products?: {
-    id: number
-    nama_produk: string
-    harga: number
-    sku: string
-    gambar_url: string | null
-    stok: number
-  }
+  added_date: string
 }
 
 interface RequestItem {
@@ -88,6 +77,7 @@ export default function UserDashboard() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  
   const [activeTab, setActiveTab] = useState('profile')
   const [productRequests, setProductRequests] = useState<ProductRequest[]>([])
   
@@ -98,7 +88,7 @@ export default function UserDashboard() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [submittingRequest, setSubmittingRequest] = useState(false)
   const [fetchingRequests, setFetchingRequests] = useState(false)
-  
+
   // Form State
   const [formData, setFormData] = useState({
     full_name: '',
@@ -108,6 +98,23 @@ export default function UserDashboard() {
     company_address: '',
     phone_number: ''
   })
+
+  // Load Wishlist from localStorage on mount
+  useEffect(() => {
+    const savedWishlist = localStorage.getItem('sonushub_wishlist')
+    if (savedWishlist) {
+      try {
+        setWishlist(JSON.parse(savedWishlist))
+      } catch (e) {
+        console.error("Failed to parse wishlist:", e)
+      }
+    }
+  }, [])
+
+  // Save Wishlist to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sonushub_wishlist', JSON.stringify(wishlist))
+  }, [wishlist])
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -120,16 +127,20 @@ export default function UserDashboard() {
   const fetchProfile = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      
       if (!session) {
         window.location.href = '/auth/signin'
         return
       }
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
         .single()
+
       if (error) throw error
+
       setProfile(data)
       setFormData({
         full_name: data.full_name || '',
@@ -140,6 +151,7 @@ export default function UserDashboard() {
         phone_number: data.phone_number || ''
       })
       setIsAuthorized(true)
+      
     } catch (err: any) {
       console.error("Failed to fetch profile:", err)
       setError("Gagal memuat data profil: " + err.message)
@@ -154,8 +166,10 @@ export default function UserDashboard() {
 
   const handleSaveProfile = async () => {
     if (!profile?.id) return
+
     try {
       setSaving(true)
+
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -169,15 +183,18 @@ export default function UserDashboard() {
           updated_at: new Date().toISOString()
         })
         .eq('id', profile.id)
+
       if (error) throw error
-      setProfile(prev => prev ? {
-        ...prev,
-        ...formData,
+
+      setProfile(prev => prev ? { 
+        ...prev, 
+        ...formData, 
         profile_completed: true,
         updated_at: new Date().toISOString()
       } : null)
       setIsEditing(false)
       alert("✅ Profil berhasil diperbarui!")
+
     } catch (err: any) {
       alert("❌ Gagal menyimpan profil: " + err.message)
     } finally {
@@ -199,59 +216,77 @@ export default function UserDashboard() {
     setIsEditing(false)
   }
 
-  const removeItem = async (productId: string) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        alert("❌ Session expired. Silakan login ulang.")
-        return
-      }
-      const { error } = await supabase
-        .from('wishlists')
-        .delete()
-        .eq('user_id', session.user.id)
-        .eq('product_id', productId)
-      if (error) throw error
-      setWishlist(prev => prev.filter(item => item.product_id !== productId))
-      setSelectedItems(prev => {
-        const next = new Set(prev)
-        next.delete(productId)
-        return next
+// ✅ GANTI FUNGSI removeItem DENGAN INI
+const removeItem = async (productId: string) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert("❌ Session expired. Silakan login ulang.")
+      return
+    }
+
+    // DELETE DARI DATABASE
+    const { error } = await supabase
+      .from('wishlists')
+      .delete()
+      .eq('user_id', session.user.id)
+      .eq('product_id', productId)
+
+    if (error) throw error
+
+    // UPDATE LOCAL STATE
+    setWishlist(prev => prev.filter(item => item.product_id !== productId))
+    setSelectedItems(prev => {
+      const next = new Set(prev)
+      next.delete(productId)
+      return next
+    })
+
+  } catch (err: any) {
+    console.error("Failed to remove item:", err)
+    alert("❌ Gagal menghapus item: " + err.message)
+  }
+}
+
+// ✅ UPDATE QUANTITY JUGA HARUS SYNC KE DATABASE
+const updateQuantity = async (productId: string, delta: number) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    // Find current item
+    const currentItem = wishlist.find(item => item.product_id === productId)
+    if (!currentItem) return
+
+    const newQty = Math.max(1, currentItem.quantity + delta)
+
+    // UPDATE DATABASE
+    const { error } = await supabase
+      .from('wishlists')
+      .update({ 
+        quantity: newQty,
+        updated_at: new Date().toISOString()
       })
-    } catch (err: any) {
-      console.error("Failed to remove item:", err)
-      alert("❌ Gagal menghapus item: " + err.message)
-    }
-  }
+      .eq('user_id', session.user.id)
+      .eq('product_id', productId)
 
-  const updateQuantity = async (productId: string, delta: number) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const currentItem = wishlist.find(item => item.product_id === productId)
-      if (!currentItem) return
-      const newQty = Math.max(1, currentItem.quantity + delta)
-      const { error } = await supabase
-        .from('wishlists')
-        .update({
-          quantity: newQty,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', session.user.id)
-        .eq('product_id', productId)
-      if (error) throw error
-      setWishlist(prev => prev.map(item => {
-        if (item.product_id === productId) {
-          return { ...item, quantity: newQty }
-        }
-        return item
-      }))
-    } catch (err: any) {
-      console.error("Failed to update quantity:", err)
-      alert("❌ Gagal update quantity: " + err.message)
-    }
-  }
+    if (error) throw error
 
+    // UPDATE LOCAL STATE
+    setWishlist(prev => prev.map(item => {
+      if (item.product_id === productId) {
+        return { ...item, quantity: newQty }
+      }
+      return item
+    }))
+
+  } catch (err: any) {
+    console.error("Failed to update quantity:", err)
+    alert("❌ Gagal update quantity: " + err.message)
+  }
+}
+
+  // Toggle item selection
   const toggleItemSelection = (productId: string) => {
     setSelectedItems(prev => {
       const next = new Set(prev)
@@ -264,6 +299,7 @@ export default function UserDashboard() {
     })
   }
 
+  // Select all items
   const selectAllItems = () => {
     if (selectedItems.size === wishlist.length) {
       setSelectedItems(new Set())
@@ -272,10 +308,11 @@ export default function UserDashboard() {
     }
   }
 
+  // Calculate selected items total
   const getSelectedItemsTotal = () => {
     return wishlist
       .filter(item => selectedItems.has(item.product_id))
-      .reduce((sum, item) => sum + ((item.products?.harga ?? item.price ?? 0) * item.quantity), 0)
+      .reduce((sum, item) => sum + (item.price * item.quantity), 0)
   }
 
   const getSelectedItemsCount = () => {
@@ -290,23 +327,35 @@ export default function UserDashboard() {
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case 'wishlist': return 'bg-blue-600'
-      case 'pending': return 'bg-orange-600'
-      case 'approved': return 'bg-green-600'
-      case 'rejected': return 'bg-red-600'
-      case 'fulfilled': return 'bg-purple-600'
-      default: return 'bg-slate-600'
+      case 'wishlist':
+        return 'bg-blue-600'
+      case 'pending':
+        return 'bg-orange-600'
+      case 'approved':
+        return 'bg-green-600'
+      case 'rejected':
+        return 'bg-red-600'
+      case 'fulfilled':
+        return 'bg-purple-600'
+      default:
+        return 'bg-slate-600'
     }
   }
 
   const getStatusBadgeText = (status: string) => {
     switch (status) {
-      case 'wishlist': return 'Wishlist'
-      case 'pending': return 'Menunggu Review'
-      case 'approved': return 'Disetujui'
-      case 'rejected': return 'Ditolak'
-      case 'fulfilled': return 'Terpenuhi'
-      default: return status
+      case 'wishlist':
+        return 'Wishlist'
+      case 'pending':
+        return 'Menunggu Review'
+      case 'approved':
+        return 'Disetujui'
+      case 'rejected':
+        return 'Ditolak'
+      case 'fulfilled':
+        return 'Terpenuhi'
+      default:
+        return status
     }
   }
 
@@ -315,123 +364,94 @@ export default function UserDashboard() {
       alert("❌ Pilih item yang mau di-request!")
       return
     }
+
+    // Show confirmation modal first
     setShowConfirmModal(true)
   }
 
-  // ✅ FIX: FETCH WISHLIST - SIMPLE DULU, TANPA JOIN YANG KOMPLEKS
-  const fetchWishlist = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        console.log('❌ No session')
-        return
-      }
-      
-      console.log('🔍 Fetching wishlist for user:', session.user.id)
-      
-      // STEP 1: Fetch wishlist dulu (tanpa JOIN products)
-      const { data: wishlistData, error: wishlistError } = await supabase
-        .from('wishlists')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-      
-      if (wishlistError) {
-        console.error('❌ Wishlist fetch error:', wishlistError)
-        throw wishlistError
-      }
-      
-      console.log('✅ Wishlist data:', wishlistData)
-      
-      // STEP 2: Jika ada wishlist, fetch products data terpisah
-      let enrichedWishlist = wishlistData || []
-      
-      if (enrichedWishlist.length > 0) {
-        const productIds = enrichedWishlist.map(w => w.product_id)
-        
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('id, nama_produk, harga, sku, gambar_url, stok')
-          .in('id', productIds)
-        
-        if (productsError) {
-          console.error('⚠️ Products fetch error:', productsError)
-        } else {
-          console.log('✅ Products data:', productsData)
-          
-          // Merge products data ke wishlist
-          enrichedWishlist = enrichedWishlist.map(item => ({
-            ...item,
-            products: productsData?.find(p => p.id.toString() === item.product_id) || null
-          }))
-        }
-      }
-      
-      setWishlist(enrichedWishlist)
-      console.log('📦 Final wishlist:', enrichedWishlist)
-      
-    } catch (err: any) {
-      console.error("❌ Failed to fetch wishlist:", err)
-    }
-  }, [])
+// HAPUS useEffect localStorage yang lama
+// GANTI dengan fetch dari database + realtime subscription
 
-  useEffect(() => {
+const fetchWishlist = useCallback(async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { data, error } = await supabase
+      .from('wishlists')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    setWishlist(data || [])
+  } catch (err: any) {
+    console.error("Failed to fetch wishlist:", err)
+  }
+}, [])
+
+// Load wishlist saat component mount
+useEffect(() => {
+  fetchWishlist()
+}, [fetchWishlist])
+
+// ✅ REALTIME SUBSCRIPTION - Auto refresh saat ada perubahan
+useEffect(() => {
+  const channel = supabase
+    .channel('wishlist-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*', // Listen semua event: INSERT, UPDATE, DELETE
+        schema: 'public',
+        table: 'wishlists',
+        filter: `user_id=eq.${profile?.id}` // Hanya untuk user ini
+      },
+      () => {
+        fetchWishlist() // Auto-refresh saat ada perubahan
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [profile?.id])
+
+// ✅ LISTEN untuk event dari ProductDetailModal (jika masih pakai localStorage fallback)
+useEffect(() => {
+  const handleWishlistUpdated = () => {
     fetchWishlist()
-  }, [fetchWishlist])
+  }
 
-  // Realtime subscription
-  useEffect(() => {
-    if (!profile?.id) return
-    
-    const channel = supabase
-      .channel('wishlist-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'wishlists',
-          filter: `user_id=eq.${profile.id}`
-        },
-        () => {
-          console.log('🔄 Realtime update detected')
-          fetchWishlist()
-        }
-      )
-      .subscribe()
-    
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [profile?.id])
-
-  // Listen for wishlist-updated event
-  useEffect(() => {
-    const handleWishlistUpdated = () => {
-      console.log('📢 Wishlist updated event received')
-      fetchWishlist()
-    }
-    window.addEventListener('wishlist-updated', handleWishlistUpdated)
-    return () => window.removeEventListener('wishlist-updated', handleWishlistUpdated)
-  }, [])
+  window.addEventListener('wishlist-updated', handleWishlistUpdated)
+  return () => window.removeEventListener('wishlist-updated', handleWishlistUpdated)
+}, [])
 
   const confirmSubmitRequest = async () => {
     if (selectedItems.size === 0) {
       alert("❌ Pilih item yang mau di-request!")
       return
     }
+
     try {
       setSubmittingRequest(true)
+
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         alert("❌ Session expired. Silakan login ulang.")
         return
       }
+
+      // Get selected items from wishlist
       const selectedWishlistItems = wishlist.filter(item => selectedItems.has(item.product_id))
-      const totalItems = selectedWishlistItems.length
-      const estimatedTotal = selectedWishlistItems.reduce((sum, item) => sum + ((item.products?.harga ?? item.price ?? 0) * item.quantity), 0)
       
+      // Calculate totals
+      const totalItems = selectedWishlistItems.length
+      const estimatedTotal = selectedWishlistItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+      // Insert request to product_requests table
       const { data: requestData, error: requestError } = await supabase
         .from('product_requests')
         .insert({
@@ -444,34 +464,42 @@ export default function UserDashboard() {
         })
         .select()
         .single()
-      
+
       if (requestError) throw requestError
-      
+
+      // Insert each item to request_items table
       const requestItems = selectedWishlistItems.map(item => ({
         request_id: requestData.id,
         product_id: item.product_id,
-        product_name: item.products?.nama_produk ?? item.product_name,
-        product_image_url: item.products?.gambar_url ?? item.product_image_url ?? null,
-        unit_price: item.products?.harga ?? item.price ?? 0,
+        product_name: item.product_name,
+        product_image_url: item.product_image_url || null,
+        unit_price: item.price,
         quantity: item.quantity,
-        subtotal: (item.products?.harga ?? item.price ?? 0) * item.quantity,
+        subtotal: item.price * item.quantity,
         status: 'pending' as const,
         created_at: new Date().toISOString()
       }))
-      
+
       const { error: itemsError } = await supabase
         .from('request_items')
         .insert(requestItems)
-      
+
       if (itemsError) throw itemsError
-      
+
+      // Remove submitted items from wishlist
       const remainingWishlist = wishlist.filter(item => !selectedItems.has(item.product_id))
       setWishlist(remainingWishlist)
+      
+      // Clear selection
       setSelectedItems(new Set())
       setShowConfirmModal(false)
       setShowRequestModal(false)
+      
       alert("✅ Permintaan produk berhasil dikirim! Tim kami akan segera memverifikasi.")
+
+      // Refresh requests list
       fetchProductRequests(session.user.id)
+
     } catch (err: any) {
       console.error("Failed to submit request:", err)
       alert("❌ Gagal mengirim permintaan: " + err.message)
@@ -483,6 +511,8 @@ export default function UserDashboard() {
   const fetchProductRequests = async (userId: string) => {
     try {
       setFetchingRequests(true)
+      
+      // Fetch requests with items
       const { data: requests, error } = await supabase
         .from('product_requests')
         .select(`
@@ -503,6 +533,7 @@ export default function UserDashboard() {
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
+
       if (error) throw error
       setProductRequests(requests || [])
     } catch (err: any) {
@@ -566,6 +597,7 @@ export default function UserDashboard() {
             </div>
             <span className="text-sm font-medium hidden sm:inline">Back to Home</span>
           </Link>
+
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2 text-green-500">
               <User className="h-8 w-8" />
@@ -574,9 +606,10 @@ export default function UserDashboard() {
             <p className="text-slate-400 mt-1">Kelola profil perusahaan dan partisipasi lelang.</p>
           </div>
         </div>
+
         <Badge variant="outline" className={`px-4 py-2 ${
-          completionPercentage === 100
-            ? 'text-green-400 border-green-400 bg-green-900/20'
+          completionPercentage === 100 
+            ? 'text-green-400 border-green-400 bg-green-900/20' 
             : 'text-orange-400 border-orange-400 bg-orange-900/20'
         }`}>
           {completionPercentage === 100 ? (
@@ -643,17 +676,32 @@ export default function UserDashboard() {
                   Informasi Perusahaan
                 </div>
                 {!isEditing ? (
-                  <Button size="sm" onClick={() => setIsEditing(true)} className="bg-blue-600 hover:bg-blue-700">
+                  <Button
+                    size="sm"
+                    onClick={() => setIsEditing(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
                     <Edit2 className="h-4 w-4 mr-2" />
                     Edit Profil
                   </Button>
                 ) : (
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={handleCancelEdit} variant="outline" className="border-slate-600" disabled={saving}>
+                    <Button
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      variant="outline"
+                      className="border-slate-600"
+                      disabled={saving}
+                    >
                       <X className="h-4 w-4 mr-2" />
                       Batal
                     </Button>
-                    <Button size="sm" onClick={handleSaveProfile} className="bg-green-600 hover:bg-green-700" disabled={saving}>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveProfile}
+                      className="bg-green-600 hover:bg-green-700"
+                      disabled={saving}
+                    >
                       {saving ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -675,39 +723,68 @@ export default function UserDashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Nama Lengkap */}
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <User className="h-4 w-4" />
                     Nama Lengkap
                   </label>
                   {isEditing ? (
-                    <input type="text" value={formData.full_name} onChange={(e) => setFormData({...formData, full_name: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500" placeholder="John Doe" />
+                    <input
+                      type="text"
+                      value={formData.full_name}
+                      onChange={(e) => setFormData({...formData, full_name: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                      placeholder="John Doe"
+                    />
                   ) : (
-                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.full_name || '-'}</p>
+                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                      {profile?.full_name || '-'}
+                    </p>
                   )}
                 </div>
+
+                {/* Email */}
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <Mail className="h-4 w-4" />
                     Email
                   </label>
-                  <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.email || '-'}</p>
+                  <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                    {profile?.email || '-'}
+                  </p>
                 </div>
+
+                {/* Nama Perusahaan */}
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
                     Nama Perusahaan
                   </label>
                   {isEditing ? (
-                    <input type="text" value={formData.company_name} onChange={(e) => setFormData({...formData, company_name: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500" placeholder="PT. Sonus Nusantara" />
+                    <input
+                      type="text"
+                      value={formData.company_name}
+                      onChange={(e) => setFormData({...formData, company_name: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                      placeholder="PT. Sonus Nusantara"
+                    />
                   ) : (
-                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.company_name || '-'}</p>
+                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                      {profile?.company_name || '-'}
+                    </p>
                   )}
                 </div>
+
+                {/* Tipe Perusahaan */}
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block">Tipe Perusahaan</label>
                   {isEditing ? (
-                    <select value={formData.company_type} onChange={(e) => setFormData({...formData, company_type: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500">
+                    <select
+                      value={formData.company_type}
+                      onChange={(e) => setFormData({...formData, company_type: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                    >
                       <option value="">Pilih Tipe</option>
                       <option value="pt">PT (Perseroan Terbatas)</option>
                       <option value="cv">CV (Commanditaire Vennootschap)</option>
@@ -717,50 +794,87 @@ export default function UserDashboard() {
                       <option value="lainnya">Lainnya</option>
                     </select>
                   ) : (
-                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.company_type || '-'}</p>
+                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                      {profile?.company_type || '-'}
+                    </p>
                   )}
                 </div>
+
+                {/* NPWP / Tax ID */}
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <FileText className="h-4 w-4" />
                     NPWP / Tax ID
                   </label>
                   {isEditing ? (
-                    <input type="text" value={formData.tax_id} onChange={(e) => setFormData({...formData, tax_id: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500" placeholder="00.000.000.0-000.000" />
+                    <input
+                      type="text"
+                      value={formData.tax_id}
+                      onChange={(e) => setFormData({...formData, tax_id: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                      placeholder="00.000.000.0-000.000"
+                    />
                   ) : (
-                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.tax_id || '-'}</p>
+                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                      {profile?.tax_id || '-'}
+                    </p>
                   )}
                 </div>
+
+                {/* Nomor Telepon */}
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <Phone className="h-4 w-4" />
                     Nomor Telepon
                   </label>
                   {isEditing ? (
-                    <input type="tel" value={formData.phone_number} onChange={(e) => setFormData({...formData, phone_number: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500" placeholder="+62 812 3456 7890" />
+                    <input
+                      type="tel"
+                      value={formData.phone_number}
+                      onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                      placeholder="+62 812 3456 7890"
+                    />
                   ) : (
-                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.phone_number || '-'}</p>
+                    <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                      {profile?.phone_number || '-'}
+                    </p>
                   )}
                 </div>
               </div>
+
+              {/* Alamat Perusahaan */}
               <div>
                 <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
                   Alamat Perusahaan
                 </label>
                 {isEditing ? (
-                  <textarea value={formData.company_address} onChange={(e) => setFormData({...formData, company_address: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500 min-h-[100px]" placeholder="Jl. Contoh No. 123, Jakarta, Indonesia" />
+                  <textarea
+                    value={formData.company_address}
+                    onChange={(e) => setFormData({...formData, company_address: e.target.value})}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500 min-h-[100px]"
+                    placeholder="Jl. Contoh No. 123, Jakarta, Indonesia"
+                  />
                 ) : (
-                  <p className="text-white bg-slate-800/50 rounded px-4 py-2">{profile?.company_address || '-'}</p>
+                  <p className="text-white bg-slate-800/50 rounded px-4 py-2">
+                    {profile?.company_address || '-'}
+                  </p>
                 )}
               </div>
+
+              {/* Member Since */}
               <div className="pt-4 border-t border-slate-700">
                 <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
                   Bergabung Sejak
                 </label>
                 <p className="text-white bg-slate-800/50 rounded px-4 py-2">
-                  {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}
+                  {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('id-ID', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  }) : '-'}
                 </p>
               </div>
             </CardContent>
@@ -783,7 +897,9 @@ export default function UserDashboard() {
               <div className="text-center py-12 text-slate-500">
                 <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p className="text-lg font-medium">Belum ada partisipasi lelang.</p>
-                <p className="text-sm mt-2">Ikuti lelang yang tersedia untuk melihat riwayat partisipasi Anda di sini.</p>
+                <p className="text-sm mt-2">
+                  Ikuti lelang yang tersedia untuk melihat riwayat partisipasi Anda di sini.
+                </p>
                 <Link href="/auction">
                   <Button className="mt-4 bg-green-600 hover:bg-green-700">
                     <Gavel className="h-4 w-4 mr-2" />
@@ -811,13 +927,15 @@ export default function UserDashboard() {
               <div className="text-center py-12 text-slate-500">
                 <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p className="text-lg font-medium">Belum ada riwayat penawaran.</p>
-                <p className="text-sm mt-2">Ajukan penawaran pada lelang yang tersedia untuk melihat riwayat bid Anda di sini.</p>
+                <p className="text-sm mt-2">
+                  Ajukan penawaran pada lelang yang tersedia untuk melihat riwayat bid Anda di sini.
+                </p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* TAB 4: PERMINTAAN PRODUK (RFQ) */}
+        {/* TAB 4: PERMINTAAN PRODUK (RFQ) - FIXED TO SHOW WISHLIST */}
         <TabsContent value="requests" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
@@ -826,7 +944,12 @@ export default function UserDashboard() {
                   <ShoppingCart className="h-5 w-5 text-orange-400" />
                   Permintaan Produk (RFQ)
                 </div>
-                <Button size="sm" onClick={submitRequest} className="bg-orange-600 hover:bg-orange-700" disabled={wishlist.length === 0 || submittingRequest}>
+                <Button 
+                  size="sm" 
+                  onClick={submitRequest}
+                  className="bg-orange-600 hover:bg-orange-700"
+                  disabled={wishlist.length === 0 || submittingRequest}
+                >
                   {submittingRequest ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -846,10 +969,13 @@ export default function UserDashboard() {
             </CardHeader>
             <CardContent>
               {wishlist.length === 0 ? (
+                // EMPTY STATE - WISHLIST KOSONG
                 <div className="text-center py-12 text-slate-500">
                   <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p className="text-lg font-medium">Belum ada produk di wishlist.</p>
-                  <p className="text-sm mt-2">Tambahkan produk dari katalog untuk membuat permintaan.</p>
+                  <p className="text-sm mt-2">
+                    Tambahkan produk dari katalog untuk membuat permintaan.
+                  </p>
                   <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
                     <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                       <FileText className="h-6 w-6 text-orange-400 mx-auto mb-2" />
@@ -867,21 +993,28 @@ export default function UserDashboard() {
                       <p className="text-xs text-slate-500 mt-1">Tim kami akan verifikasi</p>
                     </div>
                   </div>
-                  <Link href="/catalog">
-                    <Button className="mt-6 bg-green-600 hover:bg-green-700">
+                  <Link href="/catalog" className="mt-6 inline-block">
+                    <Button className="bg-green-600 hover:bg-green-700">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Buka Katalog Produk
                     </Button>
                   </Link>
                 </div>
               ) : (
+                // WISHLIST ITEMS TABLE
                 <div className="space-y-4">
+                  {/* Table Header with Select All */}
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-800 text-slate-300">
                         <tr>
                           <th className="px-4 py-3 w-12">
-                            <Button size="sm" variant="ghost" onClick={selectAllItems} className="h-8 w-8 p-0 hover:bg-slate-700">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={selectAllItems}
+                              className="h-8 w-8 p-0 hover:bg-slate-700"
+                            >
                               {selectedItems.size === wishlist.length ? (
                                 <CheckCircle className="h-4 w-4 text-green-400" />
                               ) : (
@@ -901,7 +1034,12 @@ export default function UserDashboard() {
                         {wishlist.map((item) => (
                           <tr key={item.product_id} className="hover:bg-slate-800/30">
                             <td className="px-4 py-3">
-                              <Button size="sm" variant="ghost" onClick={() => toggleItemSelection(item.product_id)} className="h-8 w-8 p-0 hover:bg-slate-700">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => toggleItemSelection(item.product_id)}
+                                className="h-8 w-8 p-0 hover:bg-slate-700"
+                              >
                                 {selectedItems.has(item.product_id) ? (
                                   <CheckCircle className="h-4 w-4 text-green-400" />
                                 ) : (
@@ -910,8 +1048,12 @@ export default function UserDashboard() {
                               </Button>
                             </td>
                             <td className="px-4 py-3">
-                              {(item.products?.gambar_url || item.product_image_url) ? (
-                                <img src={item.products?.gambar_url || item.product_image_url || ''} alt={item.products?.nama_produk || item.product_name} className="w-12 h-12 object-cover rounded-lg border border-slate-600" />
+                              {item.product_image_url ? (
+                                <img 
+                                  src={item.product_image_url} 
+                                  alt={item.product_name}
+                                  className="w-12 h-12 object-cover rounded-lg border border-slate-600"
+                                />
                               ) : (
                                 <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
                                   <ImageIcon className="h-5 w-5 text-slate-500" />
@@ -919,27 +1061,44 @@ export default function UserDashboard() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-white font-medium">
-                              {item.products?.nama_produk || item.product_name}
+                              {item.product_name}
                             </td>
                             <td className="px-4 py-3 text-right text-slate-300 font-mono">
-                              {formatPrice(item.products?.harga || item.price || 0)}
+                              {formatPrice(item.price)}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
-                                <Button size="sm" variant="outline" onClick={() => updateQuantity(item.product_id, -1)} className="h-8 w-8 p-0 border-slate-600">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateQuantity(item.product_id, -1)}
+                                  className="h-8 w-8 p-0 border-slate-600"
+                                >
                                   <Minus className="h-3 w-3" />
                                 </Button>
-                                <span className="text-white font-mono w-12 text-center">{item.quantity}</span>
-                                <Button size="sm" variant="outline" onClick={() => updateQuantity(item.product_id, 1)} className="h-8 w-8 p-0 border-slate-600">
+                                <span className="text-white font-mono w-12 text-center">
+                                  {item.quantity}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateQuantity(item.product_id, 1)}
+                                  className="h-8 w-8 p-0 border-slate-600"
+                                >
                                   <Plus className="h-3 w-3" />
                                 </Button>
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
-                              {formatPrice((item.products?.harga || item.price || 0) * item.quantity)}
+                              {formatPrice(item.price * item.quantity)}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <Button size="sm" variant="destructive" onClick={() => removeItem(item.product_id)} className="h-8 w-8 p-0">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removeItem(item.product_id)}
+                                className="h-8 w-8 p-0"
+                              >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </td>
@@ -948,6 +1107,8 @@ export default function UserDashboard() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Summary Footer */}
                   <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
                     <div className="flex justify-between items-center flex-wrap gap-4">
                       <div className="flex items-center gap-4">
@@ -977,7 +1138,7 @@ export default function UserDashboard() {
             </CardContent>
           </Card>
 
-          {/* RIWAYAT PERMINTAAN */}
+          {/* RIWAYAT PERMINTAAN YANG SUDAH DISUBMIT */}
           {productRequests.length > 0 && (
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
@@ -996,7 +1157,13 @@ export default function UserDashboard() {
                       <div className="bg-slate-800/50 p-4 flex items-center justify-between border-b border-slate-700">
                         <div>
                           <p className="text-white font-bold">{request.request_number || `RFQ-${request.id.slice(0, 8)}`}</p>
-                          <p className="text-slate-400 text-sm">{new Date(request.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                          <p className="text-slate-400 text-sm">
+                            {new Date(request.created_at).toLocaleDateString('id-ID', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </p>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-right">
@@ -1024,7 +1191,9 @@ export default function UserDashboard() {
                             </div>
                           ))}
                           {request.items.length > 3 && (
-                            <p className="text-slate-500 text-xs text-center">+{request.items.length - 3} produk lainnya</p>
+                            <p className="text-slate-500 text-xs text-center">
+                              +{request.items.length - 3} produk lainnya
+                            </p>
                           )}
                         </div>
                       )}
@@ -1036,6 +1205,303 @@ export default function UserDashboard() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* MODAL WISHLIST & REQUEST - UPDATED WITH CHECKBOX TABLE */}
+      <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-orange-400" />
+              Buat Permintaan Produk
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Pilih produk dari wishlist Anda dan ajukan permintaan.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 flex-1 overflow-y-auto">
+            {wishlist.length === 0 ? (
+              // EMPTY STATE - WISHLIST KOSONG
+              <div className="text-center py-12">
+                <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-slate-600" />
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  Belum ada wishlist?
+                </h3>
+                <p className="text-slate-400 mb-6">
+                  Yuk pilih produk dari katalog kami dan tambahkan ke wishlist!
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Link href="/catalog">
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Buka Katalog Produk
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              // WISHLIST ITEMS TABLE WITH CHECKBOXES
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-800 text-slate-300 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 w-12">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={selectAllItems}
+                          className="h-8 w-8 p-0 hover:bg-slate-700"
+                        >
+                          {selectedItems.size === wishlist.length ? (
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                          ) : (
+                            <div className="h-4 w-4 border-2 border-slate-500 rounded" />
+                          )}
+                        </Button>
+                      </th>
+                      <th className="px-4 py-3 w-16">Gambar</th>
+                      <th className="px-4 py-3">Nama Produk</th>
+                      <th className="px-4 py-3 text-right">Harga Satuan</th>
+                      <th className="px-4 py-3 text-center">Jumlah</th>
+                      <th className="px-4 py-3 text-right">Subtotal</th>
+                      <th className="px-4 py-3 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {wishlist.map((item) => (
+                      <tr key={item.product_id} className="hover:bg-slate-800/30">
+                        <td className="px-4 py-3">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleItemSelection(item.product_id)}
+                            className="h-8 w-8 p-0 hover:bg-slate-700"
+                          >
+                            {selectedItems.has(item.product_id) ? (
+                              <CheckCircle className="h-4 w-4 text-green-400" />
+                            ) : (
+                              <div className="h-4 w-4 border-2 border-slate-500 rounded" />
+                            )}
+                          </Button>
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.product_image_url ? (
+                            <img 
+                              src={item.product_image_url} 
+                              alt={item.product_name}
+                              className="w-12 h-12 object-cover rounded-lg border border-slate-600"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
+                              <ImageIcon className="h-5 w-5 text-slate-500" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-white font-medium">
+                          {item.product_name}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-300 font-mono">
+                          {formatPrice(item.price)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateQuantity(item.product_id, -1)}
+                              className="h-8 w-8 p-0 border-slate-600"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="text-white font-mono w-12 text-center">
+                              {item.quantity}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateQuantity(item.product_id, 1)}
+                              className="h-8 w-8 p-0 border-slate-600"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
+                          {formatPrice(item.price * item.quantity)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => removeItem(item.product_id)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          
+          {wishlist.length > 0 && (
+            <div className="border-t border-slate-700 pt-4 flex-shrink-0">
+              {/* SELECTED ITEMS INFO & TOTAL ESTIMATE */}
+              <div className="mb-4 bg-slate-800/50 rounded-lg p-4">
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <span className="text-slate-400 text-sm">Item Dipilih:</span>
+                      <p className="text-white font-bold text-lg">{selectedCount} dari {wishlist.length} produk</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-sm">Total Quantity:</span>
+                      <p className="text-white font-bold text-lg">{totalQuantity} unit</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 text-sm">Estimasi Harga Total:</span>
+                    <p className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</p>
+                  </div>
+                </div>
+                {selectedCount === 0 && (
+                  <p className="text-orange-400 text-sm mt-2 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Pilih minimal 1 item untuk melanjutkan
+                  </p>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRequestModal(false)}
+                  className="border-slate-600"
+                  disabled={submittingRequest}
+                >
+                  Batal
+                </Button>
+                <div className="flex gap-2">
+                  <Link href="/catalog">
+                    <Button
+                      variant="outline"
+                      className="border-green-600 text-green-400"
+                      disabled={submittingRequest}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Tambah Produk
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={submitRequest}
+                    className="bg-orange-600 hover:bg-orange-700"
+                    disabled={submittingRequest || selectedCount === 0}
+                  >
+                    {submittingRequest ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Memproses...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Lanjut ke Konfirmasi ({selectedCount} Item)
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL KONFIRMASI SEBELUM KIRIM */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-400">
+              <CheckCircle className="h-6 w-6" />
+              Konfirmasi Permintaan
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Review kembali permintaan Anda sebelum dikirim ke tim kami.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <p className="text-slate-400 text-sm">Total Produk</p>
+                <p className="text-white font-bold text-2xl">{selectedCount}</p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <p className="text-slate-400 text-sm">Total Quantity</p>
+                <p className="text-white font-bold text-2xl">{totalQuantity}</p>
+              </div>
+            </div>
+
+            {/* Selected Items List */}
+            <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700 max-h-60 overflow-y-auto">
+              <p className="text-slate-400 text-sm mb-3 font-medium">Produk yang Dipilih:</p>
+              <div className="space-y-2">
+                {wishlist
+                  .filter(item => selectedItems.has(item.product_id))
+                  .map((item) => (
+                    <div key={item.product_id} className="flex justify-between items-center text-sm">
+                      <span className="text-white truncate flex-1">{item.product_name}</span>
+                      <span className="text-slate-400 mx-2">×{item.quantity}</span>
+                      <span className="text-orange-400 font-mono">{formatPrice(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Total Estimate */}
+            <div className="bg-orange-900/20 rounded-lg p-4 border border-orange-700">
+              <div className="flex justify-between items-center">
+                <span className="text-orange-300 font-medium">Estimasi Total Harga:</span>
+                <span className="text-orange-400 font-bold text-2xl">{formatPrice(selectedTotal)}</span>
+              </div>
+              <p className="text-orange-300/60 text-xs mt-2">
+                *Harga dapat berubah sesuai penawaran dari supplier
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmModal(false)}
+              className="border-slate-600"
+              disabled={submittingRequest}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={confirmSubmitRequest}
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={submittingRequest}
+            >
+              {submittingRequest ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Mengirim...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Kirim Permintaan
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
