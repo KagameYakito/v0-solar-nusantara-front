@@ -1,6 +1,6 @@
 // hooks/useProducts.ts
 import { useState, useEffect } from 'react';
-import { supabase } from '@/utils/supabaseClient'; // Pastikan path ini benar sesuai project lo
+import { supabase } from '@/utils/supabaseClient';
 
 export interface Product {
   id: string;
@@ -24,8 +24,8 @@ interface UseProductsReturn {
   categories: CategoryCount[];
   loading: boolean;
   error: string | null;
-  totalCount: number; // Total produk hasil filter (untuk pagination)
-  globalTotalCount: number; // Total semua produk di DB (untuk tombol "Semua")
+  totalCount: number;
+  globalTotalCount: number;
 }
 
 export function useProducts(
@@ -48,21 +48,24 @@ export function useProducts(
         setLoading(true);
         setError(null);
 
-        // 1. AMBIL TOTAL GLOBAL (Untuk tombol "Semua" di sidebar - always 10444)
+        // 1. GLOBAL TOTAL (Untuk tombol "Semua Produk")
         const { count: globalCount } = await supabase
           .from('products')
           .select('*', { count: 'exact', head: true });
         setGlobalTotalCount(globalCount || 0);
 
-        // 2. AMBIL DAFTAR KATEGORI DARI TABEL BARU 'categories'
+        // 2. ✅ FIX: AMBIL KATEGORI - TAMBAH KOLOM slug
         const { data: catData, error: catError } = await supabase
           .from('categories')
-          .select('id, name, is_default')
-          .order('is_default', { ascending: false });
+          .select('id, name, slug, is_default') // ✅ Tambah 'slug'
+          .order('name', { ascending: true }); // ✅ Order by name instead of is_default
 
-        if (catError) throw catError;
+        if (catError) {
+          console.error('Category fetch error:', catError);
+          throw catError;
+        }
 
-        // Hitung jumlah produk per kategori secara dinamis
+        // Hitung jumlah produk per kategori
         if (catData) {
           const categoriesWithCount = await Promise.all(
             catData.map(async (cat) => {
@@ -71,26 +74,28 @@ export function useProducts(
                 .select('*', { count: 'exact', head: true })
                 .eq('category_id', cat.id);
               
-              return { ...cat, count: count || 0 };
+              return { 
+                id: cat.id, 
+                name: cat.name, 
+                count: count || 0,
+                is_default: cat.is_default || false
+              };
             })
           );
           setCategories(categoriesWithCount);
         }
 
-        // 3. QUERY PRODUK (Dengan Filter Kategori & Search)
+        // 3. QUERY PRODUK
         let query = supabase.from('products').select('*', { count: 'exact' });
 
-        // Filter berdasarkan Kategori (Jika ada yang dipilih)
         if (selectedCategoryId) {
           query = query.eq('category_id', selectedCategoryId);
         }
 
-        // Filter berdasarkan Search Term
         if (searchTerm && searchTerm.trim() !== '') {
           query = query.ilike('nama_produk', `%${searchTerm.trim()}%`);
         }
 
-        // Eksekusi Query dengan Pagination
         const start = (page - 1) * perPage;
         const end = start + perPage - 1;
 
@@ -98,18 +103,26 @@ export function useProducts(
           .range(start, end)
           .order('id', { ascending: true });
 
-        if (prodError) throw prodError;
+        if (prodError) {
+          console.error('Product fetch error:', prodError);
+          throw prodError;
+        }
 
         // Transformasi Data Produk
         const transformedData: Product[] = (pageData || []).map((item: any) => {
           let specs: Record<string, any> = {};
-          if (item.spesifikasi && typeof item.spesifikasi === 'string') {
-            try {
-              const cleanJsonString = item.spesifikasi.replace(/""/g, '"');
-              const parsed = JSON.parse(cleanJsonString);
-              specs = (parsed && typeof parsed === 'object') ? parsed : { "Note": "Invalid Format" };
-            } catch (e) { specs = { "Note": "Parse Error" }; }
-          } else if (item.spesifikasi) { specs = item.spesifikasi; }
+          
+          if (item.spesifikasi) {
+            if (typeof item.spesifikasi === 'string') {
+              try {
+                specs = JSON.parse(item.spesifikasi);
+              } catch (e) {
+                specs = { "Note": "Parse Error" };
+              }
+            } else {
+              specs = item.spesifikasi;
+            }
+          }
 
           return {
             id: item.id?.toString() || '0',
@@ -123,7 +136,7 @@ export function useProducts(
         });
 
         setProducts(transformedData);
-        setTotalCount(count || 0); // Total hasil filter (penting untuk pagination dinamis)
+        setTotalCount(count || 0);
         setLoading(false);
 
       } catch (err: any) {
