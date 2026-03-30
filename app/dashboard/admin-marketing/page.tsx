@@ -1,10 +1,15 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check, Gavel, MessageSquare, Clock, DollarSign, TrendingUp, FileText, Timer, Eye, EyeOff, Image as ImageIcon, Upload, Trash2, Save, Search } from 'lucide-react'
+import { 
+  Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check, Gavel, 
+  MessageSquare, Clock, DollarSign, TrendingUp, FileText, Timer, Eye, 
+  EyeOff, Image as ImageIcon, Upload, Trash2, Save, Search, Bookmark, 
+  CheckCircle2, XCircle, Hourglass, CreditCard, FileCheck
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,7 +45,6 @@ const ITEMS_PER_PAGE = 100
 export default function AdminMarketingDashboard() {
   const router = useRouter()
   
-  // ✅ STATE DIPISAHKAN AGAR TIDAK REFRESH SEMUA KOMPONEN
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,20 +52,18 @@ export default function AdminMarketingDashboard() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
   
-  // ✅ SEARCH STATE - TIDAK TRIGGER RE-RENDER SAAT NGETIK
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedTerm, setDebouncedTerm] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
   
-  const [filterView, setFilterView] = useState<'all' | 'auction' | 'request'>('all')
+  // ✅ UPDATED: Include 'wishlist' in filterView
+  const [filterView, setFilterView] = useState<'all' | 'auction' | 'request' | 'wishlist'>('all')
   
-  // ✅ MODAL EDIT HARGA - BARU!
   const [showEditPriceModal, setShowEditPriceModal] = useState(false)
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
   const [editingPrice, setEditingPrice] = useState('')
   const [priceSaving, setPriceSaving] = useState(false)
   
-  // Modal State untuk Konfigurasi Lelang
   const [showAuctionModal, setShowAuctionModal] = useState(false)
   const [isEditingAuction, setIsEditingAuction] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
@@ -74,26 +76,201 @@ export default function AdminMarketingDashboard() {
   })
   const [auctionLoading, setAuctionLoading] = useState(false)
   
-  // Upload Image State (MULTIPLE)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [existingGalleryUrls, setExistingGalleryUrls] = useState<string[]>([])
   
-  // Toggle visibility untuk bid deadline (admin only)
   const [showBidDeadline, setShowBidDeadline] = useState<Record<string, boolean>>({})
+  
+  // ✅ WISHLIST ANALYTICS STATE
+  const [wishlistItems, setWishlistItems] = useState<any[]>([])
+  const [wishlistLoading, setWishlistLoading] = useState(false)
+  const [wishlistFilter, setWishlistFilter] = useState<'all' | 'deal' | 'pending' | 'requested' | 'wishlist' | 'decline'>('all')
+  const [showNoteModal, setShowNoteModal] = useState(false)
+  const [selectedWishlistItem, setSelectedWishlistItem] = useState<any>(null)
+  const [adminNote, setAdminNote] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [wishlistTotal, setWishlistTotal] = useState(0)
 
-  // ✅ DEBOUNCE SEARCH - TIDAK REFRESH SAAT NGETIK
+  const STATUS_PRIORITY: Record<string, number> = {
+    'deal': 1,
+    'pending': 2,
+    'requested': 3,
+    'wishlist': 4,
+    'decline': 5
+  }
+
+  const fetchWishlistItems = useCallback(async () => {
+    try {
+      setWishlistLoading(true)
+      
+      // 1. Fetch wishlist dulu (TANPA relationship)
+      let query = supabase
+        .from('wishlists')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+      
+      if (wishlistFilter !== 'all') {
+        query = query.eq('status', wishlistFilter)
+      }
+      
+      const { data: wishlistData, error: wishlistError, count } = await query
+      
+      if (wishlistError) throw wishlistError
+      if (!wishlistData || wishlistData.length === 0) {
+        setWishlistItems([])
+        setWishlistTotal(count || 0)
+        return
+      }
+      
+      // 2. Fetch profiles user (TANPA relationship)
+      const userIds = [...new Set(wishlistData.map(w => w.user_id))]
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name, company_name, email')
+        .in('id', userIds)
+      
+      // 3. Fetch products (TANPA relationship)
+      const productIds = [...new Set(wishlistData.map(w => w.product_id))]
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('id, nama_produk, harga, gambar_url')
+        .in('id', productIds)
+      
+      // 4. Manual Join di Frontend
+      const enrichedData = wishlistData.map(item => {
+        const product = productsData?.find(p => p.id.toString() === item.product_id.toString())
+        
+        return {
+          ...item,
+          profiles: profilesData?.find(p => p.id === item.user_id) || null,
+          products: product || null,
+          // ✅ SELALU GUNAKAN HARGA DARI PRODUCTS TABLE
+          current_price: product?.harga || item.price || 0,
+          original_price: item.price || 0
+        }
+      })
+      
+      // 5. Sort berdasarkan priority status
+      const sortedData = enrichedData.sort((a, b) => {
+        return (STATUS_PRIORITY[a.status] || 99) - (STATUS_PRIORITY[b.status] || 99)
+      })
+      
+      setWishlistItems(sortedData)
+      setWishlistTotal(count || 0)
+    } catch (err: any) {
+      console.error("Failed to fetch wishlist:", err)
+    } finally {
+      setWishlistLoading(false)
+    }
+  }, [wishlistFilter])
+
+  useEffect(() => {
+    if (isAuthorized) {
+      fetchWishlistItems()
+    }
+  }, [isAuthorized, wishlistFilter])
+
+  const openNoteModal = (item: any) => {
+    setSelectedWishlistItem(item)
+    setAdminNote(item.admin_notes || '')
+    setShowNoteModal(true)
+  }
+
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'deal':
+        return { label: 'Deal', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CreditCard }
+      case 'pending':
+        return { label: 'Pending Payment', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
+      case 'requested':
+        return { label: 'Requested', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: FileCheck }
+      case 'wishlist':
+        return { label: 'Wishlist', color: 'bg-slate-500/10 text-slate-400 border-slate-500/20', icon: Bookmark }
+      case 'decline':
+        return { label: 'Declined', color: 'bg-red-500/10 text-red-400 border-red-500/20', icon: XCircle }
+      default:
+        return { label: status, color: 'bg-slate-500/10 text-slate-400 border-slate-500/20', icon: Clock }
+    }
+  }
+
+  const handleSaveNote = async () => {
+    if (!selectedWishlistItem) return
+    
+    try {
+      setNoteSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      const { error } = await supabase
+        .from('wishlists')
+        .update({
+          admin_notes: adminNote,
+          admin_id: session?.user.id,
+          status_updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedWishlistItem.id)
+      
+      if (error) throw error
+      
+      await fetchWishlistItems()
+      setShowNoteModal(false)
+      setSelectedWishlistItem(null)
+      setAdminNote('')
+      alert("✅ Note berhasil disimpan!")
+    } catch (err: any) {
+      alert("❌ Gagal menyimpan note: " + err.message)
+    } finally {
+      setNoteSaving(false)
+    }
+  }
+
+  const updateWishlistStatus = async (itemId: string, action: 'accept' | 'decline' | 'mark_deal') => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      let finalStatus = ''
+      let message = ''
+  
+      if (action === 'accept') {
+        finalStatus = 'accepted' // User lihat "Accepted", Admin lihat "Menunggu Bayar"
+        message = 'Accept'
+      } else if (action === 'decline') {
+        finalStatus = 'declined'
+        message = 'Decline'
+      } else if (action === 'mark_deal') {
+        finalStatus = 'deal'
+        message = 'Deal Closed'
+      }
+  
+      if (!finalStatus) return
+  
+      const { error } = await supabase
+        .from('wishlists')
+        .update({
+          status: finalStatus,
+          admin_id: session?.user.id,
+          status_updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId)
+      
+      if (error) throw error
+      
+      await fetchWishlistItems()
+      alert(`✅ Item berhasil di-${message}!`)
+    } catch (err: any) {
+      alert("❌ Gagal update status: " + err.message)
+    }
+  }
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedTerm(searchTerm)
       setCurrentPage(1)
-    }, 500) // Delay 500ms setelah user berhenti ngetik
-    
+    }, 500)
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  // ✅ FETCH PRODUCTS - HANYA TRIGGER SAAT DEBOUNCED TERM BERUBAH
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
@@ -130,7 +307,6 @@ export default function AdminMarketingDashboard() {
     }
   }, [currentPage, debouncedTerm, filterView])
 
-  // ✅ AUTH CHECK
   useEffect(() => {
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
@@ -147,7 +323,6 @@ export default function AdminMarketingDashboard() {
         ])
         
         if (timeoutId) clearTimeout(timeoutId)
-        
         if (!isMounted) return
         
         if (sessionResponse.error || !sessionResponse.data.session) {
@@ -197,61 +372,53 @@ export default function AdminMarketingDashboard() {
     }
   }, [])
 
-  // ✅ LOAD PRODUCTS - HANYA SAAT AUTH & FILTER BERUBAH
   useEffect(() => {
     if (isAuthorized) {
       fetchProducts()
     }
   }, [isAuthorized, fetchProducts])
 
-  // ✅ FUNGSI EDIT HARGA - BARU!
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
     setEditingPrice((currentPrice || 0).toString())
     setShowEditPriceModal(true)
   }
 
-const handleSavePrice = async () => {
-  if (!editingProductId) return
-  
-  const newPrice = parseInt(editingPrice)
-  
-  if (isNaN(newPrice) || newPrice <= 0) {
-    alert("❌ Harga harus valid dan lebih dari 0!")
-    return
+  const handleSavePrice = async () => {
+    if (!editingProductId) return
+    
+    const newPrice = parseInt(editingPrice)
+    
+    if (isNaN(newPrice) || newPrice <= 0) {
+      alert("❌ Harga harus valid dan lebih dari 0!")
+      return
+    }
+    
+    try {
+      setPriceSaving(true)
+      
+      const { error } = await supabase
+        .from('products')
+        .update({ harga: newPrice })
+        .eq('id', editingProductId)
+      
+      if (error) throw error
+      
+      await fetchProducts()
+      
+      setShowEditPriceModal(false)
+      setEditingProductId(null)
+      setEditingPrice('')
+      
+      alert("✅ Harga produk berhasil diupdate di database!")
+    } catch (err: any) {
+      console.error("Failed to update price:", err)
+      alert("❌ Gagal update harga: " + err.message)
+    } finally {
+      setPriceSaving(false)
+    }
   }
-  
-  try {
-    setPriceSaving(true)
-    
-    // ✅ UPDATE KE DATABASE
-    const { error } = await supabase
-      .from('products')
-      .update({ 
-        harga: newPrice
-        // HAPUS updated_at karena kolom ini tidak ada
-      })
-      .eq('id', editingProductId)
-    
-    if (error) throw error
-    
-    // ✅ REFRESH DATA DARI DATABASE (BUKAN CUMA UPDATE STATE LOKAL)
-    await fetchProducts()
-    
-    setShowEditPriceModal(false)
-    setEditingProductId(null)
-    setEditingPrice('')
-    
-    alert("✅ Harga produk berhasil diupdate di database!")
-  } catch (err: any) {
-    console.error("Failed to update price:", err)
-    alert("❌ Gagal update harga: " + err.message)
-  } finally {
-    setPriceSaving(false)
-  }
-}
 
-  // Dual Countdown Timer State (Auction End + Bid Deadline)
   const [timeRemaining, setTimeRemaining] = useState<Record<string, { auction: string; bidDeadline: string }>>({})
   
   useEffect(() => {
@@ -306,7 +473,6 @@ const handleSavePrice = async () => {
     }))
   }
 
-  // Buka Modal Konfigurasi Lelang
   const openAuctionModal = (productId: string, isEdit = false) => {
     setSelectedProductId(productId)
     setIsEditingAuction(isEdit)
@@ -335,7 +501,6 @@ const handleSavePrice = async () => {
     setShowAuctionModal(true)
   }
 
-  // Handle File Selection (MULTIPLE)
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
@@ -368,7 +533,6 @@ const handleSavePrice = async () => {
     })
   }
 
-  // Upload Multiple Images ke Supabase Storage
   const uploadImages = async (): Promise<string[]> => {
     if (!selectedFiles.length || !selectedProductId) return existingGalleryUrls
     
@@ -599,6 +763,7 @@ const handleSavePrice = async () => {
   const getEmptyMessage = () => {
     if (debouncedTerm) return "Tidak ada produk yang sesuai dengan pencarian."
     if (filterView === 'auction') return "Belum ada produk yang sedang dilelang."
+    if (filterView === 'wishlist') return "Belum ada data."
     if (filterView === 'request') return "Belum ada permintaan dari client."
     return "Belum ada produk."
   }
@@ -659,7 +824,7 @@ const handleSavePrice = async () => {
         </Badge>
       </div>
 
-      {/* SEARCH BAR & FILTERS - TIDAK REFRESH SAAT NGETIK */}
+      {/* SEARCH BAR & FILTERS */}
       <Card className="bg-slate-900 border-slate-800">
         <CardContent className="pt-6">
           <div className="flex gap-4 mb-4">
@@ -689,6 +854,8 @@ const handleSavePrice = async () => {
               </Button>
             )}
           </div>
+          
+          {/* ✅ UPDATED FILTER BUTTONS - Include Wishlist Analytics */}
           <div className="flex gap-2 mb-4 flex-wrap">
             <Button
               variant={filterView === 'all' ? 'default' : 'outline'}
@@ -712,6 +879,17 @@ const handleSavePrice = async () => {
               Sedang Lelang
             </Button>
             <Button
+              variant={filterView === 'wishlist' ? 'default' : 'outline'}
+              onClick={() => {
+                setFilterView('wishlist')
+                setCurrentPage(1)
+              }}
+              className={filterView === 'wishlist' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}
+            >
+              <Bookmark className="h-4 w-4 mr-2" />
+              Wishlist Analytics ({wishlistTotal})
+            </Button>
+            <Button
               variant={filterView === 'request' ? 'default' : 'outline'}
               onClick={() => {
                 setFilterView('request')
@@ -726,217 +904,435 @@ const handleSavePrice = async () => {
         </CardContent>
       </Card>
 
-      {/* PRODUCTS TABLE - HANYA INI YANG REFRESH SAAT SEARCH */}
-      <Card className="bg-slate-900 border-slate-800">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-white">
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-green-400" />
-              {filterView === 'all' ? 'Daftar Produk' : filterView === 'auction' ? 'Produk Lelang' : 'Permintaan Client'}
-            </div>
-            <span className="text-sm text-slate-400">
-              {totalProducts === 0 ? '0' : `${startIndex}-${endIndex}`} dari {totalProducts}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {products.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 flex flex-col items-center">
-              {filterView === 'auction' ? <Gavel className="h-12 w-12 mb-3 opacity-50" /> :
-              filterView === 'request' ? <MessageSquare className="h-12 w-12 mb-3 opacity-50" /> :
-              <Package className="h-12 w-12 mb-3 opacity-50" />}
-              <p className="text-lg font-medium">{getEmptyMessage()}</p>
-              {filterView !== 'all' && (
-                <Button
-                  variant="link"
-                  onClick={() => setFilterView('all')}
-                  className="mt-2 text-blue-400"
+      {/* ✅ WISHLIST ANALYTICS TABLE - Shows when filterView === 'wishlist' */}
+      {filterView === 'wishlist' && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Bookmark className="h-5 w-5 text-blue-400" />
+                Wishlist Analytics
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={wishlistFilter}
+                  onChange={(e) => setWishlistFilter(e.target.value as any)}
+                  className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
                 >
-                  Kembali ke Semua Produk
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-800 uppercase font-medium">
-                  <tr>
-                    <th className="px-4 py-3 rounded-tl-lg">No</th>
-                    <th className="px-4 py-3">Nama Produk</th>
-                    <th className="px-4 py-3">Harga Produk</th>
-                    <th className="px-4 py-3">Info Lelang</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {products.map((product, index) => {
-                    const globalIndex = startIndex + index
-                    const isBidDeadlineVisible = showBidDeadline[product.id]
-                    return (
-                      <tr key={product.id} className="hover:bg-slate-800/50">
-                        <td className="px-4 py-3 text-slate-400">{globalIndex}</td>
-                        <td className="px-4 py-3 font-medium text-white">
-                          {product.nama_produk || 'Produk Tanpa Nama'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-white font-mono">
-                            {formatRupiah(product.harga || 0)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {product.auction_active && product.auction_end_time ? (
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
-                                <Clock className="h-3 w-3" />
-                                <span>Batas Lelang: {timeRemaining[product.id]?.auction || 'Loading...'}</span>
+                  <option value="all">Semua Status</option>
+                  <option value="deal">Deal</option>
+                  <option value="pending">Pending</option>
+                  <option value="requested">Requested</option>
+                  <option value="wishlist">Wishlist</option>
+                  <option value="decline">Decline</option>
+                </select>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {wishlistLoading ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+              </div>
+            ) : wishlistItems.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Bookmark className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>Belum ada data.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 uppercase font-medium">
+                    <tr>
+                      <th className="px-4 py-3">Gambar</th>
+                      <th className="px-4 py-3">Produk</th>
+                      <th className="px-4 py-3">User</th>
+                      <th className="px-4 py-3 text-right">Harga Satuan</th>
+                      <th className="px-4 py-3 text-center">Jumlah</th>
+                      <th className="px-4 py-3 text-right">Subtotal</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Tanggal</th>
+                      <th className="px-4 py-3 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {wishlistItems.map((item) => {
+                      const statusConfig = getStatusConfig(item.status)
+                      const StatusIcon = statusConfig.icon
+                      const canAddNote = item.status === 'requested' || item.status === 'pending' || item.status === 'decline' || item.status === 'deal'
+                      
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-800/50">
+                          <td className="px-4 py-3">
+                            {item.products?.gambar_url ? (
+                              <img
+                                src={item.products.gambar_url}
+                                alt={item.products.nama_produk}
+                                className="w-12 h-12 object-cover rounded-lg border border-slate-700"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700">
+                                <ImageIcon className="h-5 w-5 text-slate-500" />
                               </div>
-                              {product.current_bid_price && product.current_bid_price > (product.auction_start_price || 0) && (
-                                <div className="bg-slate-800/50 rounded p-2 border border-slate-700">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <div className="flex items-center gap-1 text-red-400 text-xs font-mono">
-                                      <Timer className="h-3 w-3" />
-                                      <span>Bid Deadline:</span>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => toggleBidDeadlineVisibility(product.id)}
-                                      className="h-6 p-1 text-slate-400 hover:text-white"
-                                    >
-                                      {isBidDeadlineVisible ? (
-                                        <EyeOff className="h-3 w-3" />
-                                      ) : (
-                                        <Eye className="h-3 w-3" />
-                                      )}
-                                    </Button>
-                                  </div>
-                                  {isBidDeadlineVisible ? (
-                                    <div className="text-red-400 text-xs font-mono font-bold">
-                                      {timeRemaining[product.id]?.bidDeadline || 'Loading...'}
-                                    </div>
-                                  ) : (
-                                    <div className="text-slate-600 text-xs italic">
-                                      [Hidden - Klik 👁 untuk lihat]
-                                    </div>
-                                  )}
-                                  <div className="text-slate-500 text-xs mt-1">
-                                    Current Bid: {formatRupiah(product.current_bid_price || 0)}
-                                  </div>
-                                  <div className="mt-2 flex gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => simulateNewBid(product.id, (product.current_bid_price || product.auction_start_price || 0) + (product.auction_increment || 50000))}
-                                      className="h-6 text-xs border-green-600 text-green-400 hover:bg-green-900/20"
-                                    >
-                                      +Bid Test
-                                    </Button>
-                                  </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-white">
+                            {item.products?.nama_produk || 'Produk Tidak Ditemukan'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="text-white">{item.profiles?.full_name || 'Anonymous'}</p>
+                              <p className="text-xs text-slate-500">{item.profiles?.company_name || '-'}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-white font-mono">
+                                {formatRupiah(item.current_price)}
+                              </span>
+                              {/* Indikator jika harga berubah */}
+                              {item.current_price !== item.original_price && item.original_price > 0 && (
+                                <span className="text-xs text-amber-400">
+                                  ⚠️ Berubah dari {formatRupiah(item.original_price)}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="text-white font-mono">{item.quantity}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-blue-400 font-mono font-bold">
+                              {formatRupiah(item.current_price * item.quantity)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge className={`${statusConfig.color} border`}>
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {statusConfig.label}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {new Date(item.status_updated_at || item.created_at).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2 items-center">
+                              
+                              {/* KONDISI 1: Menunggu Review Admin (Status: requested) */}
+                              {/* KONDISI 1: Menunggu Review Admin (Status: requested ATAU pending_review) */}
+                              {(item.status === 'requested' || item.status === 'pending_review') && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => updateWishlistStatus(item.id, 'accept')}
+                                    className="text-xs bg-emerald-600 hover:bg-emerald-700 border border-emerald-500"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => updateWishlistStatus(item.id, 'decline')}
+                                    variant="destructive"
+                                    className="text-xs"
+                                  >
+                                    <XCircle className="h-3 w-3 mr-1" />
+                                    Decline
+                                  </Button>
+                                </>
+                              )}
+
+                              {/* KONDISI 2: Menunggu Pembayaran (Status: accepted) */}
+                              {item.status === 'accepted' && (
+                                <div className="flex items-center gap-2">
+                                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    Menunggu Bayar
+                                  </Badge>
+                                  {/* Tombol Kecil untuk Mark Deal */}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateWishlistStatus(item.id, 'mark_deal')}
+                                    className="h-7 text-xs border-emerald-600 text-emerald-400 hover:bg-emerald-900/20"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Mark Deal
+                                  </Button>
                                 </div>
                               )}
-                              <div className="flex items-center gap-1 text-purple-400 text-xs">
-                                <DollarSign className="h-3 w-3" />
-                                <span>Start: {formatRupiah(product.auction_start_price || 0)}</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-purple-400 text-xs">
-                                <TrendingUp className="h-3 w-3" />
-                                <span>Kelipatan: {formatRupiah(product.auction_increment || 0)}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 text-xs">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2 flex-wrap">
-                            {product.is_auction ? (
-                              <Badge className="bg-purple-600 text-white animate-pulse">
-                                <Gavel className="h-3 w-3 mr-1" />
-                                Sedang Lelang
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-slate-800">
-                                Normal
-                              </Badge>
-                            )}
-                            {product.is_request ? (
-                              <Badge className="bg-orange-600 text-white">
-                                <MessageSquare className="h-3 w-3 mr-1" />
-                                Request
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-slate-800">
-                                Tidak Ada Request
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-2">
-                            {/* ✅ TOMBOL EDIT HARGA - SEKARANG BERFUNGSI! */}
-                            <Button
-                              size="sm"
-                              onClick={() => openEditPriceModal(product.id, product.harga)}
-                              className="bg-blue-600 hover:bg-blue-700 text-xs"
-                            >
-                              <Edit2 className="h-3 w-3 mr-1" />
-                              Edit Harga
-                            </Button>
-                            {product.auction_active ? (
-                              <Button
-                                size="sm"
-                                onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
-                                variant="destructive"
-                                className="text-xs"
-                              >
-                                <X className="h-3 w-3 mr-1" />
-                                Batalkan Lelang
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => openAuctionModal(product.id, false)}
-                                className="bg-orange-600 hover:bg-orange-700 text-xs"
-                              >
-                                <Gavel className="h-3 w-3 mr-1" />
-                                Jadwalkan Lelang
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-800">
-              <Button
-                variant="outline"
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="border-slate-700 disabled:opacity-50"
-              >
-                ← Prev
-              </Button>
-              <span className="text-slate-400 text-sm">Page {currentPage} / {totalPages}</span>
-              <Button
-                variant="outline"
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="border-slate-700 disabled:opacity-50"
-              >
-                Next →
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* ✅ MODAL EDIT HARGA - BARU! */}
+                              {/* KONDISI 3: Deal Selesai */}
+                              {item.status === 'deal' && (
+                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Deal Closed
+                                </Badge>
+                              )}
+
+                              {/* KONDISI 4: Ditolak */}
+                              {item.status === 'declined' && (
+                                <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-xs">
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  Declined
+                                </Badge>
+                              )}
+
+                              {/* KONDISI 5: Masih Wishlist / Menunggu Request */}
+                              {(item.status === 'wishlist' || item.status === 'pending') && (
+                                <Badge variant="outline" className="text-xs bg-slate-800 text-slate-400">
+                                  {item.status === 'wishlist' ? 'Menunggu Request' : 'Menunggu Review'}
+                                </Badge>
+                              )}
+
+                              {/* TOMBOL NOTE (Selalu Ada) */}
+                              <Button
+                                size="sm"
+                                onClick={() => openNoteModal(item)}
+                                disabled={item.status !== 'accepted' && item.status !== 'declined' && item.status !== 'deal'}
+                                className={`h-8 w-8 p-0 transition-all ${
+                                  // Jika aktif (accepted/declined/deal)
+                                  (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
+                                    ? 'text-slate-400 hover:text-white hover:bg-slate-700' 
+                                    : 'text-slate-600 cursor-not-allowed opacity-50' // Jika tidak aktif (wishlist/requested)
+                                }`}
+                                title={
+                                  (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
+                                    ? "Tambahkan catatan untuk item ini"
+                                    : "Note hanya tersedia setelah Accept/Decline"
+                                }
+                              >
+                                <MessageSquare className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* PRODUCTS TABLE - Only shows when filterView !== 'wishlist' */}
+      {filterView !== 'wishlist' && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-green-400" />
+                {filterView === 'all' ? 'Daftar Produk' : filterView === 'auction' ? 'Produk Lelang' : 'Permintaan Client'}
+              </div>
+              <span className="text-sm text-slate-400">
+                {totalProducts === 0 ? '0' : `${startIndex}-${endIndex}`} dari {totalProducts}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {products.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 flex flex-col items-center">
+                {filterView === 'auction' ? <Gavel className="h-12 w-12 mb-3 opacity-50" /> :
+                filterView === 'request' ? <MessageSquare className="h-12 w-12 mb-3 opacity-50" /> :
+                <Package className="h-12 w-12 mb-3 opacity-50" />}
+                <p className="text-lg font-medium">{getEmptyMessage()}</p>
+                {filterView !== 'all' && (
+                  <Button
+                    variant="link"
+                    onClick={() => setFilterView('all')}
+                    className="mt-2 text-blue-400"
+                  >
+                    Kembali ke Semua Produk
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 uppercase font-medium">
+                    <tr>
+                      <th className="px-4 py-3 rounded-tl-lg">No</th>
+                      <th className="px-4 py-3">Nama Produk</th>
+                      <th className="px-4 py-3">Harga Produk</th>
+                      <th className="px-4 py-3">Info Lelang</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {products.map((product, index) => {
+                      const globalIndex = startIndex + index
+                      const isBidDeadlineVisible = showBidDeadline[product.id]
+                      return (
+                        <tr key={product.id} className="hover:bg-slate-800/50">
+                          <td className="px-4 py-3 text-slate-400">{globalIndex}</td>
+                          <td className="px-4 py-3 font-medium text-white">
+                            {product.nama_produk || 'Produk Tanpa Nama'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-white font-mono">
+                              {formatRupiah(product.harga || 0)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {product.auction_active && product.auction_end_time ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
+                                  <Clock className="h-3 w-3" />
+                                  <span>Batas Lelang: {timeRemaining[product.id]?.auction || 'Loading...'}</span>
+                                </div>
+                                {product.current_bid_price && product.current_bid_price > (product.auction_start_price || 0) && (
+                                  <div className="bg-slate-800/50 rounded p-2 border border-slate-700">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="flex items-center gap-1 text-red-400 text-xs font-mono">
+                                        <Timer className="h-3 w-3" />
+                                        <span>Bid Deadline:</span>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => toggleBidDeadlineVisibility(product.id)}
+                                        className="h-6 p-1 text-slate-400 hover:text-white"
+                                      >
+                                        {isBidDeadlineVisible ? (
+                                          <EyeOff className="h-3 w-3" />
+                                        ) : (
+                                          <Eye className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                    {isBidDeadlineVisible ? (
+                                      <div className="text-red-400 text-xs font-mono font-bold">
+                                        {timeRemaining[product.id]?.bidDeadline || 'Loading...'}
+                                      </div>
+                                    ) : (
+                                      <div className="text-slate-600 text-xs italic">
+                                        [Hidden - Klik 👁 untuk lihat]
+                                      </div>
+                                    )}
+                                    <div className="text-slate-500 text-xs mt-1">
+                                      Current Bid: {formatRupiah(product.current_bid_price || 0)}
+                                    </div>
+                                    <div className="mt-2 flex gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => simulateNewBid(product.id, (product.current_bid_price || product.auction_start_price || 0) + (product.auction_increment || 50000))}
+                                        className="h-6 text-xs border-green-600 text-green-400 hover:bg-green-900/20"
+                                      >
+                                        +Bid Test
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1 text-purple-400 text-xs">
+                                  <DollarSign className="h-3 w-3" />
+                                  <span>Start: {formatRupiah(product.auction_start_price || 0)}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-purple-400 text-xs">
+                                  <TrendingUp className="h-3 w-3" />
+                                  <span>Kelipatan: {formatRupiah(product.auction_increment || 0)}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 text-xs">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2 flex-wrap">
+                              {product.is_auction ? (
+                                <Badge className="bg-purple-600 text-white animate-pulse">
+                                  <Gavel className="h-3 w-3 mr-1" />
+                                  Sedang Lelang
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-slate-800">
+                                  Normal
+                                </Badge>
+                              )}
+                              {product.is_request ? (
+                                <Badge className="bg-orange-600 text-white">
+                                  <MessageSquare className="h-3 w-3 mr-1" />
+                                  Request
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-slate-800">
+                                  Tidak Ada Request
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => openEditPriceModal(product.id, product.harga)}
+                                className="bg-blue-600 hover:bg-blue-700 text-xs"
+                              >
+                                <Edit2 className="h-3 w-3 mr-1" />
+                                Edit Harga
+                              </Button>
+                              {product.auction_active ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
+                                  variant="destructive"
+                                  className="text-xs"
+                                >
+                                  <X className="h-3 w-3 mr-1" />
+                                  Batalkan Lelang
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => openAuctionModal(product.id, false)}
+                                  className="bg-orange-600 hover:bg-orange-700 text-xs"
+                                >
+                                  <Gavel className="h-3 w-3 mr-1" />
+                                  Jadwalkan Lelang
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-800">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="border-slate-700 disabled:opacity-50"
+                >
+                  ← Prev
+                </Button>
+                <span className="text-slate-400 text-sm">Page {currentPage} / {totalPages}</span>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="border-slate-700 disabled:opacity-50"
+                >
+                  Next →
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* MODAL EDIT HARGA */}
       {showEditPriceModal && (
         <Dialog open={showEditPriceModal} onOpenChange={setShowEditPriceModal}>
           <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
@@ -1235,6 +1631,90 @@ const handleSavePrice = async () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* ✅ MODAL ADMIN NOTE - ADDED AT END */}
+      {showNoteModal && (
+        <Dialog open={showNoteModal} onOpenChange={setShowNoteModal}>
+          <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-400">
+                <MessageSquare className="h-5 w-5" />
+                Admin Note
+              </DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Berikan catatan internal untuk wishlist ini.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              {selectedWishlistItem && (
+                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                  <div className="flex gap-4">
+                    {selectedWishlistItem.products?.gambar_url ? (
+                      <img
+                        src={selectedWishlistItem.products.gambar_url}
+                        alt={selectedWishlistItem.products.nama_produk}
+                        className="w-20 h-20 object-cover rounded-lg border border-slate-600"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-600">
+                        <ImageIcon className="h-8 w-8 text-slate-500" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-white font-medium">{selectedWishlistItem.products?.nama_produk}</p>
+                      <p className="text-sm text-slate-400">User: {selectedWishlistItem.profiles?.full_name}</p>
+                      <p className="text-sm text-slate-400">Company: {selectedWishlistItem.profiles?.company_name || '-'}</p>
+                      <p className="text-blue-400 font-mono text-sm mt-1">
+                        {formatRupiah((selectedWishlistItem.price || 0) * selectedWishlistItem.quantity)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">Catatan Admin</label>
+                <textarea
+                  value={adminNote}
+                  onChange={(e) => setAdminNote(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500 min-h-[120px]"
+                  placeholder="Contoh: User meminta diskon 10% untuk pembelian bulk..."
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowNoteModal(false)
+                  setSelectedWishlistItem(null)
+                  setAdminNote('')
+                }}
+                className="border-slate-600"
+                disabled={noteSaving}
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={handleSaveNote}
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={noteSaving}
+              >
+                {noteSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Simpan Note
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

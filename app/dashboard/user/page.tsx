@@ -4,12 +4,17 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, MessageSquare } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { 
+  User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, 
+  Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, 
+  Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, 
+  MessageSquare, Bookmark, CheckCircle2, XCircle 
+} from 'lucide-react'
 
 interface Profile {
   id: string
@@ -88,6 +93,8 @@ export default function UserDashboard() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [submittingRequest, setSubmittingRequest] = useState(false)
   const [fetchingRequests, setFetchingRequests] = useState(false)
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [selectedStatusItem, setSelectedStatusItem] = useState<RequestItem | null>(null)
 
   // Form State
   const [formData, setFormData] = useState({
@@ -98,23 +105,6 @@ export default function UserDashboard() {
     company_address: '',
     phone_number: ''
   })
-
-  // Load Wishlist from localStorage on mount
-  useEffect(() => {
-    const savedWishlist = localStorage.getItem('sonushub_wishlist')
-    if (savedWishlist) {
-      try {
-        setWishlist(JSON.parse(savedWishlist))
-      } catch (e) {
-        console.error("Failed to parse wishlist:", e)
-      }
-    }
-  }, [])
-
-  // Save Wishlist to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('sonushub_wishlist', JSON.stringify(wishlist))
-  }, [wishlist])
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -248,6 +238,83 @@ const removeItem = async (productId: string) => {
   }
 }
 
+// ✅ TAMBAHKAN FUNGSI INI
+const handleStatusClick = (item: RequestItem) => {
+  setSelectedStatusItem(item)
+  setShowStatusModal(true)
+}
+
+// ✅ GANTI FUNGSI getStatusMessage (Hapus Emoji, Pakai Icon)
+const getStatusMessage = (status: string, adminNotes?: string | null) => {
+  switch (status) {
+    case 'wishlist':
+      return {
+        title: 'Wishlist',
+        message: 'Barang ini telah menjadi wishlistmu! Segera ajukan permintaan untuk mendapatkan penawaran.',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/10',
+        borderColor: 'border-blue-500/20',
+        icon: Bookmark // Icon Jarum Modern
+      }
+    case 'pending':
+      return {
+        title: 'Menunggu Review',
+        message: 'Barang sedang diajukan ke admin, mohon ditunggu ya! Tim kami akan segera memverifikasi ketersediaan.',
+        color: 'text-orange-400',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/20',
+        icon: Clock // Icon Jam
+      }
+    case 'approved':
+    case 'accepted':
+      return {
+        title: 'Disetujui',
+        message: adminNotes || 'Barang tersedia ya kak dengan budget yang telah disepakati.',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/20',
+        icon: CheckCircle2 // Icon Centang Modern
+      }
+    case 'rejected':
+    case 'declined':
+      return {
+        title: 'Ditolak',
+        message: adminNotes || 'Mohon maaf ya, untuk produk ini sedang tidak tersedia.',
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/10',
+        borderColor: 'border-red-500/20',
+        icon: XCircle // Icon Silang Modern
+      }
+    default:
+      return {
+        title: 'Status',
+        message: 'Status tidak dikenali.',
+        color: 'text-slate-400',
+        bgColor: 'bg-slate-500/10',
+        borderColor: 'border-slate-500/20',
+        icon: Clock
+      }
+  }
+}
+
+// ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
+const getStatusBadgeColor = (status: string) => {
+  switch (status) {
+    case 'wishlist':
+      return 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
+    case 'pending':
+      return 'bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20'
+    case 'approved':
+      return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+    case 'rejected':
+      return 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20'
+    case 'fulfilled':
+      return 'bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20'
+    default:
+      return 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+  }
+}
+
 // ✅ UPDATE QUANTITY JUGA HARUS SYNC KE DATABASE
 const updateQuantity = async (productId: string, delta: number) => {
   try {
@@ -325,23 +392,6 @@ const updateQuantity = async (productId: string, delta: number) => {
       .reduce((sum, item) => sum + item.quantity, 0)
   }
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'wishlist':
-        return 'bg-blue-600'
-      case 'pending':
-        return 'bg-orange-600'
-      case 'approved':
-        return 'bg-green-600'
-      case 'rejected':
-        return 'bg-red-600'
-      case 'fulfilled':
-        return 'bg-purple-600'
-      default:
-        return 'bg-slate-600'
-    }
-  }
-
   const getStatusBadgeText = (status: string) => {
     switch (status) {
       case 'wishlist':
@@ -377,15 +427,34 @@ const fetchWishlist = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    const { data, error } = await supabase
+    // 1. Fetch wishlist dulu
+    const { data: wishlistData, error } = await supabase
       .from('wishlists')
       .select('*')
       .eq('user_id', session.user.id)
-      .eq('status', 'active')
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    setWishlist(data || [])
+    if (!wishlistData || wishlistData.length === 0) {
+      setWishlist([])
+      return
+    }
+
+    // 2. Fetch products untuk dapat harga terbaru
+    const productIds = [...new Set(wishlistData.map(w => w.product_id))]
+    const { data: productsData } = await supabase
+      .from('products')
+      .select('id, harga')
+      .in('id', productIds)
+
+    // 3. Gabungkan data dengan harga terbaru dari products
+    const enrichedWishlist = wishlistData.map(item => ({
+      ...item,
+      // ✅ PRIORITASKAN HARGA DARI PRODUCTS TABLE
+      price: productsData?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price || 0
+    }))
+
+    setWishlist(enrichedWishlist)
   } catch (err: any) {
     console.error("Failed to fetch wishlist:", err)
   }
@@ -397,27 +466,37 @@ useEffect(() => {
 }, [fetchWishlist])
 
 // ✅ REALTIME SUBSCRIPTION - Auto refresh saat ada perubahan
+// ✅ GANTI BAGIAN INI (line 437-450)
+// ✅ GANTI useEffect INI (line 428-450)
 useEffect(() => {
-  const channel = supabase
-    .channel('wishlist-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: '*', // Listen semua event: INSERT, UPDATE, DELETE
-        schema: 'public',
-        table: 'wishlists',
-        filter: `user_id=eq.${profile?.id}` // Hanya untuk user ini
-      },
-      () => {
-        fetchWishlist() // Auto-refresh saat ada perubahan
-      }
-    )
-    .subscribe()
+  const fetchSessionAndSubscribe = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
 
-  return () => {
-    supabase.removeChannel(channel)
+    const channel = supabase
+      .channel('wishlist-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wishlists',
+          filter: `user_id=eq.${session.user.id}`
+        },
+        () => {
+          fetchWishlist()
+        }
+      )
+      .subscribe()
+
+    // ✅ TAMBAHKAN TYPE ANNOTATION DI CLEANUP
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }
-}, [profile?.id])
+
+  fetchSessionAndSubscribe()
+}, [])
 
 // ✅ LISTEN untuk event dari ProductDetailModal (jika masih pakai localStorage fallback)
 useEffect(() => {
@@ -448,8 +527,18 @@ useEffect(() => {
       const selectedWishlistItems = wishlist.filter(item => selectedItems.has(item.product_id))
       
       // Calculate totals
+      const productIds = selectedWishlistItems.map(item => item.product_id)
+      const { data: latestProducts } = await supabase
+        .from('products')
+        .select('id, harga')
+        .in('id', productIds)
+    
+      // Calculate totals dengan harga terbaru
       const totalItems = selectedWishlistItems.length
-      const estimatedTotal = selectedWishlistItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      const estimatedTotal = selectedWishlistItems.reduce((sum, item) => {
+        const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
+        return sum + (latestPrice * item.quantity)
+      }, 0)
 
       // Insert request to product_requests table
       const { data: requestData, error: requestError } = await supabase
@@ -473,9 +562,9 @@ useEffect(() => {
         product_id: item.product_id,
         product_name: item.product_name,
         product_image_url: item.product_image_url || null,
-        unit_price: item.price,
+        unit_price: latestPrice,
         quantity: item.quantity,
-        subtotal: item.price * item.quantity,
+        subtotal: latestPrice * item.quantity,
         status: 'pending' as const,
         created_at: new Date().toISOString()
       }))
@@ -486,9 +575,19 @@ useEffect(() => {
 
       if (itemsError) throw itemsError
 
-      // Remove submitted items from wishlist
-      const remainingWishlist = wishlist.filter(item => !selectedItems.has(item.product_id))
-      setWishlist(remainingWishlist)
+      const { error: updateError } = await supabase
+        .from('wishlists')
+        .update({ 
+          status: 'pending',
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', session.user.id)
+        .in('product_id', Array.from(selectedItems))
+
+      if (updateError) console.warn('Gagal update status wishlist:', updateError)
+
+      // Refresh wishlist untuk menampilkan status baru
+      fetchWishlist()
       
       // Clear selection
       setSelectedItems(new Set())
@@ -1027,12 +1126,14 @@ useEffect(() => {
                           <th className="px-4 py-3 text-right">Harga Satuan</th>
                           <th className="px-4 py-3 text-center">Jumlah</th>
                           <th className="px-4 py-3 text-right">Subtotal</th>
+                          <th className="px-4 py-3 text-center">Status</th>
                           <th className="px-4 py-3 text-center">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
                         {wishlist.map((item) => (
                           <tr key={item.product_id} className="hover:bg-slate-800/30">
+                            {/* 1. Checkbox */}
                             <td className="px-4 py-3">
                               <Button
                                 size="sm"
@@ -1047,6 +1148,8 @@ useEffect(() => {
                                 )}
                               </Button>
                             </td>
+
+                            {/* 2. Gambar */}
                             <td className="px-4 py-3">
                               {item.product_image_url ? (
                                 <img 
@@ -1060,12 +1163,18 @@ useEffect(() => {
                                 </div>
                               )}
                             </td>
+
+                            {/* 3. Nama Produk */}
                             <td className="px-4 py-3 text-white font-medium">
                               {item.product_name}
                             </td>
+
+                            {/* 4. Harga Satuan */}
                             <td className="px-4 py-3 text-right text-slate-300 font-mono">
                               {formatPrice(item.price)}
                             </td>
+
+                            {/* 5. Jumlah */}
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
                                 <Button
@@ -1089,9 +1198,25 @@ useEffect(() => {
                                 </Button>
                               </div>
                             </td>
+
+                            {/* 6. Subtotal */}
                             <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
                               {formatPrice(item.price * item.quantity)}
                             </td>
+
+                            {/* 7. STATUS BADGE (INI YANG KURANG!) */}
+                            <td className="px-4 py-3 text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleStatusClick(item as any)}
+                                className={`h-8 px-3 border-slate-600 ${getStatusBadgeColor((item as any).status || 'wishlist')}`}
+                              >
+                                {getStatusBadgeText((item as any).status || 'wishlist')}
+                              </Button>
+                            </td>
+
+                            {/* 8. Aksi (Delete Button) */}
                             <td className="px-4 py-3 text-center">
                               <Button
                                 size="sm"
@@ -1264,12 +1389,15 @@ useEffect(() => {
                       <th className="px-4 py-3 text-right">Harga Satuan</th>
                       <th className="px-4 py-3 text-center">Jumlah</th>
                       <th className="px-4 py-3 text-right">Subtotal</th>
+                      <th className="px-4 py-3 text-center">Status</th> 
                       <th className="px-4 py-3 text-center">Aksi</th>
                     </tr>
                   </thead>
+                  {/* GANTI SELURUH <tbody> DI DALAM DIALOG showRequestModal DENGAN INI */}
                   <tbody className="divide-y divide-slate-800">
                     {wishlist.map((item) => (
                       <tr key={item.product_id} className="hover:bg-slate-800/30">
+                        {/* 1. Checkbox */}
                         <td className="px-4 py-3">
                           <Button
                             size="sm"
@@ -1284,6 +1412,8 @@ useEffect(() => {
                             )}
                           </Button>
                         </td>
+
+                        {/* 2. Gambar */}
                         <td className="px-4 py-3">
                           {item.product_image_url ? (
                             <img 
@@ -1297,12 +1427,18 @@ useEffect(() => {
                             </div>
                           )}
                         </td>
+
+                        {/* 3. Nama Produk */}
                         <td className="px-4 py-3 text-white font-medium">
                           {item.product_name}
                         </td>
+
+                        {/* 4. Harga Satuan */}
                         <td className="px-4 py-3 text-right text-slate-300 font-mono">
                           {formatPrice(item.price)}
                         </td>
+
+                        {/* 5. Jumlah */}
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-2">
                             <Button
@@ -1326,9 +1462,33 @@ useEffect(() => {
                             </Button>
                           </div>
                         </td>
+
+                        {/* 6. Subtotal */}
                         <td className="px-4 py-3 text-right text-orange-400 font-bold font-mono">
                           {formatPrice(item.price * item.quantity)}
                         </td>
+
+                        {/* 7. Status Badge (PINDAHKAN KE SINI) */}
+                        {/* 7. STATUS BADGE (MODERN STYLE) */}
+                        <td className="px-4 py-3 text-center">
+                          <Button
+                            size="sm"
+                            variant="ghost" // Ganti variant jadi ghost agar lebih clean
+                            onClick={() => handleStatusClick(item as any)}
+                            className={`h-8 px-3 gap-2 font-medium ${getStatusBadgeColor((item as any).status || 'wishlist')}`}
+                          >
+                            {/* Render Icon Dinamis */}
+                            {(() => {
+                              const statusInfo = getStatusMessage((item as any).status || 'wishlist');
+                              const IconComponent = statusInfo.icon;
+                              return <IconComponent className="h-4 w-4" />;
+                            })()}
+                            
+                            {getStatusBadgeText((item as any).status || 'wishlist')}
+                          </Button>
+                        </td>
+
+                        {/* 8. Aksi (Delete Button) */}
                         <td className="px-4 py-3 text-center">
                           <Button
                             size="sm"
@@ -1498,6 +1658,58 @@ useEffect(() => {
                   Kirim Permintaan
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showStatusModal} onOpenChange={setShowStatusModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-3 text-lg ${
+              selectedStatusItem ? getStatusMessage((selectedStatusItem as any).status || 'wishlist').color : 'text-slate-400'
+            }`}>
+              {/* Icon Besar di Header */}
+              {selectedStatusItem && (() => {
+                const IconComp = getStatusMessage((selectedStatusItem as any).status || 'wishlist').icon;
+                return <IconComp className="h-6 w-6" />;
+              })()}
+              
+              {selectedStatusItem && getStatusMessage((selectedStatusItem as any).status || 'wishlist').title}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {selectedStatusItem && (
+              <>
+                {/* Info Produk */}
+                <div className="bg-slate-800/50 rounded-lg p-4 mb-4 border border-slate-700 flex gap-4">
+                  {/* ... (kode gambar produk tetap sama) ... */}
+                  <div className="flex-1">
+                      <p className="text-white font-medium">{selectedStatusItem.product_name}</p>
+                      <p className="text-slate-400 text-sm">Qty: {selectedStatusItem.quantity}</p>
+                      <p className="text-orange-400 font-bold">{formatPrice((selectedStatusItem as any).price)}</p>
+                  </div>
+                </div>
+
+                {/* Pesan Status dengan Background Baru */}
+                <div className={`rounded-lg p-4 border ${
+                  getStatusMessage((selectedStatusItem as any).status || 'wishlist').bgColor
+                } ${
+                  getStatusMessage((selectedStatusItem as any).status || 'wishlist').borderColor
+                }`}>
+                  <p className={`text-sm leading-relaxed ${
+                    getStatusMessage((selectedStatusItem as any).status || 'wishlist').color
+                  }`}>
+                    {getStatusMessage((selectedStatusItem as any).status || 'wishlist', (selectedStatusItem as any).admin_notes).message}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setShowStatusModal(false)} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600">
+              Tutup
             </Button>
           </DialogFooter>
         </DialogContent>

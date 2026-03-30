@@ -86,7 +86,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         .select('id, quantity')
         .eq('user_id', session.user.id)
         .eq('product_id', product.id)
-        .eq('status', 'active')
+        .eq('status', 'wishlist')
         .single()
 
       let error
@@ -98,6 +98,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
           .from('wishlists')
           .update({ 
             quantity: newQty,
+            status: 'wishlist',
             updated_at: new Date().toISOString()
           })
           .eq('id', existingItem.id))
@@ -112,7 +113,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
             product_image_url: product.image_url || null,
             price: product.price,
             quantity: quantity,
-            status: 'active',
+            status: 'wishlist',
             created_at: new Date().toISOString()
           }))
       }
