@@ -13,7 +13,7 @@ import {
   User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, 
   Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, 
   Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, 
-  MessageSquare, Bookmark, CheckCircle2, XCircle 
+  MessageSquare, Bookmark, CheckCircle2, XCircle, Lock 
 } from 'lucide-react'
 
 interface Profile {
@@ -27,6 +27,8 @@ interface Profile {
   company_address: string | null
   phone_number: string | null
   profile_completed: boolean | null
+  profile_locked_until: string | null  // ✅ TAMBAHKAN INI
+  last_profile_update: string | null   // ✅ TAMBAHKAN INI
   created_at: string
   updated_at: string
 }
@@ -157,10 +159,38 @@ export default function UserDashboard() {
 
   const handleSaveProfile = async () => {
     if (!profile?.id) return
-
+  
     try {
       setSaving(true)
-
+  
+      // ✅ CEK APAKAH SUDAH 100% SEBELUMNYA
+      const wasAlreadyCompleted = profile.profile_completed
+  
+      // ✅ HITUNG COMPLETION PERCENTAGE
+      const fields = [
+        formData.full_name,
+        formData.company_name,
+        formData.company_type,
+        formData.tax_id,
+        formData.company_address,
+        formData.phone_number
+      ]
+      const filled = fields.filter(f => f && f.trim() !== '').length
+      const completionPercentage = Math.round((filled / fields.length) * 100)
+  
+      // ✅ LOGIKA LOCK 7 HARI
+      let profileLockedUntil: string | null = null
+      if (completionPercentage === 100 && !wasAlreadyCompleted) {
+        // Baru pertama kali 100% - set lock 7 hari dari sekarang
+        const lockDate = new Date()
+        lockDate.setDate(lockDate.getDate() + 7)
+        profileLockedUntil = lockDate.toISOString()
+      } else if (completionPercentage === 100 && wasAlreadyCompleted) {
+        // Sudah pernah 100% - pertahankan lock yang ada
+        profileLockedUntil = profile.profile_locked_until
+      }
+      // Jika < 100%, tidak ada lock (bisa edit bebas)
+  
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -170,22 +200,31 @@ export default function UserDashboard() {
           tax_id: formData.tax_id,
           company_address: formData.company_address,
           phone_number: formData.phone_number,
-          profile_completed: true,
+          profile_completed: completionPercentage === 100,
+          profile_locked_until: profileLockedUntil,
+          last_profile_update: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', profile.id)
-
+  
       if (error) throw error
-
+  
       setProfile(prev => prev ? { 
         ...prev, 
         ...formData, 
-        profile_completed: true,
+        profile_completed: completionPercentage === 100,
+        profile_locked_until: profileLockedUntil,
+        last_profile_update: new Date().toISOString(),
         updated_at: new Date().toISOString()
       } : null)
       setIsEditing(false)
-      alert("✅ Profil berhasil diperbarui!")
-
+      
+      if (completionPercentage === 100 && !wasAlreadyCompleted) {
+        alert("✅ Profil lengkap! Anda tidak dapat mengubah data selama 7 hari untuk menjaga integritas data.")
+      } else {
+        alert("✅ Profil berhasil diperbarui!")
+      }
+  
     } catch (err: any) {
       alert("❌ Gagal menyimpan profil: " + err.message)
     } finally {
@@ -206,13 +245,35 @@ export default function UserDashboard() {
     }
     setIsEditing(false)
   }
-  
+
   const checkProfileCompletion = () => {
     if (!profile?.profile_completed) {
       setShowProfileAlert(true)
       return false
     }
     return true
+  }
+
+  const isProfileLocked = () => {
+    if (!profile?.profile_completed || !profile?.profile_locked_until) {
+      return false
+    }
+    
+    const lockUntil = new Date(profile.profile_locked_until)
+    const now = new Date()
+    
+    return now < lockUntil
+  }
+  
+  const getLockRemainingDays = () => {
+    if (!profile?.profile_locked_until) return 0
+    
+    const lockUntil = new Date(profile.profile_locked_until)
+    const now = new Date()
+    const diffTime = lockUntil.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    return Math.max(0, diffDays)
   }
 
   // ✅ GANTI FUNGSI removeItem DENGAN INI
@@ -419,6 +480,12 @@ const updateQuantity = async (productId: string, delta: number) => {
   }
 
   const submitRequest = async () => {
+    if (!profile?.profile_completed) {
+      alert("❌ Profil harus lengkap 100% sebelum melakukan request! Silakan lengkapi profil terlebih dahulu.")
+      setActiveTab('profile')
+      return
+    }
+
     if (selectedItems.size === 0) {
       alert("❌ Pilih item yang mau di-request!")
       return
@@ -843,10 +910,13 @@ useEffect(() => {
                   <Button
                     size="sm"
                     onClick={() => setIsEditing(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={isProfileLocked()}
+                    className={`bg-blue-600 hover:bg-blue-700 ${
+                      isProfileLocked() ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
                     <Edit2 className="h-4 w-4 mr-2" />
-                    Edit Profil
+                    {isProfileLocked() ? `Terkunci (${getLockRemainingDays()} hari)` : 'Edit Profil'}
                   </Button>
                 ) : (
                   <div className="flex gap-2">
@@ -881,6 +951,20 @@ useEffect(() => {
                   </div>
                 )}
               </CardTitle>
+              {isProfileLocked() && (
+                <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <Lock className="h-5 w-5" />
+                    <p className="font-medium">
+                      Profil terkunci selama {getLockRemainingDays()} hari lagi
+                    </p>
+                  </div>
+                  <p className="text-amber-300/70 text-sm mt-2">
+                    Untuk menjaga integritas data, profil yang sudah lengkap tidak dapat diubah selama 7 hari. 
+                    Jika ada kesalahan, hubungi admin.
+                  </p>
+                </div>
+              )}
               <CardDescription className="text-slate-400">
                 Lengkapi informasi perusahaan untuk verifikasi dan partisipasi lelang B2B.
               </CardDescription>
