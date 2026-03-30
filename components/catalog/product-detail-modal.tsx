@@ -81,7 +81,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       }
 
       // 1. Cek apakah produk sudah ada di wishlist user ini di Database
-      // ✅ 1. CEK SEMUA WISHLIST USER INI (tidak filter status)
+      // ✅ 1. CEK SEMUA WISHLIST/REQUEST USER INI UNTUK PRODUK YANG SAMA
       const { data: allWishlistItems, error: fetchError } = await supabase
       .from('wishlists')
       .select('id, quantity, status')
@@ -90,42 +90,33 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
 
       if (fetchError) throw fetchError
 
-      // ✅ 2. HITUNG TOTAL QUANTITY SEMUA STATUS (wishlist + requested + pending)
-      const totalQty = allWishlistItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0
+      // ✅ 2. HITUNG BERAPA REQUEST YANG MASIH PENDING (BELUM DI-RESPONSE ADMIN)
+      // Status yang dianggap "masih aktif": wishlist, requested, pending, accepted
+      // Status yang dianggap "sudah selesai": deal, declined (tidak dihitung ke limit)
+      const pendingRequests = allWishlistItems?.filter(item => 
+      item.status === 'wishlist' || 
+      item.status === 'requested' || 
+      item.status === 'pending' || 
+      item.status === 'accepted'
+      ) || []
 
-      // ✅ 3. CEK LIMIT MAX 3X
-      if (totalQty >= 3) {
-      alert("❌ Maksimal request untuk produk ini adalah 3 unit! Anda sudah memiliki " + totalQty + " unit di wishlist/request.")
+      const pendingCount = pendingRequests.length
+
+      // ✅ 3. CEK LIMIT MAKSIMAL 2 REQUEST AKTIF
+      if (pendingCount >= 2) {
+      alert("⚠️ Request terlalu banyak! Tunggu lagi setelah request sebelumnya telah direspon admin!")
       setIsAdding(false)
       return
       }
 
-      // ✅ 4. CEK APAKAH SUDAH ADA YANG STATUSNYA BUKAN 'wishlist' (sedang diproses)
-      const hasPendingRequest = allWishlistItems?.some(item => 
-      item.status === 'requested' || item.status === 'pending' || item.status === 'accepted'
-      )
-
-      if (hasPendingRequest) {
-      alert("⚠️ Produk ini sedang dalam proses review admin. Silakan tunggu konfirmasi sebelum menambah quantity.")
-      setIsAdding(false)
-      return
-      }
-
-      // ✅ 5. CEK APAKAH SUDAH ADA DI WISHLIST (status = 'wishlist')
+      // ✅ 4. CEK APAKAH SUDAH ADA DI WISHLIST (status = 'wishlist') UNTUK UPDATE QUANTITY
       const existingWishlistItem = allWishlistItems?.find(item => item.status === 'wishlist')
 
       let error
 
       if (existingWishlistItem) {
-      // Update quantity jika sudah ada di wishlist
+      // Update quantity jika sudah ada di wishlist (ini masih request yang sama, bukan request baru)
       const newQty = existingWishlistItem.quantity + quantity
-
-      // ✅ DOUBLE CHECK LIMIT SEBELUM UPDATE
-      if (newQty > 3) {
-        alert("❌ Maksimal request untuk produk ini adalah 3 unit!")
-        setIsAdding(false)
-        return
-      }
 
       ;({ error } = await supabase
         .from('wishlists')
@@ -136,7 +127,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         })
         .eq('id', existingWishlistItem.id))
       } else {
-      // Insert baru ke Database
+      // Insert baru ke Database (ini dihitung sebagai request baru)
       ;({ error } = await supabase
         .from('wishlists')
         .insert({
