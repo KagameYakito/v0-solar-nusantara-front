@@ -95,6 +95,7 @@ export default function UserDashboard() {
   const [fetchingRequests, setFetchingRequests] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [selectedStatusItem, setSelectedStatusItem] = useState<RequestItem | null>(null)
+  const [showProfileAlert, setShowProfileAlert] = useState(false)
 
   // Form State
   const [formData, setFormData] = useState({
@@ -205,15 +206,23 @@ export default function UserDashboard() {
     }
     setIsEditing(false)
   }
-
-// ✅ GANTI FUNGSI removeItem DENGAN INI
-const removeItem = async (productId: string) => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      alert("❌ Session expired. Silakan login ulang.")
-      return
+  
+  const checkProfileCompletion = () => {
+    if (!profile?.profile_completed) {
+      setShowProfileAlert(true)
+      return false
     }
+    return true
+  }
+
+  // ✅ GANTI FUNGSI removeItem DENGAN INI
+  const removeItem = async (productId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        alert("❌ Session expired. Silakan login ulang.")
+        return
+      }
 
     // DELETE DARI DATABASE
     const { error } = await supabase
@@ -756,19 +765,70 @@ useEffect(() => {
             <Building2 className="h-4 w-4 mr-2" />
             Profil Perusahaan
           </TabsTrigger>
-          <TabsTrigger value="auctions" className="data-[state=active]:bg-green-600">
+          <TabsTrigger 
+            value="auctions" 
+            className="data-[state=active]:bg-green-600"
+            onClick={(e) => {
+              if (!checkProfileCompletion()) {
+                e.preventDefault()
+              }
+            }}
+          >
             <Gavel className="h-4 w-4 mr-2" />
             Riwayat Lelang
           </TabsTrigger>
-          <TabsTrigger value="bids" className="data-[state=active]:bg-green-600">
+          <TabsTrigger 
+            value="bids" 
+            className="data-[state=active]:bg-green-600"
+            onClick={(e) => {
+              if (!checkProfileCompletion()) {
+                e.preventDefault()
+              }
+            }}
+          >
             <History className="h-4 w-4 mr-2" />
             Riwayat Bid
           </TabsTrigger>
-          <TabsTrigger value="requests" className="data-[state=active]:bg-green-600">
+          <TabsTrigger 
+            value="requests" 
+            className="data-[state=active]:bg-green-600"
+            onClick={(e) => {
+              if (!checkProfileCompletion()) {
+                e.preventDefault()
+              }
+            }}
+          >
             <ShoppingCart className="h-4 w-4 mr-2" />
             Permintaan Produk
           </TabsTrigger>
         </TabsList>
+
+        {/* ✅ TAMBAHKAN DIALOG ALERT INI (sebelum closing </div> terakhir) */}
+        <Dialog open={showProfileAlert} onOpenChange={setShowProfileAlert}>
+          <DialogContent className="bg-slate-900 border-red-700 text-white max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-400">
+                <AlertCircle className="h-5 w-5" />
+                Profil Belum Lengkap
+              </DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Lengkapilah profil terlebih dahulu sebelum mengakses fitur!
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  setShowProfileAlert(false)
+                  setActiveTab('profile')
+                }}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Edit2 className="h-4 w-4 mr-2" />
+                Isi Profil Sekarang
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* TAB 1: PROFIL PERUSAHAAN */}
         <TabsContent value="profile" className="space-y-4 mt-6">
