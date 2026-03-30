@@ -557,17 +557,22 @@ useEffect(() => {
       if (requestError) throw requestError
 
       // Insert each item to request_items table
-      const requestItems = selectedWishlistItems.map(item => ({
-        request_id: requestData.id,
-        product_id: item.product_id,
-        product_name: item.product_name,
-        product_image_url: item.product_image_url || null,
-        unit_price: latestPrice,
-        quantity: item.quantity,
-        subtotal: latestPrice * item.quantity,
-        status: 'pending' as const,
-        created_at: new Date().toISOString()
-      }))
+      const requestItems = selectedWishlistItems.map(item => {
+        // ✅ DEFISINIKAN ULANG latestPrice DI SINI (di dalam scope map)
+        const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
+
+        return {
+          request_id: requestData.id,
+          product_id: item.product_id,
+          product_name: item.product_name,
+          product_image_url: item.product_image_url || null,
+          unit_price: latestPrice,       // ✅ Sekarang aman
+          quantity: item.quantity,
+          subtotal: latestPrice * item.quantity, // ✅ Sekarang aman
+          status: 'pending' as const,    // Atau 'requested'
+          created_at: new Date().toISOString()
+        }
+      })
 
       const { error: itemsError } = await supabase
         .from('request_items')
@@ -696,35 +701,35 @@ useEffect(() => {
             </div>
             <span className="text-sm font-medium hidden sm:inline">Back to Home</span>
           </Link>
-
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2 text-green-500">
-              <User className="h-8 w-8" />
-              Dashboard User
-            </h1>
-            <p className="text-slate-400 mt-1">Kelola profil perusahaan dan partisipasi lelang.</p>
-          </div>
+          {/* ... header content ... */}
         </div>
-
-        <Badge variant="outline" className={`px-4 py-2 ${
-          completionPercentage === 100 
-            ? 'text-green-400 border-green-400 bg-green-900/20' 
-            : 'text-orange-400 border-orange-400 bg-orange-900/20'
-        }`}>
-          {completionPercentage === 100 ? (
-            <>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Profil Lengkap
-            </>
-          ) : (
-            <>
-              <AlertCircle className="h-4 w-4 mr-2" />
-              Profil {completionPercentage}% Lengkap
-            </>
-          )}
-        </Badge>
+        {/* ✅ TAMBAHKAN TOMBOL KE KATALOG */}
+        <div className="flex items-center gap-2">
+          <Link href="/catalog">
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Ke Katalog
+            </Button>
+          </Link>
+          <Badge variant="outline" className={`px-4 py-2 ${
+            completionPercentage === 100 
+              ? 'text-green-400 border-green-400 bg-green-900/20' 
+              : 'text-orange-400 border-orange-400 bg-orange-900/20'
+          }`}>
+            {completionPercentage === 100 ? (
+              <>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Profil Lengkap
+              </>
+            ) : (
+              <>
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Profil {completionPercentage}% Lengkap
+              </>
+            )}
+          </Badge>
+        </div>
       </div>
-
       {/* PROFILE COMPLETION ALERT */}
       {completionPercentage < 100 && (
         <Card className="bg-orange-900/20 border-orange-700">
@@ -1177,11 +1182,17 @@ useEffect(() => {
                             {/* 5. Jumlah */}
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
+                                {/* ✅ DISABLE BUTTON JIKA STATUS BUKAN WISHLIST */}
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => updateQuantity(item.product_id, -1)}
-                                  className="h-8 w-8 p-0 border-slate-600"
+                                  disabled={(item as any).status !== 'wishlist'}
+                                  className={`h-8 w-8 p-0 border-slate-600 ${
+                                    (item as any).status !== 'wishlist' 
+                                      ? 'opacity-50 cursor-not-allowed' 
+                                      : 'hover:bg-slate-700'
+                                  }`}
                                 >
                                   <Minus className="h-3 w-3" />
                                 </Button>
@@ -1192,11 +1203,22 @@ useEffect(() => {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => updateQuantity(item.product_id, 1)}
-                                  className="h-8 w-8 p-0 border-slate-600"
+                                  disabled={(item as any).status !== 'wishlist'}
+                                  className={`h-8 w-8 p-0 border-slate-600 ${
+                                    (item as any).status !== 'wishlist' 
+                                      ? 'opacity-50 cursor-not-allowed' 
+                                      : 'hover:bg-slate-700'
+                                  }`}
                                 >
                                   <Plus className="h-3 w-3" />
                                 </Button>
                               </div>
+                              {/* ✅ TAMPILKAN PESAN JIKA STATUS BUKAN WISHLIST */}
+                              {(item as any).status !== 'wishlist' && (
+                                <p className="text-xs text-amber-400 text-center mt-1">
+                                  ⚠️ Menunggu review admin
+                                </p>
+                              )}
                             </td>
 
                             {/* 6. Subtotal */}
