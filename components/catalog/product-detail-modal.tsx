@@ -81,41 +81,74 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       }
 
       // 1. Cek apakah produk sudah ada di wishlist user ini di Database
-      const { data: existingItem, error: fetchError } = await supabase
-        .from('wishlists')
-        .select('id, quantity')
-        .eq('user_id', session.user.id)
-        .eq('product_id', product.id)
-        .eq('status', 'wishlist')
-        .single()
+      // ✅ 1. CEK SEMUA WISHLIST USER INI (tidak filter status)
+      const { data: allWishlistItems, error: fetchError } = await supabase
+      .from('wishlists')
+      .select('id, quantity, status')
+      .eq('user_id', session.user.id)
+      .eq('product_id', product.id)
+
+      if (fetchError) throw fetchError
+
+      // ✅ 2. HITUNG TOTAL QUANTITY SEMUA STATUS (wishlist + requested + pending)
+      const totalQty = allWishlistItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0
+
+      // ✅ 3. CEK LIMIT MAX 3X
+      if (totalQty >= 3) {
+      alert("❌ Maksimal request untuk produk ini adalah 3 unit! Anda sudah memiliki " + totalQty + " unit di wishlist/request.")
+      setIsAdding(false)
+      return
+      }
+
+      // ✅ 4. CEK APAKAH SUDAH ADA YANG STATUSNYA BUKAN 'wishlist' (sedang diproses)
+      const hasPendingRequest = allWishlistItems?.some(item => 
+      item.status === 'requested' || item.status === 'pending' || item.status === 'accepted'
+      )
+
+      if (hasPendingRequest) {
+      alert("⚠️ Produk ini sedang dalam proses review admin. Silakan tunggu konfirmasi sebelum menambah quantity.")
+      setIsAdding(false)
+      return
+      }
+
+      // ✅ 5. CEK APAKAH SUDAH ADA DI WISHLIST (status = 'wishlist')
+      const existingWishlistItem = allWishlistItems?.find(item => item.status === 'wishlist')
 
       let error
-      
-      if (existingItem) {
-        // Update quantity jika sudah ada
-        const newQty = existingItem.quantity + quantity
-        ;({ error } = await supabase
-          .from('wishlists')
-          .update({ 
-            quantity: newQty,
-            status: 'wishlist',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingItem.id))
+
+      if (existingWishlistItem) {
+      // Update quantity jika sudah ada di wishlist
+      const newQty = existingWishlistItem.quantity + quantity
+
+      // ✅ DOUBLE CHECK LIMIT SEBELUM UPDATE
+      if (newQty > 3) {
+        alert("❌ Maksimal request untuk produk ini adalah 3 unit!")
+        setIsAdding(false)
+        return
+      }
+
+      ;({ error } = await supabase
+        .from('wishlists')
+        .update({ 
+          quantity: newQty,
+          status: 'wishlist',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingWishlistItem.id))
       } else {
-        // Insert baru ke Database
-        ;({ error } = await supabase
-          .from('wishlists')
-          .insert({
-            user_id: session.user.id,
-            product_id: product.id,
-            product_name: product.name,
-            product_image_url: product.image_url || null,
-            price: product.price,
-            quantity: quantity,
-            status: 'wishlist',
-            created_at: new Date().toISOString()
-          }))
+      // Insert baru ke Database
+      ;({ error } = await supabase
+        .from('wishlists')
+        .insert({
+          user_id: session.user.id,
+          product_id: product.id,
+          product_name: product.name,
+          product_image_url: product.image_url || null,
+          price: product.price,
+          quantity: quantity,
+          status: 'wishlist',
+          created_at: new Date().toISOString()
+        }))
       }
 
       if (error) throw error
