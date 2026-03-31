@@ -1,17 +1,14 @@
 'use client'
 
 import Image from 'next/image'
-import { X, ShoppingCart, Minus, Plus, CheckCircle, Loader2 } from 'lucide-react'
+import { X, ShoppingCart, Minus, Plus, CheckCircle, Loader2, AlertCircle, Edit2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import type { Product } from '@/hooks/useProducts'
 import { useState, useEffect } from 'react'
-
-// ✅ IMPORT SUPABASE & ROUTER
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 
-// ✅ INISIALISASI SUPABASE CLIENT
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -31,16 +28,25 @@ interface WishlistItem {
   added_date: string
 }
 
+interface UserProfile {
+  profile_completed: boolean | null
+  full_name: string | null
+  company_name: string | null
+  company_type: string | null
+  company_address: string | null
+  phone_number: string | null
+}
+
 export function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
-  // ✅ INIT ROUTER
   const router = useRouter()
   
   const [quantity, setQuantity] = useState(1)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [wishlist, setWishlist] = useState<WishlistItem[]>([])
   const [isAdding, setIsAdding] = useState(false)
+  const [showProfileAlert, setShowProfileAlert] = useState(false)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
 
-  // Load wishlist from localStorage (Fallback only)
   useEffect(() => {
     const savedWishlist = localStorage.getItem('sonushub_wishlist')
     if (savedWishlist) {
@@ -64,10 +70,41 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
 
   const estimatedTotal = product.price * quantity
 
-  // ✅ SAVE TO DATABASE (BUKAN LOCALSTORAGE)
+  // ✅ FUNGSI BARU - FETCH USER PROFILE
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('profile_completed, full_name, company_name, company_type, company_address, phone_number')
+        .eq('id', userId)
+        .single()
+      
+      if (error) throw error
+      setUserProfile(data)
+      return data
+    } catch (err: any) {
+      console.error("Failed to fetch user profile:", err)
+      return null
+    }
+  }
+
+  // ✅ FUNGSI BARU - HITUNG COMPLETION PERCENTAGE
+  const getProfileCompletion = (profile: any) => {
+    if (!profile) return 0
+    const fields = [
+      profile.full_name,
+      profile.company_name,
+      profile.company_type,
+      profile.company_address,
+      profile.phone_number
+    ]
+    const filled = fields.filter(f => f && f.trim() !== '').length
+    return Math.round((filled / fields.length) * 100)
+  }
+
   const handleAddToWishlist = async () => {
     if (!product) return
-  
+
     try {
       setIsAdding(true)
       
@@ -78,16 +115,26 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         router.push('/auth/signin')
         return
       }
+
+      // ✅ CEK PROFIL LENGKAP ATAU BELUM
+      const profile = await fetchUserProfile(session.user.id)
+      const completionPercentage = getProfileCompletion(profile)
+
+      if (completionPercentage < 100) {
+        setShowProfileAlert(true)
+        setIsAdding(false)
+        return
+      }
   
-      // ✅ 1. CEK APAKAH INI WISHLIST PERTAMA USER (UNTUK LOCK)
+      // ✅ 1. CEK APAKAH INI WISHLIST PERTAMA
       const { data: allUserWishlists } = await supabase
         .from('wishlists')
         .select('id')
         .eq('user_id', session.user.id)
   
       const isFirstWishlist = allUserWishlists?.length === 0
-  
-      // ✅ 2. CEK SEMUA WISHLIST/REQUEST USER INI UNTUK PRODUK YANG SAMA
+
+      // ✅ 2. CEK WISHLIST UNTUK PRODUK YANG SAMA
       const { data: allWishlistItems, error: fetchError } = await supabase
         .from('wishlists')
         .select('id, quantity, status')
@@ -95,25 +142,25 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         .eq('product_id', product.id)
   
       if (fetchError) throw fetchError
-  
-      // ✅ 3. HITUNG BERAPA REQUEST YANG MASIH PENDING
+
+      // ✅ 3. HITUNG PENDING REQUESTS
       const pendingRequests = allWishlistItems?.filter(item => 
         item.status === 'wishlist' || 
         item.status === 'requested' || 
         item.status === 'pending' || 
         item.status === 'accepted'
       ) || []
-  
+
       const pendingCount = pendingRequests.length
-  
-      // ✅ 4. CEK LIMIT MAKSIMAL 2 REQUEST AKTIF
+
+      // ✅ 4. CEK LIMIT 2 REQUEST AKTIF
       if (pendingCount >= 2) {
         alert("⚠️ Request terlalu banyak! Tunggu lagi setelah request sebelumnya telah direspon admin!")
         setIsAdding(false)
         return
       }
   
-      // ✅ 5. JIKA INI WISHLIST PERTAMA, SET LOCK 7 HARI
+      // ✅ 5. JIKA WISHLIST PERTAMA, SET LOCK 7 HARI
       if (isFirstWishlist) {
         const lockDate = new Date()
         lockDate.setDate(lockDate.getDate() + 7)
@@ -126,7 +173,6 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
           })
           .eq('id', session.user.id)
         
-        // ✅ NOTIFY DASHBOARD UNTUK REFRESH PROFILE
         window.dispatchEvent(new CustomEvent('wishlist-updated'))
         
         alert("✅ Wishlist pertama ditambahkan! Profil akan terkunci selama 7 hari untuk menjaga integritas data.")
@@ -134,15 +180,13 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         setShowConfirmModal(true)
       }
   
-      // ✅ 6. CEK APAKAH SUDAH ADA DI WISHLIST (status = 'wishlist')
+      // ✅ 6. UPDATE ATAU INSERT WISHLIST
       const existingWishlistItem = allWishlistItems?.find(item => item.status === 'wishlist')
-  
       let error
-  
+
       if (existingWishlistItem) {
-        // Update quantity jika sudah ada di wishlist
         const newQty = existingWishlistItem.quantity + quantity
-  
+
         ;({ error } = await supabase
           .from('wishlists')
           .update({ 
@@ -152,7 +196,6 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
           })
           .eq('id', existingWishlistItem.id))
       } else {
-        // Insert baru ke Database
         ;({ error } = await supabase
           .from('wishlists')
           .insert({
@@ -168,7 +211,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       }
   
       if (error) throw error
-  
+
       // 7. Update Local State
       const newItem: WishlistItem = {
         product_id: product.id,
@@ -195,13 +238,6 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       
       localStorage.setItem('sonushub_wishlist', JSON.stringify(newWishlist))
       window.dispatchEvent(new CustomEvent('wishlist-updated'))
-  
-      // ✅ ALERT YANG BERBEDA JIKA INI WISHLIST PERTAMA
-      if (isFirstWishlist) {
-        alert("✅ Wishlist pertama ditambahkan! Profil akan terkunci selama 7 hari untuk menjaga integritas data.")
-      } else {
-        setShowConfirmModal(true)
-      }
   
     } catch (err: any) {
       console.error("Failed to add to wishlist:", err)
@@ -285,7 +321,6 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
               </div>
             )}
 
-            {/* QUANTITY CONTROL & ESTIMATED PRICE */}
             <div className="mt-6 pt-6 border-t border-foreground/15 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-foreground">Jumlah:</span>
@@ -349,6 +384,58 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
           </div>
         </div>
       </div>
+
+      {/* ✅ MODAL ALERT PROFIL (FLEKSIBEL) */}
+      <Dialog open={showProfileAlert} onOpenChange={setShowProfileAlert}>
+        <DialogContent className="bg-slate-900 border-orange-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-400">
+              <AlertCircle className="h-5 w-5" />
+              Profil Belum Lengkap
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Lengkapi profil perusahaan Anda terlebih dahulu sebelum melakukan request produk.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {userProfile && (
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-slate-400 text-sm">Kelengkapan Profil:</span>
+                  <span className="text-orange-400 font-bold">
+                    {getProfileCompletion(userProfile)}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-700 rounded-full h-2">
+                  <div 
+                    className="bg-orange-500 h-2 rounded-full transition-all"
+                    style={{ width: `${getProfileCompletion(userProfile)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowProfileAlert(false)}
+              className="border-slate-600"
+            >
+              Nanti Saja
+            </Button>
+            <Button
+              onClick={() => {
+                setShowProfileAlert(false)
+                router.push('/dashboard/user')
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Edit2 className="h-4 w-4 mr-2" />
+              Isi Profil Sekarang
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* MODAL KONFIRMASI */}
       <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
