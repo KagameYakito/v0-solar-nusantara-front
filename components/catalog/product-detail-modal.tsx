@@ -67,11 +67,10 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
   // ✅ SAVE TO DATABASE (BUKAN LOCALSTORAGE)
   const handleAddToWishlist = async () => {
     if (!product) return
-
+  
     try {
       setIsAdding(true)
       
-      // Cek session user
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
@@ -79,72 +78,98 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         router.push('/auth/signin')
         return
       }
-
-      // 1. Cek apakah produk sudah ada di wishlist user ini di Database
-      // ✅ 1. CEK SEMUA WISHLIST/REQUEST USER INI UNTUK PRODUK YANG SAMA
+  
+      // ✅ 1. CEK APAKAH INI WISHLIST PERTAMA USER (UNTUK LOCK)
+      const { data: allUserWishlists } = await supabase
+        .from('wishlists')
+        .select('id')
+        .eq('user_id', session.user.id)
+  
+      const isFirstWishlist = allUserWishlists?.length === 0
+  
+      // ✅ 2. CEK SEMUA WISHLIST/REQUEST USER INI UNTUK PRODUK YANG SAMA
       const { data: allWishlistItems, error: fetchError } = await supabase
-      .from('wishlists')
-      .select('id, quantity, status')
-      .eq('user_id', session.user.id)
-      .eq('product_id', product.id)
-
+        .from('wishlists')
+        .select('id, quantity, status')
+        .eq('user_id', session.user.id)
+        .eq('product_id', product.id)
+  
       if (fetchError) throw fetchError
-
-      // ✅ 2. HITUNG BERAPA REQUEST YANG MASIH PENDING (BELUM DI-RESPONSE ADMIN)
-      // Status yang dianggap "masih aktif": wishlist, requested, pending, accepted
-      // Status yang dianggap "sudah selesai": deal, declined (tidak dihitung ke limit)
+  
+      // ✅ 3. HITUNG BERAPA REQUEST YANG MASIH PENDING
       const pendingRequests = allWishlistItems?.filter(item => 
-      item.status === 'wishlist' || 
-      item.status === 'requested' || 
-      item.status === 'pending' || 
-      item.status === 'accepted'
+        item.status === 'wishlist' || 
+        item.status === 'requested' || 
+        item.status === 'pending' || 
+        item.status === 'accepted'
       ) || []
-
+  
       const pendingCount = pendingRequests.length
-
-      // ✅ 3. CEK LIMIT MAKSIMAL 2 REQUEST AKTIF
+  
+      // ✅ 4. CEK LIMIT MAKSIMAL 2 REQUEST AKTIF
       if (pendingCount >= 2) {
-      alert("⚠️ Request terlalu banyak! Tunggu lagi setelah request sebelumnya telah direspon admin!")
-      setIsAdding(false)
-      return
+        alert("⚠️ Request terlalu banyak! Tunggu lagi setelah request sebelumnya telah direspon admin!")
+        setIsAdding(false)
+        return
       }
-
-      // ✅ 4. CEK APAKAH SUDAH ADA DI WISHLIST (status = 'wishlist') UNTUK UPDATE QUANTITY
-      const existingWishlistItem = allWishlistItems?.find(item => item.status === 'wishlist')
-
-      let error
-
-      if (existingWishlistItem) {
-      // Update quantity jika sudah ada di wishlist (ini masih request yang sama, bukan request baru)
-      const newQty = existingWishlistItem.quantity + quantity
-
-      ;({ error } = await supabase
-        .from('wishlists')
-        .update({ 
-          quantity: newQty,
-          status: 'wishlist',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingWishlistItem.id))
+  
+      // ✅ 5. JIKA INI WISHLIST PERTAMA, SET LOCK 7 HARI
+      if (isFirstWishlist) {
+        const lockDate = new Date()
+        lockDate.setDate(lockDate.getDate() + 7)
+        
+        await supabase
+          .from('profiles')
+          .update({
+            first_wishlist_at: new Date().toISOString(),
+            profile_locked_until: lockDate.toISOString()
+          })
+          .eq('id', session.user.id)
+        
+        // ✅ NOTIFY DASHBOARD UNTUK REFRESH PROFILE
+        window.dispatchEvent(new CustomEvent('wishlist-updated'))
+        
+        alert("✅ Wishlist pertama ditambahkan! Profil akan terkunci selama 7 hari untuk menjaga integritas data.")
       } else {
-      // Insert baru ke Database (ini dihitung sebagai request baru)
-      ;({ error } = await supabase
-        .from('wishlists')
-        .insert({
-          user_id: session.user.id,
-          product_id: product.id,
-          product_name: product.name,
-          product_image_url: product.image_url || null,
-          price: product.price,
-          quantity: quantity,
-          status: 'wishlist',
-          created_at: new Date().toISOString()
-        }))
+        setShowConfirmModal(true)
       }
-
+  
+      // ✅ 6. CEK APAKAH SUDAH ADA DI WISHLIST (status = 'wishlist')
+      const existingWishlistItem = allWishlistItems?.find(item => item.status === 'wishlist')
+  
+      let error
+  
+      if (existingWishlistItem) {
+        // Update quantity jika sudah ada di wishlist
+        const newQty = existingWishlistItem.quantity + quantity
+  
+        ;({ error } = await supabase
+          .from('wishlists')
+          .update({ 
+            quantity: newQty,
+            status: 'wishlist',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingWishlistItem.id))
+      } else {
+        // Insert baru ke Database
+        ;({ error } = await supabase
+          .from('wishlists')
+          .insert({
+            user_id: session.user.id,
+            product_id: product.id,
+            product_name: product.name,
+            product_image_url: product.image_url || null,
+            price: product.price,
+            quantity: quantity,
+            status: 'wishlist',
+            created_at: new Date().toISOString()
+          }))
+      }
+  
       if (error) throw error
-
-      // 2. Update Local State (untuk UI langsung responsif)
+  
+      // 7. Update Local State
       const newItem: WishlistItem = {
         product_id: product.id,
         product_name: product.name,
@@ -153,7 +178,7 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
         quantity: quantity,
         added_date: new Date().toISOString()
       }
-
+  
       const existingIndex = wishlist.findIndex(item => item.product_id === product.id)
       let newWishlist: WishlistItem[]
       
@@ -168,14 +193,16 @@ export function ProductDetailModal({ product, onClose }: ProductDetailModalProps
       }
       setWishlist(newWishlist)
       
-      // Simpan ke localStorage juga sebagai backup/cache
       localStorage.setItem('sonushub_wishlist', JSON.stringify(newWishlist))
-
-      // 3. Dispatch event untuk notify dashboard
       window.dispatchEvent(new CustomEvent('wishlist-updated'))
-
-      setShowConfirmModal(true)
-
+  
+      // ✅ ALERT YANG BERBEDA JIKA INI WISHLIST PERTAMA
+      if (isFirstWishlist) {
+        alert("✅ Wishlist pertama ditambahkan! Profil akan terkunci selama 7 hari untuk menjaga integritas data.")
+      } else {
+        setShowConfirmModal(true)
+      }
+  
     } catch (err: any) {
       console.error("Failed to add to wishlist:", err)
       alert("❌ Gagal menambahkan ke wishlist: " + err.message)

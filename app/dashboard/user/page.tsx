@@ -27,8 +27,8 @@ interface Profile {
   company_address: string | null
   phone_number: string | null
   profile_completed: boolean | null
+  first_wishlist_at: string | null 
   profile_locked_until: string | null  // ✅ TAMBAHKAN INI
-  last_profile_update: string | null   // ✅ TAMBAHKAN INI
   created_at: string
   updated_at: string
 }
@@ -171,7 +171,6 @@ export default function UserDashboard() {
         formData.full_name,
         formData.company_name,
         formData.company_type,
-        formData.tax_id,
         formData.company_address,
         formData.phone_number
       ]
@@ -179,7 +178,7 @@ export default function UserDashboard() {
       const completionPercentage = Math.round((filled / fields.length) * 100)
   
       // ✅ LOGIKA LOCK 7 HARI
-      let profileLockedUntil: string | null = null
+      let profileLockedUntil: string | null = null 
       if (completionPercentage === 100 && !wasAlreadyCompleted) {
         // Baru pertama kali 100% - set lock 7 hari dari sekarang
         const lockDate = new Date()
@@ -201,7 +200,6 @@ export default function UserDashboard() {
           company_address: formData.company_address,
           phone_number: formData.phone_number,
           profile_completed: completionPercentage === 100,
-          profile_locked_until: profileLockedUntil,
           last_profile_update: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -255,7 +253,7 @@ export default function UserDashboard() {
   }
 
   const isProfileLocked = () => {
-    if (!profile?.profile_completed || !profile?.profile_locked_until) {
+    if (!profile?.profile_locked_until) {
       return false
     }
     
@@ -729,7 +727,6 @@ useEffect(() => {
       profile.full_name,
       profile.company_name,
       profile.company_type,
-      profile.tax_id,
       profile.company_address,
       profile.phone_number
     ]
@@ -871,8 +868,21 @@ useEffect(() => {
         </TabsList>
 
         {/* ✅ TAMBAHKAN DIALOG ALERT INI (sebelum closing </div> terakhir) */}
-        <Dialog open={showProfileAlert} onOpenChange={setShowProfileAlert}>
-          <DialogContent className="bg-slate-900 border-red-700 text-white max-w-md">
+        <Dialog 
+          open={showProfileAlert} 
+          onOpenChange={(open) => {
+            // ✅ PREVENT CLOSING - User HARUS interact dengan modal
+            if (!open) {
+              setShowProfileAlert(true) // Force keep open
+              return
+            }
+            setShowProfileAlert(open)
+          }}
+        >
+          <DialogContent 
+            className="bg-slate-900 border-red-700 text-white max-w-md"
+            onInteractOutside={(e) => e.preventDefault()} // ✅ Block klik luar
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-400">
                 <AlertCircle className="h-5 w-5" />
@@ -888,7 +898,7 @@ useEffect(() => {
                   setShowProfileAlert(false)
                   setActiveTab('profile')
                 }}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-green-600 hover:bg-green-700 w-full"
               >
                 <Edit2 className="h-4 w-4 mr-2" />
                 Isi Profil Sekarang
