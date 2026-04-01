@@ -46,7 +46,8 @@ interface GroupedWishlistItem {
   total_price: number
   status: string
   created_at: string
-  items: any[] // Array of individual items
+  items: any[]
+  product_count: number // Array of individual items
 }
 
 const supabase = createClient(
@@ -160,7 +161,7 @@ export default function AdminMarketingDashboard() {
         const product = productsData?.find(p => p.id.toString() === item.product_id.toString())
         
         // Create unique key: user_id + product_id
-        const groupKey = `${item.user_id}-${item.product_id}`
+        const groupKey = `${item.user_id}`
         
         if (!groupedMap.has(groupKey)) {
           groupedMap.set(groupKey, {
@@ -173,18 +174,24 @@ export default function AdminMarketingDashboard() {
             total_price: (product?.harga || item.price || 0) * item.quantity,
             status: item.status,
             created_at: item.created_at,
-            items: [item]
+            items: [item],
+            product_count: 1  // ✅ HITUNG JUMLAH PRODUK BERBEDA
           })
         } else {
-          // Update existing group
           const group = groupedMap.get(groupKey)!
           group.total_quantity += item.quantity
           group.total_price += (product?.harga || item.price || 0) * item.quantity
           group.items.push(item)
+          group.product_count += 1  // ✅ TAMBAH COUNT PRODUK
           
-          // Use earliest wishlist_id
+          // Gunakan wishlist_id terkecil (yang paling awal)
           if (item.wishlist_id && item.wishlist_id < group.wishlist_id) {
             group.wishlist_id = item.wishlist_id
+          }
+          
+          // Update status ke yang paling priority (requested > wishlist, dll)
+          if (STATUS_PRIORITY[item.status] < STATUS_PRIORITY[group.status]) {
+            group.status = item.status
           }
         }
       })
@@ -1007,7 +1014,16 @@ export default function AdminMarketingDashboard() {
                         
                         {/* Kode Produk */}
                         <td className="px-4 py-3 font-mono text-white">
-                          {item.product_sku}
+                          {item.product_count > 1 ? (
+                            <div>
+                              <p className="text-orange-400">{item.product_sku}</p>
+                              <p className="text-xs text-slate-500">
+                                +{item.product_count - 1} produk lainnya
+                              </p>
+                            </div>
+                          ) : (
+                            item.product_sku
+                          )}
                         </td>
                         
                         {/* User */}
@@ -1023,11 +1039,9 @@ export default function AdminMarketingDashboard() {
                           <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">
                             {item.total_quantity} Unit
                           </Badge>
-                          {item.items.length > 1 && (
-                            <p className="text-xs text-slate-500 mt-1">
-                              ({item.items.length} item)
-                            </p>
-                          )}
+                          <p className="text-xs text-slate-500 mt-1">
+                            ({item.product_count} produk berbeda)
+                          </p>
                         </td>
                         
                         {/* Harga Total */}
@@ -1043,6 +1057,15 @@ export default function AdminMarketingDashboard() {
                             <StatusIcon className="h-3 w-3 mr-1" />
                             {statusConfig.label}
                           </Badge>
+                        </td>
+
+                        {/* Tanggal */}
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {new Date(item.created_at).toLocaleDateString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
                         </td>
                         
                         {/* Aksi */}
@@ -1154,6 +1177,7 @@ export default function AdminMarketingDashboard() {
                       <th className="px-4 py-3">Harga Produk</th>
                       <th className="px-4 py-3">Info Lelang</th>
                       <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Tanggal</th>
                       <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
                     </tr>
                   </thead>
