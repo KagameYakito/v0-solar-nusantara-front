@@ -1015,20 +1015,6 @@ export default function AdminMarketingDashboard() {
                           </Badge>
                         </td>
                         
-                        {/* Kode Produk */}
-                        <td className="px-4 py-3 font-mono text-white">
-                          {item.product_count > 1 ? (
-                            <div>
-                              <p className="text-orange-400">{item.product_sku}</p>
-                              <p className="text-xs text-slate-500">
-                                +{item.product_count - 1} produk lainnya
-                              </p>
-                            </div>
-                          ) : (
-                            item.product_sku
-                          )}
-                        </td>
-                        
                         {/* User */}
                         <td className="px-4 py-3">
                           <div>
