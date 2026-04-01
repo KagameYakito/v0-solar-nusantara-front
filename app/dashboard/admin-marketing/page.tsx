@@ -1014,6 +1014,25 @@ export default function AdminMarketingDashboard() {
                             #{item.wishlist_id}
                           </Badge>
                         </td>
+
+                        <td className="px-4 py-3 font-mono text-white">
+                          {item.product_count > 1 ? (
+                            <div 
+                              className="cursor-pointer hover:text-blue-400 transition-colors"
+                              onClick={() => {
+                                setSelectedProducts(item.items)
+                                setShowProductDetailModal(true)
+                              }}
+                            >
+                              <p className="text-orange-400">{item.product_sku}</p>
+                              <p className="text-xs text-slate-500">
+                                +{item.product_count - 1} produk lainnya (klik untuk detail)
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-orange-400">{item.product_sku}</p>
+                          )}
+                        </td>
                         
                         {/* User */}
                         <td className="px-4 py-3">
@@ -1055,25 +1074,6 @@ export default function AdminMarketingDashboard() {
                             month: 'short',
                             year: 'numeric'
                           })}
-                        </td>
-
-                        <td className="px-4 py-3 font-mono text-white">
-                          {item.product_count > 1 ? (
-                            <div 
-                              className="cursor-pointer hover:text-blue-400 transition-colors"
-                              onClick={() => {
-                                setSelectedProducts(item.items)
-                                setShowProductDetailModal(true)
-                              }}
-                            >
-                              <p className="text-orange-400">{item.product_sku}</p>
-                              <p className="text-xs text-slate-500">
-                                +{item.product_count - 1} produk lainnya (klik untuk detail)
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-orange-400">{item.product_sku}</p>
-                          )}
                         </td>
                         
                         {/* Aksi */}
