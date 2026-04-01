@@ -19,6 +19,7 @@ interface Product {
   id: string
   nama_produk: string | null
   harga: number | null
+  sku: string | null
   created_at: string
   is_auction: boolean
   is_request: boolean
@@ -33,6 +34,19 @@ interface Product {
   auction_gallery_urls: string[] | null
   current_bid_price: number | null
   current_bidder_id: string | null
+}
+
+interface GroupedWishlistItem {
+  wishlist_id: number
+  user_id: string
+  user_name: string
+  company_name: string
+  product_sku: string
+  total_quantity: number
+  total_price: number
+  status: string
+  created_at: string
+  items: any[] // Array of individual items
 }
 
 const supabase = createClient(
@@ -84,14 +98,14 @@ export default function AdminMarketingDashboard() {
   const [showBidDeadline, setShowBidDeadline] = useState<Record<string, boolean>>({})
   
   // ✅ WISHLIST ANALYTICS STATE
-  const [wishlistItems, setWishlistItems] = useState<any[]>([])
+  const [wishlistItems, setWishlistItems] = useState<GroupedWishlistItem[]>([])
+  const [wishlistTotal, setWishlistTotal] = useState(0)
   const [wishlistLoading, setWishlistLoading] = useState(false)
   const [wishlistFilter, setWishlistFilter] = useState<'all' | 'deal' | 'pending' | 'requested' | 'wishlist' | 'decline'>('all')
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<any>(null)
   const [adminNote, setAdminNote] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
-  const [wishlistTotal, setWishlistTotal] = useState(0)
 
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
@@ -105,11 +119,11 @@ export default function AdminMarketingDashboard() {
     try {
       setWishlistLoading(true)
       
-      // 1. Fetch wishlist dulu (TANPA relationship)
+      // 1. Fetch wishlist dengan wishlist_id
       let query = supabase
         .from('wishlists')
         .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
+        .order('wishlist_id', { ascending: false })
       
       if (wishlistFilter !== 'all') {
         query = query.eq('status', wishlistFilter)
@@ -124,36 +138,60 @@ export default function AdminMarketingDashboard() {
         return
       }
       
-      // 2. Fetch profiles user (TANPA relationship)
+      // 2. Fetch profiles user
       const userIds = [...new Set(wishlistData.map(w => w.user_id))]
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, full_name, company_name, email')
         .in('id', userIds)
       
-      // 3. Fetch products (TANPA relationship)
+      // 3. Fetch products (include SKU!)
       const productIds = [...new Set(wishlistData.map(w => w.product_id))]
       const { data: productsData } = await supabase
         .from('products')
-        .select('id, nama_produk, harga, gambar_url')
+        .select('id, nama_produk, harga, gambar_url, sku')
         .in('id', productIds)
       
-      // 4. Manual Join di Frontend
-      const enrichedData = wishlistData.map(item => {
+      // 4. GROUP BY USER + PRODUCT
+      const groupedMap = new Map<string, GroupedWishlistItem>()
+      
+      wishlistData.forEach(item => {
+        const profile = profilesData?.find(p => p.id === item.user_id)
         const product = productsData?.find(p => p.id.toString() === item.product_id.toString())
         
-        return {
-          ...item,
-          profiles: profilesData?.find(p => p.id === item.user_id) || null,
-          products: product || null,
-          // ✅ SELALU GUNAKAN HARGA DARI PRODUCTS TABLE
-          current_price: product?.harga || item.price || 0,
-          original_price: item.price || 0
+        // Create unique key: user_id + product_id
+        const groupKey = `${item.user_id}-${item.product_id}`
+        
+        if (!groupedMap.has(groupKey)) {
+          groupedMap.set(groupKey, {
+            wishlist_id: item.wishlist_id || 0,
+            user_id: item.user_id,
+            user_name: profile?.full_name || 'Anonymous',
+            company_name: profile?.company_name || '-',
+            product_sku: product?.sku || `SKU-${item.product_id}`,
+            total_quantity: item.quantity,
+            total_price: (product?.harga || item.price || 0) * item.quantity,
+            status: item.status,
+            created_at: item.created_at,
+            items: [item]
+          })
+        } else {
+          // Update existing group
+          const group = groupedMap.get(groupKey)!
+          group.total_quantity += item.quantity
+          group.total_price += (product?.harga || item.price || 0) * item.quantity
+          group.items.push(item)
+          
+          // Use earliest wishlist_id
+          if (item.wishlist_id && item.wishlist_id < group.wishlist_id) {
+            group.wishlist_id = item.wishlist_id
+          }
         }
       })
       
-      // 5. Sort berdasarkan priority status
-      const sortedData = enrichedData.sort((a, b) => {
+      // 5. Convert to array & sort
+      const groupedData = Array.from(groupedMap.values())
+      const sortedData = groupedData.sort((a, b) => {
         return (STATUS_PRIORITY[a.status] || 99) - (STATUS_PRIORITY[b.status] || 99)
       })
       
@@ -942,178 +980,132 @@ export default function AdminMarketingDashboard() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-800 uppercase font-medium">
-                    <tr>
-                      <th className="px-4 py-3">Gambar</th>
-                      <th className="px-4 py-3">Produk</th>
-                      <th className="px-4 py-3">User</th>
-                      <th className="px-4 py-3 text-right">Harga Satuan</th>
-                      <th className="px-4 py-3 text-center">Jumlah</th>
-                      <th className="px-4 py-3 text-right">Subtotal</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Tanggal</th>
-                      <th className="px-4 py-3 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {wishlistItems.map((item) => {
-                      const statusConfig = getStatusConfig(item.status)
-                      const StatusIcon = statusConfig.icon
-                      const canAddNote = item.status === 'requested' || item.status === 'pending' || item.status === 'decline' || item.status === 'deal'
-                      
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-800/50">
-                          <td className="px-4 py-3">
-                            {item.products?.gambar_url ? (
-                              <img
-                                src={item.products.gambar_url}
-                                alt={item.products.nama_produk}
-                                className="w-12 h-12 object-cover rounded-lg border border-slate-700"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700">
-                                <ImageIcon className="h-5 w-5 text-slate-500" />
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 font-medium text-white">
-                            {item.products?.nama_produk || 'Produk Tidak Ditemukan'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="text-white">{item.profiles?.full_name || 'Anonymous'}</p>
-                              <p className="text-xs text-slate-500">{item.profiles?.company_name || '-'}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="text-white font-mono">
-                                {formatRupiah(item.current_price)}
-                              </span>
-                              {/* Indikator jika harga berubah */}
-                              {item.current_price !== item.original_price && item.original_price > 0 && (
-                                <span className="text-xs text-amber-400">
-                                  ⚠️ Berubah dari {formatRupiah(item.original_price)}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="text-white font-mono">{item.quantity}</span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-blue-400 font-mono font-bold">
-                              {formatRupiah(item.current_price * item.quantity)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge className={`${statusConfig.color} border`}>
-                              <StatusIcon className="h-3 w-3 mr-1" />
-                              {statusConfig.label}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-slate-500">
-                            {new Date(item.status_updated_at || item.created_at).toLocaleDateString('id-ID', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex justify-end gap-2 items-center">
-                              
-                              {/* KONDISI 1: Menunggu Review Admin (Status: requested) */}
-                              {/* KONDISI 1: Menunggu Review Admin (Status: requested ATAU pending_review) */}
-                              {(item.status === 'requested' || item.status === 'pending_review') && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => updateWishlistStatus(item.id, 'accept')}
-                                    className="text-xs bg-emerald-600 hover:bg-emerald-700 border border-emerald-500"
-                                  >
-                                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                                    Accept
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => updateWishlistStatus(item.id, 'decline')}
-                                    variant="destructive"
-                                    className="text-xs"
-                                  >
-                                    <XCircle className="h-3 w-3 mr-1" />
-                                    Decline
-                                  </Button>
-                                </>
-                              )}
-
-                              {/* KONDISI 2: Menunggu Pembayaran (Status: accepted) */}
-                              {item.status === 'accepted' && (
-                                <div className="flex items-center gap-2">
-                                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
-                                    <Clock className="h-3 w-3 mr-1" />
-                                    Menunggu Bayar
-                                  </Badge>
-                                  {/* Tombol Kecil untuk Mark Deal */}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => updateWishlistStatus(item.id, 'mark_deal')}
-                                    className="h-7 text-xs border-emerald-600 text-emerald-400 hover:bg-emerald-900/20"
-                                  >
-                                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                                    Mark Deal
-                                  </Button>
-                                </div>
-                              )}
-
-                              {/* KONDISI 3: Deal Selesai */}
-                              {item.status === 'deal' && (
-                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Deal Closed
-                                </Badge>
-                              )}
-
-                              {/* KONDISI 4: Ditolak */}
-                              {item.status === 'declined' && (
-                                <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-xs">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Declined
-                                </Badge>
-                              )}
-
-                              {/* KONDISI 5: Masih Wishlist / Menunggu Request */}
-                              {(item.status === 'wishlist' || item.status === 'pending') && (
-                                <Badge variant="outline" className="text-xs bg-slate-800 text-slate-400">
-                                  {item.status === 'wishlist' ? 'Menunggu Request' : 'Menunggu Review'}
-                                </Badge>
-                              )}
-
-                              {/* TOMBOL NOTE (Selalu Ada) */}
+                <thead className="bg-slate-800 uppercase font-medium">
+                  <tr>
+                    <th className="px-4 py-3 text-center">ID</th>
+                    <th className="px-4 py-3">Kode Produk</th>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3 text-center">Jumlah</th>
+                    <th className="px-4 py-3 text-right">Harga Total</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {wishlistItems.map((item) => {
+                    const statusConfig = getStatusConfig(item.status)
+                    const StatusIcon = statusConfig.icon
+                    
+                    return (
+                      <tr key={item.wishlist_id} className="hover:bg-slate-800/50">
+                        {/* ID */}
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant="outline" className="bg-slate-800 text-slate-300 font-mono">
+                            #{item.wishlist_id}
+                          </Badge>
+                        </td>
+                        
+                        {/* Kode Produk */}
+                        <td className="px-4 py-3 font-mono text-white">
+                          {item.product_sku}
+                        </td>
+                        
+                        {/* User */}
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="text-white font-medium">{item.user_name}</p>
+                            <p className="text-xs text-slate-500">{item.company_name}</p>
+                          </div>
+                        </td>
+                        
+                        {/* Jumlah Total */}
+                        <td className="px-4 py-3 text-center">
+                          <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {item.total_quantity} Unit
+                          </Badge>
+                          {item.items.length > 1 && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              ({item.items.length} item)
+                            </p>
+                          )}
+                        </td>
+                        
+                        {/* Harga Total */}
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-orange-400 font-mono font-bold">
+                            {formatRupiah(item.total_price)}
+                          </span>
+                        </td>
+                        
+                        {/* Status */}
+                        <td className="px-4 py-3">
+                          <Badge className={`${statusConfig.color} border`}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {statusConfig.label}
+                          </Badge>
+                        </td>
+                        
+                        {/* Aksi */}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2 items-center">
+                            {/* Expand Button (untuk lihat detail) */}
+                            {item.items.length > 1 && (
                               <Button
                                 size="sm"
-                                onClick={() => openNoteModal(item)}
-                                disabled={item.status !== 'accepted' && item.status !== 'declined' && item.status !== 'deal'}
-                                className={`h-8 w-8 p-0 transition-all ${
-                                  // Jika aktif (accepted/declined/deal)
-                                  (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
-                                    ? 'text-slate-400 hover:text-white hover:bg-slate-700' 
-                                    : 'text-slate-600 cursor-not-allowed opacity-50' // Jika tidak aktif (wishlist/requested)
-                                }`}
-                                title={
-                                  (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
-                                    ? "Tambahkan catatan untuk item ini"
-                                    : "Note hanya tersedia setelah Accept/Decline"
-                                }
+                                variant="outline"
+                                onClick={() => {
+                                  // Show detail modal
+                                  alert(`Detail: ${item.items.length} items dari ${item.user_name}`)
+                                }}
+                                className="text-xs border-slate-600"
                               >
-                                <MessageSquare className="h-4 w-4" />
+                                <Eye className="h-3 w-3 mr-1" />
+                                Detail
                               </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
+                            )}
+                            
+                            {/* Accept/Decline Buttons */}
+                            {(item.status === 'requested' || item.status === 'pending_review') && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateWishlistStatus(item.items[0].id, 'accept')}
+                                  className="text-xs bg-emerald-600 hover:bg-emerald-700 border border-emerald-500"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Accept
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateWishlistStatus(item.items[0].id, 'decline')}
+                                  variant="destructive"
+                                  className="text-xs"
+                                >
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  Decline
+                                </Button>
+                              </>
+                            )}
+                            
+                            {/* Note Button */}
+                            <Button
+                              size="sm"
+                              onClick={() => openNoteModal(item.items[0])}
+                              disabled={item.status !== 'accepted' && item.status !== 'declined' && item.status !== 'deal'}
+                              className={`h-8 w-8 p-0 ${
+                                (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
+                                  ? 'text-slate-400 hover:text-white hover:bg-slate-700' 
+                                  : 'text-slate-600 cursor-not-allowed opacity-50'
+                              }`}
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
                 </table>
               </div>
             )}
