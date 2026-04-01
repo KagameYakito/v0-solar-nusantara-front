@@ -163,10 +163,7 @@ export default function UserDashboard() {
     try {
       setSaving(true)
   
-      // ✅ CEK APAKAH SUDAH 100% SEBELUMNYA
-      const wasAlreadyCompleted = profile.profile_completed
-  
-      // ✅ HITUNG COMPLETION PERCENTAGE
+      // ✅ HITUNG COMPLETION PERCENTAGE (5 FIELD TANPA NPWP)
       const fields = [
         formData.full_name,
         formData.company_name,
@@ -177,18 +174,8 @@ export default function UserDashboard() {
       const filled = fields.filter(f => f && f.trim() !== '').length
       const completionPercentage = Math.round((filled / fields.length) * 100)
   
-      // ✅ LOGIKA LOCK 7 HARI
-      let profileLockedUntil: string | null = null 
-      if (completionPercentage === 100 && !wasAlreadyCompleted) {
-        // Baru pertama kali 100% - set lock 7 hari dari sekarang
-        const lockDate = new Date()
-        lockDate.setDate(lockDate.getDate() + 7)
-        profileLockedUntil = lockDate.toISOString()
-      } else if (completionPercentage === 100 && wasAlreadyCompleted) {
-        // Sudah pernah 100% - pertahankan lock yang ada
-        profileLockedUntil = profile.profile_locked_until
-      }
-      // Jika < 100%, tidak ada lock (bisa edit bebas)
+      // ✅ HAPUS SEMUA LOGIKA LOCK DARI SINI!
+      // Lock sekarang dihandle di handleAddToWishlist
   
       const { error } = await supabase
         .from('profiles')
@@ -200,7 +187,7 @@ export default function UserDashboard() {
           company_address: formData.company_address,
           phone_number: formData.phone_number,
           profile_completed: completionPercentage === 100,
-          last_profile_update: new Date().toISOString(),
+          // ✅ TIDAK ADA profile_locked_until DI SINI LAGI
           updated_at: new Date().toISOString()
         })
         .eq('id', profile.id)
@@ -211,17 +198,12 @@ export default function UserDashboard() {
         ...prev, 
         ...formData, 
         profile_completed: completionPercentage === 100,
-        profile_locked_until: profileLockedUntil,
-        last_profile_update: new Date().toISOString(),
         updated_at: new Date().toISOString()
       } : null)
       setIsEditing(false)
       
-      if (completionPercentage === 100 && !wasAlreadyCompleted) {
-        alert("✅ Profil lengkap! Anda tidak dapat mengubah data selama 7 hari untuk menjaga integritas data.")
-      } else {
-        alert("✅ Profil berhasil diperbarui!")
-      }
+      // ✅ SIMPLE ALERT (TIDAK ADA ANCAMAN LOCK)
+      alert("✅ Profil berhasil diperbarui!")
   
     } catch (err: any) {
       alert("❌ Gagal menyimpan profil: " + err.message)
@@ -970,7 +952,7 @@ useEffect(() => {
                     </p>
                   </div>
                   <p className="text-amber-300/70 text-sm mt-2">
-                    Untuk menjaga integritas data, profil yang sudah lengkap tidak dapat diubah selama 7 hari. 
+                    Profil terkunci setelah wishlist pertama untuk menjaga integritas data. 
                     Jika ada kesalahan, hubungi admin.
                   </p>
                 </div>
@@ -1044,12 +1026,12 @@ useEffect(() => {
                       className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
                     >
                       <option value="">Pilih Tipe</option>
-                      <option value="pt">PT (Perseroan Terbatas)</option>
-                      <option value="cv">CV (Commanditaire Vennootschap)</option>
-                      <option value="ud">UD (Usaha Dagang)</option>
-                      <option value="koperasi">Koperasi</option>
-                      <option value="perseorangan">Perseorangan</option>
-                      <option value="lainnya">Lainnya</option>
+                      <option value="PT">PT (Perseroan Terbatas)</option>
+                      <option value="CV">CV (Commanditaire Vennootschap)</option>
+                      <option value="UD">UD (Usaha Dagang)</option>
+                      <option value="Koperasi">Koperasi</option>
+                      <option value="Perseorangan">Perseorangan</option>
+                      <option value="Lainnya">Lainnya</option>
                     </select>
                   ) : (
                     <p className="text-white bg-slate-800/50 rounded px-4 py-2">
