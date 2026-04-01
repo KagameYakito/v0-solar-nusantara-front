@@ -8,7 +8,7 @@ import {
   Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check, Gavel, 
   MessageSquare, Clock, DollarSign, TrendingUp, FileText, Timer, Eye, 
   EyeOff, Image as ImageIcon, Upload, Trash2, Save, Search, Bookmark, 
-  CheckCircle2, XCircle, Hourglass, CreditCard, FileCheck
+  CheckCircle2, XCircle, Hourglass, CreditCard, FileCheck, Lock
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -107,6 +107,8 @@ export default function AdminMarketingDashboard() {
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<any>(null)
   const [adminNote, setAdminNote] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
+  const [showProductDetailModal, setShowProductDetailModal] = useState(false)
+  const [selectedProducts, setSelectedProducts] = useState<any[]>([])
 
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
@@ -995,6 +997,7 @@ export default function AdminMarketingDashboard() {
                     <th className="px-4 py-3 text-center">Jumlah</th>
                     <th className="px-4 py-3 text-right">Harga Total</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Tanggal</th> 
                     <th className="px-4 py-3 text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -1067,50 +1070,56 @@ export default function AdminMarketingDashboard() {
                             year: 'numeric'
                           })}
                         </td>
+
+                        <td className="px-4 py-3 font-mono text-white">
+                          {item.product_count > 1 ? (
+                            <div 
+                              className="cursor-pointer hover:text-blue-400 transition-colors"
+                              onClick={() => {
+                                setSelectedProducts(item.items)
+                                setShowProductDetailModal(true)
+                              }}
+                            >
+                              <p className="text-orange-400">{item.product_sku}</p>
+                              <p className="text-xs text-slate-500">
+                                +{item.product_count - 1} produk lainnya (klik untuk detail)
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-orange-400">{item.product_sku}</p>
+                          )}
+                        </td>
                         
                         {/* Aksi */}
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2 items-center">
-                            {/* Expand Button (untuk lihat detail) */}
-                            {item.items.length > 1 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  // Show detail modal
-                                  alert(`Detail: ${item.items.length} items dari ${item.user_name}`)
+                            {/* ✅ DROPDOWN SELECT - HANYA AKTIF JIKA STATUS = REQUESTED */}
+                            {item.status === 'requested' ? (
+                              <select
+                                onChange={(e) => {
+                                  const action = e.target.value
+                                  if (action === 'accept') {
+                                    updateWishlistStatus(item.items[0].id, 'accept')
+                                  } else if (action === 'decline') {
+                                    updateWishlistStatus(item.items[0].id, 'decline')
+                                  }
+                                  e.target.value = '' // Reset dropdown
                                 }}
-                                className="text-xs border-slate-600"
+                                className="bg-slate-800 border border-slate-600 text-white text-xs rounded px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer"
+                                defaultValue=""
                               >
-                                <Eye className="h-3 w-3 mr-1" />
-                                Detail
-                              </Button>
+                                <option value="" disabled>Aksi...</option>
+                                <option value="accept">✅ Accept</option>
+                                <option value="decline">❌ Decline</option>
+                              </select>
+                            ) : (
+                              <Badge variant="outline" className="text-xs bg-slate-800 text-slate-500 border-slate-600">
+                                <Lock className="h-3 w-3 mr-1" />
+                                Tidak dapat diubah
+                              </Badge>
                             )}
                             
-                            {/* Accept/Decline Buttons */}
-                            {(item.status === 'requested' || item.status === 'pending_review') && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => updateWishlistStatus(item.items[0].id, 'accept')}
-                                  className="text-xs bg-emerald-600 hover:bg-emerald-700 border border-emerald-500"
-                                >
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Accept
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => updateWishlistStatus(item.items[0].id, 'decline')}
-                                  variant="destructive"
-                                  className="text-xs"
-                                >
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Decline
-                                </Button>
-                              </>
-                            )}
-                            
-                            {/* Note Button */}
+                            {/* Note Button - HANYA AKTIF UNTUK ACCEPTED/DECLINED/DEAL */}
                             <Button
                               size="sm"
                               onClick={() => openNoteModal(item.items[0])}
@@ -1120,6 +1129,11 @@ export default function AdminMarketingDashboard() {
                                   ? 'text-slate-400 hover:text-white hover:bg-slate-700' 
                                   : 'text-slate-600 cursor-not-allowed opacity-50'
                               }`}
+                              title={
+                                (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
+                                  ? "Tambahkan catatan"
+                                  : "Note hanya tersedia setelah Accept/Decline"
+                              }
                             >
                               <MessageSquare className="h-4 w-4" />
                             </Button>
@@ -1732,6 +1746,56 @@ export default function AdminMarketingDashboard() {
           </DialogContent>
         </Dialog>
       )}
+      <Dialog open={showProductDetailModal} onOpenChange={setShowProductDetailModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-400">
+              <Package className="h-5 w-5" />
+              Detail Produk
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {selectedProducts.length} produk dalam wishlist ini
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+            {selectedProducts.map((product: any, index: number) => (
+              <div key={index} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <div className="flex items-center gap-4">
+                  {product.product_image_url ? (
+                    <img
+                      src={product.product_image_url}
+                      alt={product.product_name}
+                      className="w-16 h-16 object-cover rounded-lg border border-slate-600"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-slate-700 rounded-lg flex items-center justify-center border border-slate-600">
+                      <ImageIcon className="h-8 w-8 text-slate-500" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-white font-medium">{product.product_name}</p>
+                    <p className="text-xs text-slate-400 font-mono">SKU: {product.product_id}</p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <span className="text-xs text-slate-400">Qty: <span className="text-white font-mono">{product.quantity}</span></span>
+                      <span className="text-xs text-slate-400">Harga: <span className="text-orange-400 font-mono">{formatRupiah(product.price || product.current_price)}</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <DialogFooter>
+            <Button
+              onClick={() => setShowProductDetailModal(false)}
+              className="w-full bg-slate-700 hover:bg-slate-600 border border-slate-600"
+            >
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
