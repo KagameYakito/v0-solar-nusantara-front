@@ -483,10 +483,10 @@ const fetchWishlist = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    // 1. Fetch wishlist dulu
+    // 1. Fetch wishlist dulu (include request_id)
     const { data: wishlistData, error } = await supabase
       .from('wishlists')
-      .select('*')
+      .select('*, request_id')  // ✅ TAMBAH request_id
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
 
@@ -579,127 +579,59 @@ useEffect(() => {
         return
       }
 
-      // Get selected items from wishlist
+      // ✅ 1. Get ONLY selected items from wishlist
       const selectedWishlistItems = wishlist.filter(item => selectedItems.has(item.product_id))
       
-      // Calculate totals
+      // ✅ 2. Calculate totals dengan harga terbaru
       const productIds = selectedWishlistItems.map(item => item.product_id)
       const { data: latestProducts } = await supabase
         .from('products')
         .select('id, harga')
         .in('id', productIds)
     
-      // Calculate totals dengan harga terbaru
       const totalItems = selectedWishlistItems.length
       const estimatedTotal = selectedWishlistItems.reduce((sum, item) => {
         const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
         return sum + (latestPrice * item.quantity)
       }, 0)
 
-      // Insert request to product_requests table
-      const { data: requestData, error: requestError } = await supabase
-        .from('product_requests')
-        .insert({
-          user_id: session.user.id,
-          status: 'pending',
-          total_items: totalItems,
-          estimated_total: estimatedTotal,
-          notes: 'Request dari User Dashboard',
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single()
-
-      if (requestError) throw requestError
-
-      // Insert each item to request_items table
-      const requestItems = selectedWishlistItems.map(item => {
-        // ✅ DEFISINIKAN ULANG latestPrice DI SINI (di dalam scope map)
-        const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
-
-        return {
-          request_id: requestData.id,
-          product_id: item.product_id,
-          product_name: item.product_name,
-          product_image_url: item.product_image_url || null,
-          unit_price: latestPrice,       // ✅ Sekarang aman
-          quantity: item.quantity,
-          subtotal: latestPrice * item.quantity, // ✅ Sekarang aman
-          status: 'pending' as const,    // Atau 'requested'
-          created_at: new Date().toISOString()
-        }
+      // ✅ 3. GENERATE REQUEST_ID (hanya untuk item yang di-submit!)
+      // Fetch next value from sequence
+      const { data: sequenceData } = await supabase.rpc('nextval', { 
+        sequence_name: 'request_id_seq' 
       })
+      
+      const newRequestId = sequenceData || 60000000
 
-      const { error: itemsError } = await supabase
-        .from('request_items')
-        .insert(requestItems)
-
-      if (itemsError) throw itemsError
-
+      // ✅ 4. UPDATE WISHLISTS TABLE ONLY (bukan product_requests!)
+      // Update ONLY selected items to "requested" with request_id
       const { error: updateError } = await supabase
         .from('wishlists')
         .update({ 
-          status: 'pending',
+          status: 'requested',  // ✅ BENAR: "requested" bukan "pending"
+          request_id: newRequestId,  // ✅ BENAR: Generate request_id
           updated_at: new Date().toISOString()
         })
         .eq('user_id', session.user.id)
         .in('product_id', Array.from(selectedItems))
 
-      if (updateError) console.warn('Gagal update status wishlist:', updateError)
+      if (updateError) throw updateError
 
-      // Refresh wishlist untuk menampilkan status baru
-      fetchWishlist()
+      // ✅ 5. Refresh wishlist untuk menampilkan status baru
+      await fetchWishlist()
       
-      // Clear selection
+      // ✅ 6. Clear selection
       setSelectedItems(new Set())
       setShowConfirmModal(false)
       setShowRequestModal(false)
       
       alert("✅ Permintaan produk berhasil dikirim! Tim kami akan segera memverifikasi.")
 
-      // Refresh requests list
-      fetchProductRequests(session.user.id)
-
     } catch (err: any) {
       console.error("Failed to submit request:", err)
       alert("❌ Gagal mengirim permintaan: " + err.message)
     } finally {
       setSubmittingRequest(false)
-    }
-  }
-
-  const fetchProductRequests = async (userId: string) => {
-    try {
-      setFetchingRequests(true)
-      
-      // Fetch requests with items
-      const { data: requests, error } = await supabase
-        .from('product_requests')
-        .select(`
-          *,
-          items:request_items (
-            id,
-            product_id,
-            product_name,
-            product_image_url,
-            unit_price,
-            quantity,
-            subtotal,
-            status,
-            admin_notes,
-            created_at,
-            updated_at
-          )
-        `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setProductRequests(requests || [])
-    } catch (err: any) {
-      console.error("Failed to fetch requests:", err)
-    } finally {
-      setFetchingRequests(false)
     }
   }
 

@@ -38,6 +38,7 @@ interface Product {
 
 interface GroupedWishlistItem {
   wishlist_id: number
+  request_id: number | null
   user_id: string
   user_name: string
   company_name: string
@@ -126,7 +127,7 @@ export default function AdminMarketingDashboard() {
       let query = supabase
         .from('wishlists')
         .select('*', { count: 'exact' })
-        .order('wishlist_id', { ascending: false })
+        .order('created_at', { ascending: false })
       
       if (wishlistFilter !== 'all') {
         query = query.eq('status', wishlistFilter)
@@ -155,19 +156,20 @@ export default function AdminMarketingDashboard() {
         .select('id, nama_produk, harga, gambar_url, sku')
         .in('id', productIds)
       
-      // 4. GROUP BY USER + PRODUCT
+      // 4. GROUP BY USER + STATUS (BUKAN USER SAJA!)
       const groupedMap = new Map<string, GroupedWishlistItem>()
       
       wishlistData.forEach(item => {
         const profile = profilesData?.find(p => p.id === item.user_id)
         const product = productsData?.find(p => p.id.toString() === item.product_id.toString())
         
-        // Create unique key: user_id + product_id
-        const groupKey = `${item.user_id}`
+        // ✅ KEY BARU: user_id + status (jadi requested & wishlist terpisah!)
+        const groupKey = `${item.user_id}-${item.status}`
         
         if (!groupedMap.has(groupKey)) {
           groupedMap.set(groupKey, {
             wishlist_id: item.wishlist_id || 0,
+            request_id: item.request_id || null,  // ✅ TAMBAH INI
             user_id: item.user_id,
             user_name: profile?.full_name || 'Anonymous',
             company_name: profile?.company_name || '-',
@@ -177,23 +179,23 @@ export default function AdminMarketingDashboard() {
             status: item.status,
             created_at: item.created_at,
             items: [item],
-            product_count: 1  // ✅ HITUNG JUMLAH PRODUK BERBEDA
+            product_count: 1
           })
         } else {
           const group = groupedMap.get(groupKey)!
           group.total_quantity += item.quantity
           group.total_price += (product?.harga || item.price || 0) * item.quantity
           group.items.push(item)
-          group.product_count += 1  // ✅ TAMBAH COUNT PRODUK
+          group.product_count += 1
           
-          // Gunakan wishlist_id terkecil (yang paling awal)
+          // Gunakan wishlist_id terkecil
           if (item.wishlist_id && item.wishlist_id < group.wishlist_id) {
             group.wishlist_id = item.wishlist_id
           }
           
-          // Update status ke yang paling priority (requested > wishlist, dll)
-          if (STATUS_PRIORITY[item.status] < STATUS_PRIORITY[group.status]) {
-            group.status = item.status
+          // Gunakan request_id jika ada
+          if (item.request_id && !group.request_id) {
+            group.request_id = item.request_id
           }
         }
       })
@@ -230,12 +232,14 @@ export default function AdminMarketingDashboard() {
       case 'deal':
         return { label: 'Deal', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CreditCard }
       case 'pending':
-        return { label: 'Pending Payment', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
+        return { label: 'Menunggu Bayar', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
+      case 'accepted':
+        return { label: 'Menunggu Bayar', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
       case 'requested':
         return { label: 'Requested', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: FileCheck }
       case 'wishlist':
         return { label: 'Wishlist', color: 'bg-slate-500/10 text-slate-400 border-slate-500/20', icon: Bookmark }
-      case 'decline':
+      case 'declined':
         return { label: 'Declined', color: 'bg-red-500/10 text-red-400 border-red-500/20', icon: XCircle }
       default:
         return { label: status, color: 'bg-slate-500/10 text-slate-400 border-slate-500/20', icon: Clock }
@@ -1008,10 +1012,17 @@ export default function AdminMarketingDashboard() {
                     
                     return (
                       <tr key={item.wishlist_id} className="hover:bg-slate-800/50">
-                        {/* ID */}
+                        {/* ID - Tampilkan Request ID atau Wishlist ID */}
                         <td className="px-4 py-3 text-center">
-                          <Badge variant="outline" className="bg-slate-800 text-slate-300 font-mono">
-                            #{item.wishlist_id}
+                          <Badge variant="outline" className={`${
+                            item.status === 'requested' || item.status === 'pending' 
+                              ? 'bg-blue-900/20 text-blue-400 border-blue-700' 
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          } font-mono`}>
+                            {item.status === 'requested' || item.status === 'pending' || item.status === 'accepted' || item.status === 'deal'
+                              ? `#RFQ-${item.request_id || item.wishlist_id}`
+                              : `#WLS-${item.wishlist_id}`
+                            }
                           </Badge>
                         </td>
 
