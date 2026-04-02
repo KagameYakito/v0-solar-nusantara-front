@@ -1770,10 +1770,23 @@ useEffect(() => {
                 {wishlist
                   .filter(item => selectedItems.has(item.product_id))
                   .map((item) => (
-                    <div key={item.product_id} className="flex justify-between items-center text-sm">
-                      <span className="text-white truncate flex-1">{item.product_name}</span>
-                      <span className="text-slate-400 mx-2">×{item.quantity}</span>
-                      <span className="text-orange-400 font-mono">{formatPrice(item.price * item.quantity)}</span>
+                    <div key={item.product_id} className="flex justify-between items-center text-sm gap-2">
+                      {/* Nama Produk - Truncate dengan Ellipsis */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white truncate" title={item.product_name}>
+                          {item.product_name.length > 40 
+                            ? `${item.product_name.substring(0, 40)}...` 
+                            : item.product_name}
+                        </p>
+                      </div>
+                      {/* Quantity */}
+                      <span className="text-slate-400 text-xs whitespace-nowrap">
+                        ×{item.quantity}
+                      </span>
+                      {/* Harga */}
+                      <span className="text-orange-400 font-mono text-xs whitespace-nowrap">
+                        {formatPrice(item.price * item.quantity)}
+                      </span>
                     </div>
                   ))}
               </div>
