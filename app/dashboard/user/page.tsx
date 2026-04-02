@@ -564,76 +564,84 @@ useEffect(() => {
   return () => window.removeEventListener('wishlist-updated', handleWishlistUpdated)
 }, [])
 
-  const confirmSubmitRequest = async () => {
-    if (selectedItems.size === 0) {
-      alert("❌ Pilih item yang mau di-request!")
+const confirmSubmitRequest = async () => {
+  if (selectedItems.size === 0) {
+    alert("❌ Pilih item yang mau di-request!")
+    return
+  }
+
+  try {
+    setSubmittingRequest(true)
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert("❌ Session expired. Silakan login ulang.")
       return
     }
 
-    try {
-      setSubmittingRequest(true)
+    // ✅ 1. Get ONLY selected items from wishlist (dengan type annotation)
+    const selectedWishlistItems: WishlistItem[] = wishlist.filter(
+      (item: WishlistItem) => selectedItems.has(item.product_id)
+    )
 
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        alert("❌ Session expired. Silakan login ulang.")
-        return
-      }
-
-      // ✅ 1. Get ONLY selected items from wishlist
-      const selectedWishlistItems = wishlist.filter(item => selectedItems.has(item.product_id))
-      
-      // ✅ 2. Calculate totals dengan harga terbaru
-      const productIds = selectedWishlistItems.map(item => item.product_id)
-      const { data: latestProducts } = await supabase
-        .from('products')
-        .select('id, harga')
-        .in('id', productIds)
+    // ✅ 2. Calculate totals dengan harga terbaru
+    const productIds: string[] = selectedWishlistItems.map(
+      (item: WishlistItem) => item.product_id
+    )
     
-      const totalItems = selectedWishlistItems.length
-      const estimatedTotal = selectedWishlistItems.reduce((sum, item) => {
-        const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
+    const { data: latestProducts } = await supabase
+      .from('products')
+      .select('id, harga')
+      .in('id', productIds)
+
+    const totalItems: number = selectedWishlistItems.length
+    const estimatedTotal: number = selectedWishlistItems.reduce(
+      (sum: number, item: WishlistItem) => {
+        const latestPrice = latestProducts?.find(
+          (p: any) => p.id.toString() === item.product_id.toString()
+        )?.harga || item.price
         return sum + (latestPrice * item.quantity)
-      }, 0)
+      },
+      0
+    )
 
-      // ✅ 3. GENERATE REQUEST_ID (hanya untuk item yang di-submit!)
-      // Fetch next value from sequence
-      const { data: sequenceData } = await supabase.rpc('nextval', { 
-        sequence_name: 'request_id_seq' 
+    // ✅ 3. GENERATE REQUEST_ID dari sequence
+    const { data: sequenceData } = await supabase.rpc('nextval', {
+      sequence_name: 'request_id_seq'
+    })
+
+    const newRequestId: number = sequenceData || 60000000
+
+    // ✅ 4. UPDATE WISHLISTS - Status = 'requested' (BUKAN 'pending'!)
+    const { error: updateError } = await supabase
+      .from('wishlists')
+      .update({
+        status: 'requested',  // ✅ BENAR: 'requested' bukan 'pending'
+        request_id: newRequestId,
+        updated_at: new Date().toISOString()
       })
-      
-      const newRequestId = sequenceData || 60000000
+      .eq('user_id', session.user.id)
+      .in('product_id', Array.from(selectedItems))
 
-      // ✅ 4. UPDATE WISHLISTS TABLE ONLY (bukan product_requests!)
-      // Update ONLY selected items to "requested" with request_id
-      const { error: updateError } = await supabase
-        .from('wishlists')
-        .update({ 
-          status: 'requested',  // ✅ BENAR: "requested" bukan "pending"
-          request_id: newRequestId,  // ✅ BENAR: Generate request_id
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', session.user.id)
-        .in('product_id', Array.from(selectedItems))
+    if (updateError) throw updateError
 
-      if (updateError) throw updateError
+    // ✅ 5. Refresh wishlist
+    await fetchWishlist()
 
-      // ✅ 5. Refresh wishlist untuk menampilkan status baru
-      await fetchWishlist()
-      
-      // ✅ 6. Clear selection
-      setSelectedItems(new Set())
-      setShowConfirmModal(false)
-      setShowRequestModal(false)
-      
-      alert("✅ Permintaan produk berhasil dikirim! Tim kami akan segera memverifikasi.")
+    // ✅ 6. Clear selection
+    setSelectedItems(new Set())
+    setShowConfirmModal(false)
+    setShowRequestModal(false)
 
-    } catch (err: any) {
-      console.error("Failed to submit request:", err)
-      alert("❌ Gagal mengirim permintaan: " + err.message)
-    } finally {
-      setSubmittingRequest(false)
-    }
+    alert("✅ Permintaan produk berhasil dikirim! Tim kami akan segera memverifikasi.")
+
+  } catch (err: any) {
+    console.error("Failed to submit request:", err)
+    alert("❌ Gagal mengirim permintaan: " + err.message)
+  } finally {
+    setSubmittingRequest(false)
   }
+}
 
   const getCompletionPercentage = () => {
     if (!profile) return 0
