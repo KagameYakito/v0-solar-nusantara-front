@@ -58,6 +58,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
 
   useEffect(() => {
     if (product) {
+      console.log('📦 Product received:', product)
       setEditedProduct({ ...product })
       setImagePreview(product.gambar_url)
       
@@ -105,6 +106,8 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       const fileName = `${productId}-${Date.now()}.${fileExt}`
       const filePath = `product-images/${fileName}`
 
+      console.log('📤 Uploading image:', fileName)
+
       const { error } = await supabase.storage
         .from('product-images')
         .upload(filePath, imageFile, {
@@ -117,6 +120,8 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       const { data: urlData } = supabase.storage
         .from('product-images')
         .getPublicUrl(filePath)
+
+      console.log('✅ Image uploaded:', urlData.publicUrl)
 
       if (product?.gambar_url) {
         const oldPath = product.gambar_url.split('/').pop()
@@ -138,12 +143,19 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   }
 
   const handleSave = async () => {
-    if (!editedProduct || !product) return
+    if (!editedProduct || !product) {
+      console.error('❌ No product to save')
+      return
+    }
 
     try {
+      console.log('💾 Starting save process...')
+      console.log('Product ID:', product.id)
+      console.log('Edited Product:', editedProduct)
+      console.log('Editable Fields:', editableFields)
+      
       setSaving(true)
 
-      // ✅ Cek session dulu
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         alert('⚠️ Sesi login habis. Silakan login ulang.')
@@ -154,22 +166,27 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       let imageUrl = editedProduct.gambar_url
       let specs = editedProduct.spesifikasi
 
+      // Upload image if needed
       if (imageFile && editableFields.image) {
+        console.log('📸 Uploading new image...')
         const uploadedUrl = await uploadImage(product.id)
         if (uploadedUrl) {
           imageUrl = uploadedUrl
         }
       }
 
+      // Parse specifications if edited
       if (editableFields.specifications) {
         try {
           specs = JSON.parse(specText)
+          console.log('📋 Parsed specs:', specs)
         } catch (err) {
           alert('❌ Format spesifikasi JSON tidak valid!')
           return
         }
       }
 
+      // Build update data
       const updateData: any = {
         nama_produk: editedProduct.nama_produk,
         stok: editedProduct.stok,
@@ -178,28 +195,47 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
         updated_at: new Date().toISOString()
       }
 
-      // ✅ 1. Update tabel products
-      const { error: updateError } = await supabase
+      console.log('📦 Data to update:', updateData)
+
+      // Update products table
+      console.log('🔄 Updating products table...')
+      const { data: updateResult, error: updateError } = await supabase
         .from('products')
         .update(updateData)
         .eq('id', product.id)
+        .select()
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error('❌ Update error:', updateError)
+        throw updateError
+      }
 
-      // ✅ 2. Insert ke latest_updates (FIXED: tidak pakai parseInt)
-      await supabase
+      console.log('✅ Update result:', updateResult)
+
+      // Insert to latest_updates
+      console.log('📝 Inserting to latest_updates...')
+      const { error: insertError } = await supabase
         .from('latest_updates')
         .insert({
-          product_id: product.id, // ✅ UUID langsung, tidak perlu parseInt
+          product_id: product.id,
           updated_by: session.user.id,
           updated_at: new Date().toISOString()
         })
 
+      if (insertError) {
+        console.error('⚠️ Failed to insert to latest_updates:', insertError)
+        // Don't throw - this is not critical
+      }
+
       alert('✅ Data produk berhasil diupdate!')
+      
+      // Force refresh
+      console.log('🔄 Calling onSave to refresh data...')
       onSave()
       handleClose()
+      
     } catch (err: any) {
-      console.error("Save error:", err)
+      console.error("💥 Save error:", err)
       alert('❌ Gagal update produk: ' + err.message)
     } finally {
       setSaving(false)
@@ -207,6 +243,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   }
 
   const handleClose = () => {
+    console.log('🚪 Closing modal...')
     setEditedProduct(null)
     setImageFile(null)
     setImagePreview(null)
@@ -349,7 +386,10 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
               <input
                 type="text"
                 value={editedProduct.nama_produk || ''}
-                onChange={(e) => setEditedProduct({ ...editedProduct, nama_produk: e.target.value })}
+                onChange={(e) => {
+                  console.log('✏️ Name changed to:', e.target.value)
+                  setEditedProduct({ ...editedProduct, nama_produk: e.target.value })
+                }}
                 className="w-full bg-slate-800 border border-blue-500 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
               />
