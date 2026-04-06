@@ -15,6 +15,21 @@ import { createClient } from '@supabase/supabase-js'
 import ReactCrop, { type Crop as ReactCropType, centerCrop, makeAspectCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 
+const cropStyles = `
+  .ReactCrop__crop-selection {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5) !important;
+  }
+  .ReactCrop__rule-of-thirds-vt::before,
+  .ReactCrop__rule-of-thirds-vt::after {
+    background-color: rgba(59, 130, 246, 0.5) !important;
+  }
+  .ReactCrop__rule-of-thirds-hz::before,
+  .ReactCrop__rule-of-thirds-hz::after {
+    background-color: rgba(59, 130, 246, 0.5) !important;
+  }
+`
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -83,6 +98,16 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       }
     }
   }, [product])
+
+  // Inject crop styles
+  useEffect(() => {
+    const styleElement = document.createElement('style')
+    styleElement.textContent = cropStyles
+    document.head.appendChild(styleElement)
+    return () => {
+      document.head.removeChild(styleElement)
+    }
+  }, [])
 
   const enableEdit = (field: keyof EditableField) => {
     setEditableFields(prev => ({ ...prev, [field]: true }))
@@ -463,7 +488,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
               </div>
             </div>
 
-            {/* Product Namee */}
+            {/* Product Name */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-slate-400">Nama Produk</label>
@@ -596,61 +621,63 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       </Dialog>
 
       {/* CROP MODAL */}
-      <Dialog open={showCropModal} onOpenChange={setShowCropModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl">
-          <DialogHeader>
+        <Dialog open={showCropModal} onOpenChange={setShowCropModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-blue-400">
-              <Crop className="h-5 w-5" />
-              Crop Gambar Produk
+                <Crop className="h-5 w-5" />
+                Crop Gambar Produk
             </DialogTitle>
-          </DialogHeader>
-          
-          <div className="py-4">
+            </DialogHeader>
+            
+            <div className="py-4 space-y-4">
             {imgSrc && (
-              <div className="relative">
+                <div className="relative bg-slate-800 rounded-lg p-4 flex items-center justify-center">
                 <ReactCrop
-                  crop={crop}
-                  onChange={(_, percentCrop) => setCrop(percentCrop)}
-                  onComplete={(c) => setCompletedCrop(c)}
-                  aspect={1} // 1:1 aspect ratio (square)
-                  className="max-h-[60vh]"
+                    crop={crop}
+                    onChange={(_, percentCrop) => setCrop(percentCrop)}
+                    onComplete={(c) => setCompletedCrop(c)}
+                    aspect={1} // 1:1 aspect ratio (square)
                 >
-                  <img
+                    <img
                     ref={imgRef}
                     src={imgSrc}
                     alt="Crop"
                     onLoad={onImageLoad}
-                    className="max-w-full"
-                  />
+                    className="max-h-[50vh] max-w-full object-contain"
+                    style={{ maxHeight: '50vh' }}
+                    />
                 </ReactCrop>
-              </div>
+                </div>
             )}
-            <p className="text-sm text-slate-400 mt-4 text-center">
-              Drag untuk memilih area, lalu klik "Simpan Crop"
-            </p>
-          </div>
+            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+                <p className="text-sm text-blue-300 text-center">
+                📐 Drag pada gambar untuk memilih area crop (rasio 1:1 / persegi)
+                </p>
+            </div>
+            </div>
 
-          <DialogFooter className="gap-2">
+            <DialogFooter className="gap-2">
             <Button
-              variant="outline"
-              onClick={() => {
+                variant="outline"
+                onClick={() => {
                 setShowCropModal(false)
                 setImgSrc('')
                 setImageFile(null)
-              }}
-              className="border-slate-600"
+                }}
+                className="border-slate-600"
             >
-              Batal
+                Batal
             </Button>
             <Button
-              onClick={handleCropSave}
-              className="bg-blue-600 hover:bg-blue-700"
-              disabled={!completedCrop}
+                onClick={handleCropSave}
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={!completedCrop}
             >
-              <Save className="h-4 w-4 mr-2" />
-              Simpan Crop
+                <Save className="h-4 w-4 mr-2" />
+                Simpan Crop
             </Button>
-          </DialogFooter>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
