@@ -500,15 +500,21 @@ const fetchWishlist = useCallback(async () => {
     const productIds = [...new Set(wishlistData.map(w => w.product_id))]
     const { data: productsData } = await supabase
       .from('products')
-      .select('id, harga')
+      .select('id, nama_produk, harga, gambar_url')
       .in('id', productIds)
 
     // 3. Gabungkan data dengan harga terbaru dari products
-    const enrichedWishlist = wishlistData.map(item => ({
-      ...item,
-      // ✅ PRIORITASKAN HARGA DARI PRODUCTS TABLE
-      price: productsData?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price || 0
-    }))
+    const enrichedWishlist = wishlistData.map(item => {
+      const latestProduct = productsData?.find(p => p.id.toString() === item.product_id.toString())
+      
+      return {
+        ...item,
+        // ✅ PRIORITASKAN DATA DARI PRODUCTS TABLE
+        product_name: latestProduct?.nama_produk || item.product_name,  // ✅ SYNC NAMA
+        product_image_url: latestProduct?.gambar_url || item.product_image_url,  // ✅ SYNC GAMBAR
+        price: latestProduct?.harga || item.price || 0  // ✅ SYNC HARGA
+      }
+    })
 
     setWishlist(enrichedWishlist)
   } catch (err: any) {
