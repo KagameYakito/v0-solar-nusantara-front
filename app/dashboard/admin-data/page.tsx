@@ -5,19 +5,21 @@ import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
-  Package, ArrowLeft, AlertCircle, Loader2, Edit2, Upload, 
-  Image as ImageIcon, Search, X, Save, Trash2, Eye
+  Package, ArrowLeft, AlertCircle, Loader2, Edit2, 
+  Image as ImageIcon, Search, Eye
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { ProductEditModal } from '@/components/admin/product-edit-modal'
 
 interface Product {
   id: string
   nama_produk: string | null
   sku: string | null
   gambar_url: string | null
+  stok: number | null
+  spesifikasi: any
   created_at: string
   updated_at: string | null
 }
@@ -41,17 +43,10 @@ export default function AdminDataDashboard() {
   
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedTerm, setDebouncedTerm] = useState('')
-  
-  // Modal states
+  const [filterType, setFilterType] = useState<'all' | 'latest'>('all')
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editingProductId, setEditingProductId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState('')
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
 
-  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedTerm(searchTerm)
@@ -60,14 +55,34 @@ export default function AdminDataDashboard() {
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  // Fetch products
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
       let query = supabase
         .from('products')
         .select('*', { count: 'exact' })
-        .order('sku', { ascending: true })
+
+      if (filterType === 'latest') {
+        const { data: latestData } = await supabase
+          .from('latest_updates')
+          .select('product_id')
+          .gte('updated_at', new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString())
+          .order('updated_at', { ascending: false })
+        
+        // ✅ FIX: Langsung map ke string, tidak perlu .toString() lagi
+        const productIds = latestData?.map(d => d.product_id) || []
+        
+        if (productIds.length === 0) {
+          setProducts([])
+          setTotalProducts(0)
+          return
+        }
+        
+        query = query.in('id', productIds)
+        query = query.order('updated_at', { ascending: false, nullsFirst: false })
+      } else {
+        query = query.order('sku', { ascending: true })
+      }
       
       if (debouncedTerm) {
         query = query.or(`nama_produk.ilike.%${debouncedTerm}%,sku.ilike.%${debouncedTerm}%`)
@@ -89,9 +104,8 @@ export default function AdminDataDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, debouncedTerm])
+  }, [currentPage, debouncedTerm, filterType])
 
-  // Check authorization
   useEffect(() => {
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
@@ -132,7 +146,6 @@ export default function AdminDataDashboard() {
         
         const profile = profileResponse.data
         
-        // ✅ Allow admin_data and super_admin
         if (!profile || (profile.role !== 'admin_data' && profile.role !== 'super_admin')) {
           window.location.href = '/'
           return
@@ -164,131 +177,17 @@ export default function AdminDataDashboard() {
     }
   }, [isAuthorized, fetchProducts])
 
-  // Handle file select
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
-    if (!file.type.startsWith('image/')) {
-      alert('❌ Hanya file gambar yang diperbolehkan!')
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      alert('❌ Ukuran file maksimal 10MB!')
-      return
-    }
-    
-    setSelectedFile(file)
-    
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  // Upload image to Supabase Storage
-  const uploadImage = async (productId: string): Promise<string | null> => {
-    if (!selectedFile) return null
-    
-    try {
-      setUploadingImage(true)
-      const fileExt = selectedFile.name.split('.').pop()
-      const fileName = `${productId}-${Date.now()}.${fileExt}`
-      const filePath = `product-images/${fileName}`
-      
-      const { data, error } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, selectedFile, {
-          cacheControl: '3600',
-          upsert: true
-        })
-      
-      if (error) throw error
-      
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath)
-      
-      return urlData.publicUrl
-    } catch (err: any) {
-      console.error("Upload error:", err)
-      alert('❌ Gagal upload gambar: ' + err.message)
-      return null
-    } finally {
-      setUploadingImage(false)
-    }
-  }
-
-  // Open edit modal
   const openEditModal = (product: Product) => {
-    setEditingProductId(product.id)
-    setEditingName(product.nama_produk || '')
-    setImagePreview(product.gambar_url)
-    setSelectedFile(null)
+    setSelectedProduct(product)
     setShowEditModal(true)
   }
 
-  // Save product changes
-  const handleSaveProduct = async () => {
-    if (!editingProductId) return
-    
-    try {
-      setSaving(true)
-      
-      let imageUrl = imagePreview
-      let currentProduct = products.find(p => p.id === editingProductId)
-      
-      // Upload new image if selected
-      if (selectedFile) {
-        const uploadedUrl = await uploadImage(editingProductId)
-        if (uploadedUrl) {
-          imageUrl = uploadedUrl
-          
-          // Delete old image if exists
-          if (currentProduct?.gambar_url) {
-            const oldPath = currentProduct.gambar_url.split('/').pop()
-            if (oldPath) {
-              await supabase.storage
-                .from('product-images')
-                .remove([`product-images/${oldPath}`])
-            }
-          }
-        }
-      }
-      
-      const updateData: any = {
-        nama_produk: editingName,
-        updated_at: new Date().toISOString()
-      }
-      
-      if (imageUrl && imageUrl !== currentProduct?.gambar_url) {
-        updateData.gambar_url = imageUrl
-      }
-      
-      const { error } = await supabase
-        .from('products')
-        .update(updateData)
-        .eq('id', editingProductId)
-      
-      if (error) throw error
-      
-      await fetchProducts()
-      setShowEditModal(false)
-      setEditingProductId(null)
-      setEditingName('')
-      setImagePreview(null)
-      setSelectedFile(null)
-      
-      alert("✅ Data produk berhasil diupdate!")
-    } catch (err: any) {
-      alert("❌ Gagal update produk: " + err.message)
-    } finally {
-      setSaving(false)
-    }
+  const handleSaveSuccess = () => {
+    setShowEditModal(false)
+    setSelectedProduct(null)
+    fetchProducts()
   }
 
-  // Format date
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-'
     const date = new Date(dateString)
@@ -301,7 +200,6 @@ export default function AdminDataDashboard() {
     })
   }
 
-  // Pagination
   const totalPages = Math.ceil(totalProducts / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1
   const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, totalProducts)
@@ -354,9 +252,9 @@ export default function AdminDataDashboard() {
         </Badge>
       </div>
 
-      {/* SEARCH BAR */}
+      {/* SEARCH & FILTER */}
       <Card className="bg-slate-900 border-slate-800">
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 space-y-4">
           <div className="flex gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
@@ -377,6 +275,29 @@ export default function AdminDataDashboard() {
                 Clear
               </Button>
             )}
+          </div>
+          
+          <div className="flex gap-2">
+            <Button
+              variant={filterType === 'all' ? 'default' : 'outline'}
+              onClick={() => {
+                setFilterType('all')
+                setCurrentPage(1)
+              }}
+              className={filterType === 'all' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}
+            >
+              Semua Produk
+            </Button>
+            <Button
+              variant={filterType === 'latest' ? 'default' : 'outline'}
+              onClick={() => {
+                setFilterType('latest')
+                setCurrentPage(1)
+              }}
+              className={filterType === 'latest' ? 'bg-orange-600 hover:bg-orange-700' : 'border-slate-700'}
+            >
+              Latest Update (4 Hari)
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -469,7 +390,6 @@ export default function AdminDataDashboard() {
             </div>
           )}
           
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-800">
               <Button
@@ -495,125 +415,16 @@ export default function AdminDataDashboard() {
       </Card>
 
       {/* EDIT MODAL */}
-      {showEditModal && (
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-blue-400">
-                <Edit2 className="h-5 w-5" />
-                Edit Data Produk
-              </DialogTitle>
-              <DialogDescription className="text-slate-400">
-                Update informasi produk dan upload gambar.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 space-y-4">
-              {/* Image Upload */}
-              <div>
-                <label className="text-sm text-slate-400 mb-2 block">Gambar Produk</label>
-                <div className="border-2 border-dashed border-slate-600 rounded-lg p-4">
-                  {imagePreview ? (
-                    <div className="relative">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="w-full h-48 object-cover rounded-lg border border-slate-700"
-                      />
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          setImagePreview(null)
-                          setSelectedFile(null)
-                        }}
-                        className="absolute top-2 right-2 h-8 w-8 p-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-center space-y-2">
-                      <ImageIcon className="h-12 w-12 text-slate-600 mx-auto" />
-                      <p className="text-sm text-slate-400">Belum ada gambar</p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                        id="product-image-upload"
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={() => document.getElementById('product-image-upload')?.click()}
-                        disabled={uploadingImage}
-                        className="border-slate-600"
-                      >
-                        {uploadingImage ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 mr-2" />
-                            Pilih Gambar
-                          </>
-                        )}
-                      </Button>
-                      <p className="text-xs text-slate-500">Max 10MB (JPG, PNG, WebP)</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Product Name */}
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Nama Produk</label>
-                <input
-                  type="text"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                  placeholder="Masukkan nama produk"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowEditModal(false)
-                  setEditingProductId(null)
-                  setEditingName('')
-                  setImagePreview(null)
-                  setSelectedFile(null)
-                }}
-                className="border-slate-600"
-                disabled={saving || uploadingImage}
-              >
-                Batal
-              </Button>
-              <Button
-                onClick={handleSaveProduct}
-                className="bg-blue-600 hover:bg-blue-700"
-                disabled={saving || uploadingImage}
-              >
-                {saving || uploadingImage ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Simpan Perubahan
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      {selectedProduct && (
+        <ProductEditModal
+          product={selectedProduct}
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false)
+            setSelectedProduct(null)
+          }}
+          onSave={handleSaveSuccess}
+        />
       )}
     </div>
   )
