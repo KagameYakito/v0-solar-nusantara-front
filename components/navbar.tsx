@@ -250,7 +250,7 @@ export function Navbar() {
           window.location.href = '/dashboard/logistik'
           break
         case 'admin_data':
-          window.location.href = '/dashboard/data'
+          window.location.href = '/dashboard/admin-data'
           break
         default:
           window.location.href = '/dashboard/user'
