@@ -163,13 +163,21 @@ export default function AdminMarketingDashboard() {
         const profile = profilesData?.find(p => p.id === item.user_id)
         const product = productsData?.find(p => p.id.toString() === item.product_id.toString())
         
+        // ✅ SYNC DATA PRODUK TERBARU
+        const syncedItem = {
+          ...item,
+          product_name: product?.nama_produk || item.product_name,  // ✅ SYNC NAMA
+          product_image_url: product?.gambar_url || item.product_image_url,  // ✅ SYNC GAMBAR
+          price: product?.harga || item.price || 0  // ✅ SYNC HARGA
+        }
+        
         // ✅ KEY BARU: user_id + status (jadi requested & wishlist terpisah!)
         const groupKey = `${item.user_id}-${item.status}`
         
         if (!groupedMap.has(groupKey)) {
           groupedMap.set(groupKey, {
             wishlist_id: item.wishlist_id || 0,
-            request_id: item.request_id || null,  // ✅ TAMBAH INI
+            request_id: item.request_id || null,
             user_id: item.user_id,
             user_name: profile?.full_name || 'Anonymous',
             company_name: profile?.company_name || '-',
@@ -178,14 +186,14 @@ export default function AdminMarketingDashboard() {
             total_price: (product?.harga || item.price || 0) * item.quantity,
             status: item.status,
             created_at: item.created_at,
-            items: [item],
+            items: [syncedItem],  // ✅ PAKAI DATA YANG SUDAH DI-SYNC
             product_count: 1
           })
         } else {
           const group = groupedMap.get(groupKey)!
           group.total_quantity += item.quantity
           group.total_price += (product?.harga || item.price || 0) * item.quantity
-          group.items.push(item)
+          group.items.push(syncedItem)  // ✅ PAKAI DATA YANG SUDAH DI-SYNC
           group.product_count += 1
           
           // Gunakan wishlist_id terkecil
@@ -232,7 +240,7 @@ export default function AdminMarketingDashboard() {
       case 'deal':
         return { label: 'Deal', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CreditCard }
       case 'pending':
-        return { label: 'Menunggu Bayar', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
+        return { label: 'Pending', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
       case 'accepted':
         return { label: 'Menunggu Bayar', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Hourglass }
       case 'requested':
@@ -1088,6 +1096,7 @@ export default function AdminMarketingDashboard() {
                         </td>
                         
                         {/* Aksi */}
+                        {/* Aksi */}
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2 items-center">
                             {/* ✅ DROPDOWN SELECT - HANYA AKTIF JIKA STATUS = REQUESTED */}
@@ -1116,20 +1125,25 @@ export default function AdminMarketingDashboard() {
                               </Badge>
                             )}
                             
-                            {/* Note Button - HANYA AKTIF UNTUK ACCEPTED/DECLINED/DEAL */}
+                            {/* ✅ Note Button - AKTIF UNTUK REQUESTED, ACCEPTED, DECLINED, DEAL */}
                             <Button
                               size="sm"
                               onClick={() => openNoteModal(item.items[0])}
-                              disabled={item.status !== 'accepted' && item.status !== 'declined' && item.status !== 'deal'}
+                              disabled={
+                                item.status !== 'requested' && 
+                                item.status !== 'accepted' && 
+                                item.status !== 'declined' && 
+                                item.status !== 'deal'
+                              }
                               className={`h-8 w-8 p-0 ${
-                                (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
+                                (item.status === 'requested' || item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
                                   ? 'text-slate-400 hover:text-white hover:bg-slate-700' 
                                   : 'text-slate-600 cursor-not-allowed opacity-50'
                               }`}
                               title={
-                                (item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
+                                (item.status === 'requested' || item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
                                   ? "Tambahkan catatan"
-                                  : "Note hanya tersedia setelah Accept/Decline"
+                                  : "Note hanya tersedia setelah Request/Accept/Decline"
                               }
                             >
                               <MessageSquare className="h-4 w-4" />
