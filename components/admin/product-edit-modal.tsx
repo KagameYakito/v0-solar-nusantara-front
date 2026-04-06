@@ -463,7 +463,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
               </div>
             </div>
 
-            {/* Product Name */}
+            {/* Product Namee */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-slate-400">Nama Produk</label>
