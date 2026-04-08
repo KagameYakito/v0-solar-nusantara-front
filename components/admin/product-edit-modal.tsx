@@ -42,6 +42,7 @@ interface Product {
   gambar_url: string | null
   stok: number | null
   spesifikasi: any
+  category_id: number | null 
   updated_at: string | null
 }
 
@@ -80,6 +81,15 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   const [imgSrc, setImgSrc] = useState<string>('')
   const imgRef = useRef<HTMLImageElement>(null)
 
+  // Category states
+  const [categories, setCategories] = useState<Array<{id: number, name: string, slug: string}>>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
+  const [showCategorySearch, setShowCategorySearch] = useState(false)
+  const [categorySearchTerm, setCategorySearchTerm] = useState('')
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [savingCategory, setSavingCategory] = useState(false)
+
   useEffect(() => {
     if (product) {
       console.log(' Product received:', product)
@@ -108,6 +118,84 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       document.head.removeChild(styleElement)
     }
   }, [])
+
+  useEffect(() => {
+    if (product) {
+      console.log('📦 Product received:', product)
+      setEditedProduct({ ...product })
+      setImagePreview(product.gambar_url)
+      setSelectedCategoryId(product.category_id || null)  // ✅ Set category
+      
+      if (product.spesifikasi) {
+        try {
+          const specs = typeof product.spesifikasi === 'string' 
+            ? JSON.parse(product.spesifikasi)
+            : product.spesifikasi
+          setSpecText(JSON.stringify(specs, null, 2))
+        } catch (e) {
+          console.error('Failed to parse specs:', e)
+        }
+      }
+    }
+    
+    // ✅ Fetch categories from database
+    fetchCategories()
+  }, [product])
+  
+  // ✅ Function to fetch categories
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, slug')
+        .order('name', { ascending: true })
+      
+      if (error) throw error
+      setCategories(data || [])
+    } catch (err) {
+      console.error('Failed to fetch categories:', err)
+    }
+  }
+
+  // ✅ Add new category
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      alert('❌ Nama kategori tidak boleh kosong!')
+      return
+    }
+
+    try {
+      setSavingCategory(true)
+      
+      // Create slug from name
+      const slug = newCategoryName.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+
+      const { data, error } = await supabase
+        .from('categories')
+        .insert({
+          name: newCategoryName.trim(),
+          slug: slug
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Add to categories list
+      setCategories(prev => [...prev, data])
+      setSelectedCategoryId(data.id)
+      setShowAddCategoryModal(false)
+      setNewCategoryName('')
+      alert('✅ Kategori berhasil ditambahkan!')
+    } catch (err: any) {
+      console.error('Failed to add category:', err)
+      alert('❌ Gagal menambah kategori: ' + err.message)
+    } finally {
+      setSavingCategory(false)
+    }
+  }
 
   const enableEdit = (field: keyof EditableField) => {
     setEditableFields(prev => ({ ...prev, [field]: true }))
@@ -313,6 +401,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
         stok: editedProduct.stok,
         spesifikasi: specs,
         gambar_url: imageUrl,
+        category_id: selectedCategoryId, 
         updated_at: new Date().toISOString()
       }
 
@@ -590,6 +679,116 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
             </div>
           </div>
 
+          {/* Category Selection */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-400">Kategori</label>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowCategorySearch(!showCategorySearch)}
+                className="h-6 text-xs text-blue-400 hover:text-blue-300"
+              >
+                <Edit2 className="h-3 w-3 mr-1" />
+                {showCategorySearch ? 'Tutup' : 'Pilih Kategori'}
+              </Button>
+            </div>
+
+            {showCategorySearch && (
+              <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-3">
+                {/* Search Input */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cari kategori..."
+                    value={categorySearchTerm}
+                    onChange={(e) => setCategorySearchTerm(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Scrollable Category List (Max 7 items) */}
+                <div className="max-h-[200px] overflow-y-auto space-y-1">
+                  {categories
+                    .filter(cat => 
+                      cat.name.toLowerCase().includes(categorySearchTerm.toLowerCase())
+                    )
+                    .map((category) => (
+                      <button
+                        key={category.id}
+                        onClick={() => {
+                          setSelectedCategoryId(category.id)
+                          setShowCategorySearch(false)
+                          setCategorySearchTerm('')
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                          selectedCategoryId === category.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  
+                  {categories.filter(cat => 
+                    cat.name.toLowerCase().includes(categorySearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-xs text-slate-500 text-center py-2">
+                      Tidak ada kategori ditemukan
+                    </p>
+                  )}
+                </div>
+
+                {/* Add New Category Button */}
+                <div className="pt-2 border-t border-slate-700">
+                  <button
+                    onClick={() => setShowAddCategoryModal(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-400 hover:bg-green-900/20 rounded transition-colors border border-dashed border-green-700"
+                  >
+                    <span className="text-lg">+</span>
+                    Tambah Kategori Baru
+                  </button>
+                </div>
+
+                {/* Current Selection */}
+                {selectedCategoryId && (
+                  <div className="pt-2 border-t border-slate-700">
+                    <p className="text-xs text-slate-400">
+                      Kategori terpilih: 
+                      <span className="text-blue-400 font-medium ml-1">
+                        {categories.find(c => c.id === selectedCategoryId)?.name || '-'}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Display Selected Category (when search is closed) */}
+            {!showCategorySearch && selectedCategoryId && (
+              <div className="bg-slate-800/50 rounded-lg px-4 py-3 text-white flex items-center justify-between">
+                <span>{categories.find(c => c.id === selectedCategoryId)?.name || '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedCategoryId(null)}
+                  className="h-6 text-xs text-red-400 hover:text-red-300"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Hapus
+                </Button>
+              </div>
+            )}
+
+            {!showCategorySearch && !selectedCategoryId && (
+              <div className="bg-slate-800/50 rounded-lg px-4 py-3 text-slate-500 text-sm italic">
+                Belum ada kategori dipilih
+              </div>
+            )}
+          </div>
+
           <DialogFooter className="gap-3 pt-4 border-t border-slate-700">
             <Button
               variant="outline"
@@ -678,6 +877,69 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
                 Simpan Crop
             </Button>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Category Modal */}
+      <Dialog open={showAddCategoryModal} onOpenChange={setShowAddCategoryModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-green-400">
+              Tambah Kategori Baru
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">
+                Nama Kategori
+              </label>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Contoh: Panel Surya"
+                className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddCategory()
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddCategoryModal(false)
+                setNewCategoryName('')
+              }}
+              className="border-slate-600"
+              disabled={savingCategory}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleAddCategory}
+              className="bg-green-600 hover:bg-green-700"
+              disabled={savingCategory}
+            >
+              {savingCategory ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Simpan Kategori
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
