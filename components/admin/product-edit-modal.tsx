@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { X, Upload, Save, Loader2, Edit2, Image as ImageIcon, Crop } from 'lucide-react'
+import { X, Upload, Save, Loader2, Edit2, Trash2, Image as ImageIcon, Crop } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { 
   Dialog, 
@@ -89,6 +89,10 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [savingCategory, setSavingCategory] = useState(false)
+
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null)
+  const [deletingCategory, setDeletingCategory] = useState(false)
 
   useEffect(() => {
     if (product) {
@@ -194,6 +198,52 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       alert('❌ Gagal menambah kategori: ' + err.message)
     } finally {
       setSavingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId: number, categoryName: string) => {
+    setCategoryToDelete(categoryId)
+    setShowDeleteConfirmModal(true)
+  }
+  
+  const confirmDeleteCategory = async () => {
+    if (!categoryToDelete) return
+    
+    try {
+      setDeletingCategory(true)
+      
+      // ✅ 1. Unset this category from all products
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ category_id: null })
+        .eq('category_id', categoryToDelete)
+      
+      if (updateError) throw updateError
+      
+      // ✅ 2. Delete the category
+      const { error: deleteError } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', categoryToDelete)
+      
+      if (deleteError) throw deleteError
+      
+      // ✅ 3. Remove from local state
+      setCategories(prev => prev.filter(c => c.id !== categoryToDelete))
+      
+      // ✅ 4. Clear selection if it was the selected category
+      if (selectedCategoryId === categoryToDelete) {
+        setSelectedCategoryId(null)
+      }
+      
+      setShowDeleteConfirmModal(false)
+      setCategoryToDelete(null)
+      alert('✅ Kategori berhasil dihapus!')
+    } catch (err: any) {
+      console.error('Failed to delete category:', err)
+      alert('❌ Gagal menghapus kategori: ' + err.message)
+    } finally {
+      setDeletingCategory(false)
     }
   }
 
@@ -710,19 +760,22 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
 
                 {/* Scrollable Category List (Max 7 items) */}
                 <div className="max-h-[200px] overflow-y-auto space-y-1">
-                  {categories
-                    .filter(cat => 
-                      cat.name.toLowerCase().includes(categorySearchTerm.toLowerCase())
-                    )
-                    .map((category) => (
+                {categories
+                  .filter(cat => 
+                    cat.name.toLowerCase().includes(categorySearchTerm.toLowerCase())
+                  )
+                  .map((category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between gap-2"
+                    >
                       <button
-                        key={category.id}
                         onClick={() => {
                           setSelectedCategoryId(category.id)
                           setShowCategorySearch(false)
                           setCategorySearchTerm('')
                         }}
-                        className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                        className={`flex-1 text-left px-3 py-2 rounded text-sm transition-colors ${
                           selectedCategoryId === category.id
                             ? 'bg-blue-600 text-white'
                             : 'text-slate-300 hover:bg-slate-700'
@@ -730,7 +783,15 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
                       >
                         {category.name}
                       </button>
-                    ))}
+                      <button
+                        onClick={() => handleDeleteCategory(category.id, category.name)}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors"
+                        title="Hapus kategori"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
                   
                   {categories.filter(cat => 
                     cat.name.toLowerCase().includes(categorySearchTerm.toLowerCase())
@@ -936,6 +997,69 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
                 <>
                   <Save className="h-4 w-4 mr-2" />
                   Simpan Kategori
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* ✅ DELETE CONFIRMATION MODAL */}
+      <Dialog open={showDeleteConfirmModal} onOpenChange={setShowDeleteConfirmModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <Trash2 className="h-5 w-5" />
+              Hapus Kategori
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
+              <p className="text-sm text-red-300 mb-2">
+                ⚠️ Apakah Anda yakin ingin menghapus kategori ini?
+              </p>
+              <p className="text-xs text-red-400/80">
+                Semua produk yang menggunakan kategori ini akan <strong>dilepaskan dari kategori</strong> (tidak terhapus, hanya category_id di-set null).
+              </p>
+            </div>
+            
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-sm text-slate-400">
+                Kategori yang akan dihapus:
+              </p>
+              <p className="text-white font-medium mt-1">
+                {categories.find(c => c.id === categoryToDelete)?.name}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteConfirmModal(false)
+                setCategoryToDelete(null)
+              }}
+              className="border-slate-600"
+              disabled={deletingCategory}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={confirmDeleteCategory}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deletingCategory}
+            >
+              {deletingCategory ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Ya, Hapus Kategori
                 </>
               )}
             </Button>
