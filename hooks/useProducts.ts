@@ -8,6 +8,7 @@ export interface Product {
   price: number;
   stock: number;
   category_id: number | null;
+  sub_category_id: number | null;  // ✅ TAMBAHKAN INI
   specifications: Record<string, any>;
   image_url: string | null;
 }
@@ -32,7 +33,8 @@ export function useProducts(
   page: number = 1, 
   perPage: number = 28, 
   searchTerm: string = '', 
-  selectedCategoryId: number | null = null
+  selectedCategoryId: number | null = null,
+  selectedSubCategoryId: number | null = null  // ✅ TAMBAHKAN PARAMETER INI
 ): UseProductsReturn {
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -54,11 +56,11 @@ export function useProducts(
           .select('*', { count: 'exact', head: true });
         setGlobalTotalCount(globalCount || 0);
 
-        // 2. ✅ FIX: AMBIL KATEGORI - TAMBAH KOLOM slug
+        // 2. AMBIL KATEGORI
         const { data: catData, error: catError } = await supabase
           .from('categories')
-          .select('id, name, slug, is_default') // ✅ Tambah 'slug'
-          .order('name', { ascending: true }); // ✅ Order by name instead of is_default
+          .select('id, name, slug, is_default')
+          .order('name', { ascending: true });
 
         if (catError) {
           console.error('Category fetch error:', catError);
@@ -88,14 +90,21 @@ export function useProducts(
         // 3. QUERY PRODUK
         let query = supabase.from('products').select('*', { count: 'exact' });
 
-        if (selectedCategoryId) {
+        // ✅ FILTER BY SUB-CATEGORY (Lebih Prioritas)
+        if (selectedSubCategoryId !== null) {
+          query = query.eq('sub_category_id', selectedSubCategoryId);
+        }
+        // Filter by category (jika tidak ada sub-category)
+        else if (selectedCategoryId !== null) {
           query = query.eq('category_id', selectedCategoryId);
         }
 
+        // Filter by search term
         if (searchTerm && searchTerm.trim() !== '') {
           query = query.ilike('nama_produk', `%${searchTerm.trim()}%`);
         }
 
+        // Pagination
         const start = (page - 1) * perPage;
         const end = start + perPage - 1;
 
@@ -130,6 +139,7 @@ export function useProducts(
             price: item.harga ? Number(item.harga) : 0,
             stock: item.stok ? Number(item.stok) : 0,
             category_id: item.category_id,
+            sub_category_id: item.sub_category_id,  // ✅ TAMBAHKAN INI
             specifications: specs,
             image_url: item.gambar_url || null,
           };
@@ -147,7 +157,7 @@ export function useProducts(
     };
 
     fetchData();
-  }, [page, perPage, searchTerm, selectedCategoryId]);
+  }, [page, perPage, searchTerm, selectedCategoryId, selectedSubCategoryId]);  // ✅ TAMBAHKAN selectedSubCategoryId ke dependency
 
   return { products, categories, loading, error, totalCount, globalTotalCount };
 }
