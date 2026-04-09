@@ -106,7 +106,8 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
 
   useEffect(() => {
     if (product) {
-      console.log(' Product received:', product)
+      // MODE EDIT
+      console.log('📦 Product received (EDIT MODE):', product)
       setEditedProduct({ ...product })
       setImagePreview(product.gambar_url)
       
@@ -120,6 +121,24 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
           console.error('Failed to parse specs:', e)
         }
       }
+    } else {
+      // MODE ADD - Initialize dengan data kosong
+      console.log('🆕 Creating new product (ADD MODE)')
+      setEditedProduct({
+        id: '', // Empty = new product
+        nama_produk: '',
+        sku: '',
+        gambar_url: null,
+        stok: 1,
+        spesifikasi: {},
+        category_id: null,
+        sub_category_id: null,
+        updated_at: null
+      })
+      setImagePreview(null)
+      setSpecText('{}')
+      setSelectedCategoryId(null)
+      setSelectedSubCategoryId(null)
     }
   }, [product])
 
@@ -485,7 +504,11 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
 
   const uploadImage = async (productId: string): Promise<string | null> => {
     if (!imageFile) return null
-
+    if (!productId) {
+      console.error('❌ Product ID is required for upload')
+      return null
+    }
+  
     try {
       setUploadingImage(true)
       console.log('📤 Uploading image to cloud storage...')
@@ -531,16 +554,21 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   }
 
   const handleSave = async () => {
-    if (!editedProduct || !product) {
-      console.error('❌ No product to save')
+    if (!editedProduct) {
+      console.error('❌ No product data')
       return
     }
-
+  
+    // Validate required fields
+    if (!editedProduct.nama_produk?.trim()) {
+      alert('❌ Nama produk wajib diisi!')
+      return
+    }
+  
     try {
       console.log('💾 Starting save process...')
-      console.log('Product ID:', product.id)
-      console.log('Edited Product:', editedProduct)
-      console.log('Editable Fields:', editableFields)
+      console.log('Mode:', product ? 'EDIT' : 'ADD')
+      console.log('Product ID:', product?.id || 'NEW')
       
       setSaving(true)
 
@@ -557,9 +585,15 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       // Upload image if needed
       if (imageFile && editableFields.image) {
         console.log('📸 Uploading new image to cloud...')
-        const uploadedUrl = await uploadImage(product.id)
-        if (uploadedUrl) {
-          imageUrl = uploadedUrl
+        // ✅ Only upload if product exists (EDIT mode)
+        if (product && product.id) {
+          const uploadedUrl = await uploadImage(product.id)
+          if (uploadedUrl) {
+            imageUrl = uploadedUrl
+          }
+        } else {
+          // For ADD mode, we'll handle image after insert
+          console.log('⏳ Image will be uploaded after product creation')
         }
       }
 
@@ -589,33 +623,95 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       console.log('🔍 sub_category_id value:', selectedSubCategoryId)
       console.log('🔍 selectedCategoryId value:', selectedCategoryId)
 
-      // Update products table
-      console.log('🔄 Updating products table...')
-      const { data: updateResult, error: updateError } = await supabase
-        .from('products')
-        .update(updateData)
-        .eq('id', product.id)
-        .select()
+      let resultData
 
-      if (updateError) {
-        console.error('❌ Update error:', updateError)
-        throw updateError
+      if (product && product.id) {
+        // MODE EDIT - Update existing product
+        console.log('🔄 Updating existing product...')
+        const { data: updateResult, error: updateError } = await supabase
+          .from('products')
+          .update(updateData)
+          .eq('id', product.id)
+          .select()
+
+        if (updateError) {
+          console.error('❌ Update error:', updateError)
+          throw updateError
+        }
+
+        resultData = updateResult
+        console.log('✅ Update result:', updateResult)
+      } else {
+        // MODE ADD - Insert new product
+        console.log('➕ Inserting new product...')
+        
+        // Generate SKU if empty
+        if (!updateData.sku) {
+          const { data: countData } = await supabase
+            .from('products')
+            .select('*', { count: 'exact', head: true })
+          
+          const newSku = `SKU-${(countData?.length || 0) + 1}`
+          updateData.sku = newSku
+        }
+        
+        const { data: insertResult, error: insertError } = await supabase
+          .from('products')
+          .insert([updateData])
+          .select()
+      
+        if (insertError) {
+          console.error('❌ Insert error:', insertError)
+          throw insertError
+        }
+      
+        resultData = insertResult
+        console.log('✅ Insert result:', insertResult)
+        
+        // ✅ Upload image AFTER insert (if there's an image file)
+        if (imageFile && insertResult && insertResult.length > 0) {
+          const newProductId = insertResult[0].id
+          console.log('📸 Uploading image for new product:', newProductId)
+          const uploadedUrl = await uploadImage(newProductId)
+          
+          if (uploadedUrl) {
+            // Update product with image URL
+            await supabase
+              .from('products')
+              .update({ gambar_url: uploadedUrl })
+              .eq('id', newProductId)
+          }
+        }
       }
 
-      console.log('✅ Update result:', updateResult)
+      if (product && product.id) {
+        console.log('📝 Inserting to latest_updates...')
+        const { error: insertError } = await supabase
+          .from('latest_updates')
+          .insert({
+            product_id: product.id,
+            updated_by: session.user.id,
+            updated_at: new Date().toISOString()
+          })
 
-      // Insert to latest_updates
-      console.log(' Inserting to latest_updates...')
-      const { error: insertError } = await supabase
-        .from('latest_updates')
-        .insert({
-          product_id: product.id,
-          updated_by: session.user.id,
-          updated_at: new Date().toISOString()
-        })
+        if (insertError) {
+          console.error('⚠️ Failed to insert to latest_updates:', insertError)
+        }
+      } else if (resultData && resultData.length > 0) {
+        // For ADD mode, use the newly created product ID
+        console.log('📝 Inserting to latest_updates for new product...')
+        const newProductId = resultData[0].id
+        const { error: insertError } = await supabase
+          .from('latest_updates')
+          .insert({
+            product_id: newProductId,
+            updated_by: session.user.id,
+            updated_at: new Date().toISOString()
+          })
 
-      if (insertError) {
-        console.error('⚠️ Failed to insert to latest_updates:', insertError)
+        if (insertError) {
+          console.error('⚠️ Failed to insert to latest_updates:', insertError)
+        }
       }
 
       alert('✅ Data produk berhasil diupdate!')
@@ -664,7 +760,9 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
-              <span className="text-xl font-bold text-green-400">Edit Data Produk</span>
+              <span className="text-xl font-bold text-green-400">
+                {product ? 'Edit Data Produk' : 'Tambah Produk Baru'}
+              </span>
               <button
                 onClick={handleClose}
                 className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
