@@ -161,6 +161,18 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
     // ✅ Fetch categories from database
     fetchCategories()
   }, [product])
+
+  useEffect(() => {
+    if (selectedCategoryId) {
+      console.log('🔄 Category changed, fetching sub-categories for:', selectedCategoryId)
+      fetchSubCategories(selectedCategoryId)
+    } else {
+      // Clear sub-categories when no category is selected
+      console.log('🗑️ No category selected, clearing sub-categories')
+      setSubCategories([])
+      setSelectedSubCategoryId(null)
+    }
+  }, [selectedCategoryId])
   
   // ✅ Function to fetch categories
   const fetchCategories = async () => {
