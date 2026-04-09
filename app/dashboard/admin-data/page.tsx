@@ -202,8 +202,11 @@ export default function AdminDataDashboard() {
   
   // ✅ Open Add Modal (dengan data kosong)
   const openAddModal = () => {
+    console.log('🔘 Tambah Produk button clicked!')
+    console.log('Setting showAddModal to true...')
     setSelectedProduct(null) // null = mode tambah
     setShowAddModal(true)
+    console.log('showAddModal should be true now')
   }
 
   // ✅ Delete Product Function
@@ -391,7 +394,7 @@ export default function AdminDataDashboard() {
               <Button
                 size="sm"
                 onClick={openAddModal}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="bg-green-600 hover:bg-green-700 text-white relative z-10"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Tambah Produk
@@ -509,16 +512,18 @@ export default function AdminDataDashboard() {
       </Card>
 
       {/* ADD/EDIT MODAL */}
-      {(selectedProduct || showAddModal) && (
+      {(showEditModal || showAddModal) && (
         <ProductEditModal
           product={selectedProduct}
           isOpen={showEditModal || showAddModal}
           onClose={() => {
+            console.log('🚫 Modal close triggered')
             setShowEditModal(false)
             setShowAddModal(false)
             setSelectedProduct(null)
           }}
           onSave={() => {
+            console.log('✅ Modal save triggered')
             setShowEditModal(false)
             setShowAddModal(false)
             setSelectedProduct(null)
