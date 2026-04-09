@@ -748,7 +748,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
     onClose()
   }
 
-  if (!editedProduct || !product) return null
+  if (!editedProduct) return null
 
   const specs = typeof editedProduct.spesifikasi === 'string'
     ? JSON.parse(editedProduct.spesifikasi || '{}')
