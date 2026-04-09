@@ -5,12 +5,19 @@ import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
-  Package, ArrowLeft, AlertCircle, Loader2, Edit2, 
+  Package, ArrowLeft, AlertCircle, Loader2, Edit2, Plus, Trash2,
   Image as ImageIcon, Search, Eye
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter 
+} from '@/components/ui/dialog'
 import { ProductEditModal } from '@/components/admin/product-edit-modal'
 
 interface Product {
@@ -46,6 +53,11 @@ export default function AdminDataDashboard() {
   const [filterType, setFilterType] = useState<'all' | 'latest'>('all')
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [productToDelete, setProductToDelete] = useState<string | null>(null)
+  const [deletingProduct, setDeletingProduct] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -187,6 +199,68 @@ export default function AdminDataDashboard() {
     setSelectedProduct(null)
     fetchProducts()
   }
+  
+  // ✅ Open Add Modal (dengan data kosong)
+  const openAddModal = () => {
+    setSelectedProduct(null) // null = mode tambah
+    setShowAddModal(true)
+  }
+
+  // ✅ Delete Product Function
+  const handleDeleteProduct = (productId: string, productName: string) => {
+    setProductToDelete(productId)
+    setShowDeleteConfirmModal(true)
+  }
+
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return
+    
+    try {
+      setDeletingProduct(true)
+      
+      // 1. Delete from latest_updates
+      await supabase
+        .from('latest_updates')
+        .delete()
+        .eq('product_id', productToDelete)
+      
+      // 2. Delete product images from storage (optional)
+      const { data: productData } = await supabase
+        .from('products')
+        .select('gambar_url')
+        .eq('id', productToDelete)
+        .single()
+      
+      if (productData?.gambar_url) {
+        const imagePath = productData.gambar_url.split('/').pop()
+        if (imagePath) {
+          await supabase.storage
+            .from('product-images')
+            .remove([imagePath])
+        }
+      }
+      
+      // 3. Delete the product
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productToDelete)
+      
+      if (error) throw error
+      
+      // 4. Refresh data
+      await fetchProducts()
+      
+      setShowDeleteConfirmModal(false)
+      setProductToDelete(null)
+      alert('✅ Produk berhasil dihapus!')
+    } catch (err: any) {
+      console.error('Failed to delete product:', err)
+      alert('❌ Gagal menghapus produk: ' + err.message)
+    } finally {
+      setDeletingProduct(false)
+    }
+  }
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-'
@@ -310,9 +384,19 @@ export default function AdminDataDashboard() {
               <Package className="h-5 w-5 text-green-400" />
               Daftar Produk
             </div>
-            <span className="text-sm text-slate-400">
-              {totalProducts === 0 ? '0' : `${startIndex}-${endIndex}`} dari {totalProducts}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-400">
+                {totalProducts === 0 ? '0' : `${startIndex}-${endIndex}`} dari {totalProducts}
+              </span>
+              <Button
+                size="sm"
+                onClick={openAddModal}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Tambah Produk
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -373,14 +457,24 @@ export default function AdminDataDashboard() {
                           {formatDate(product.updated_at || product.created_at)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <Button
-                            size="sm"
-                            onClick={() => openEditModal(product)}
-                            className="bg-blue-600 hover:bg-blue-700 text-xs"
-                          >
-                            <Edit2 className="h-3 w-3 mr-1" />
-                            Edit
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => openEditModal(product)}
+                              className="bg-blue-600 hover:bg-blue-700 text-xs"
+                            >
+                              <Edit2 className="h-3 w-3 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleDeleteProduct(product.id, product.nama_produk || 'Produk')}
+                              variant="destructive"
+                              className="bg-red-600 hover:bg-red-700 text-xs"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -414,18 +508,91 @@ export default function AdminDataDashboard() {
         </CardContent>
       </Card>
 
-      {/* EDIT MODAL */}
-      {selectedProduct && (
+      {/* ADD/EDIT MODAL */}
+      {(selectedProduct || showAddModal) && (
         <ProductEditModal
           product={selectedProduct}
-          isOpen={showEditModal}
+          isOpen={showEditModal || showAddModal}
           onClose={() => {
             setShowEditModal(false)
+            setShowAddModal(false)
             setSelectedProduct(null)
           }}
-          onSave={handleSaveSuccess}
+          onSave={() => {
+            setShowEditModal(false)
+            setShowAddModal(false)
+            setSelectedProduct(null)
+            fetchProducts()
+          }}
         />
       )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <Dialog open={showDeleteConfirmModal} onOpenChange={setShowDeleteConfirmModal}>
+        <DialogContent className="bg-slate-900 border-red-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertCircle className="h-6 w-6" />
+              Konfirmasi Hapus Produk
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div className="bg-red-900/20 border-2 border-red-700 rounded-lg p-4">
+              <p className="text-red-300 font-bold mb-2">
+                ⚠️ PERINGATAN KERAS!
+              </p>
+              <p className="text-sm text-red-400/90 mb-2">
+                Anda akan menghapus produk ini secara permanen:
+              </p>
+              <p className="text-white font-semibold">
+                {products.find(p => p.id === productToDelete)?.nama_produk}
+              </p>
+            </div>
+            
+            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+              <p className="text-sm text-slate-300">
+                Tindakan ini <strong className="text-red-400">TIDAK DAPAT</strong> dibatalkan. Semua data produk termasuk gambar akan dihapus permanen dari database.
+              </p>
+            </div>
+            
+            <div className="text-xs text-slate-500">
+              Ketik "HAPUS" untuk konfirmasi:
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteConfirmModal(false)
+                setProductToDelete(null)
+              }}
+              className="border-slate-600"
+              disabled={deletingProduct}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={confirmDeleteProduct}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deletingProduct}
+            >
+              {deletingProduct ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Ya, Hapus Permanen
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
