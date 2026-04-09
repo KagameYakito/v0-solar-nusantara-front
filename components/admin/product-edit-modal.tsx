@@ -42,7 +42,8 @@ interface Product {
   gambar_url: string | null
   stok: number | null
   spesifikasi: any
-  category_id: number | null 
+  category_id: number | null
+  sub_category_id: number | null 
   updated_at: string | null
 }
 
@@ -94,6 +95,15 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null)
   const [deletingCategory, setDeletingCategory] = useState(false)
 
+  // ✅ Sub-Category states
+  const [subCategories, setSubCategories] = useState<Array<{id: number, name: string, slug: string, category_id: number}>>([])
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<number | null>(null)
+  const [showSubCategorySearch, setShowSubCategorySearch] = useState(false)
+  const [subCategorySearchTerm, setSubCategorySearchTerm] = useState('')
+  const [showAddSubCategoryModal, setShowAddSubCategoryModal] = useState(false)
+  const [newSubCategoryName, setNewSubCategoryName] = useState('')
+  const [savingSubCategory, setSavingSubCategory] = useState(false)
+
   useEffect(() => {
     if (product) {
       console.log(' Product received:', product)
@@ -128,7 +138,13 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       console.log('📦 Product received:', product)
       setEditedProduct({ ...product })
       setImagePreview(product.gambar_url)
-      setSelectedCategoryId(product.category_id || null)  // ✅ Set category
+      setSelectedCategoryId(product.category_id || null)
+      setSelectedSubCategoryId(product.sub_category_id || null)  // ✅ Set sub-category
+      
+      // ✅ Fetch sub-categories if category is selected
+      if (product.category_id) {
+        fetchSubCategories(product.category_id)
+      }
       
       if (product.spesifikasi) {
         try {
@@ -158,6 +174,22 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       setCategories(data || [])
     } catch (err) {
       console.error('Failed to fetch categories:', err)
+    }
+  }
+
+  // ✅ Function to fetch sub-categories
+  const fetchSubCategories = async (categoryId: number) => {
+    try {
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .select('id, name, slug, category_id')
+        .eq('category_id', categoryId)
+        .order('name', { ascending: true })
+      
+      if (error) throw error
+      setSubCategories(data || [])
+    } catch (err) {
+      console.error('Failed to fetch sub-categories:', err)
     }
   }
 
@@ -198,6 +230,52 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       alert('❌ Gagal menambah kategori: ' + err.message)
     } finally {
       setSavingCategory(false)
+    }
+  }
+
+  // ✅ Add new sub-category
+  const handleAddSubCategory = async () => {
+    if (!newSubCategoryName.trim()) {
+      alert('❌ Nama sub-kategori tidak boleh kosong!')
+      return
+    }
+    
+    if (!selectedCategoryId) {
+      alert('❌ Pilih kategori terlebih dahulu!')
+      return
+    }
+
+    try {
+      setSavingSubCategory(true)
+      
+      // Create slug from name
+      const slug = newSubCategoryName.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+
+      const { data, error } = await supabase
+        .from('sub_categories')
+        .insert({
+          name: newSubCategoryName.trim(),
+          slug: slug,
+          category_id: selectedCategoryId
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Add to sub-categories list
+      setSubCategories(prev => [...prev, data])
+      setSelectedSubCategoryId(data.id)
+      setShowAddSubCategoryModal(false)
+      setNewSubCategoryName('')
+      alert('✅ Sub-kategori berhasil ditambahkan!')
+    } catch (err: any) {
+      console.error('Failed to add sub-category:', err)
+      alert('❌ Gagal menambah sub-kategori: ' + err.message)
+    } finally {
+      setSavingSubCategory(false)
     }
   }
 
@@ -451,7 +529,8 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
         stok: editedProduct.stok,
         spesifikasi: specs,
         gambar_url: imageUrl,
-        category_id: selectedCategoryId, 
+        category_id: selectedCategoryId,
+        sub_category_id: selectedSubCategoryId,
         updated_at: new Date().toISOString()
       }
 
@@ -513,6 +592,10 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
     })
     setShowCropModal(false)
     setImgSrc('')
+    setSubCategories([])
+    setSelectedSubCategoryId(null)
+    setShowSubCategorySearch(false)
+    setSubCategorySearchTerm('')
     onClose()
   }
 
@@ -850,6 +933,151 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
             )}
           </div>
 
+          {/* Sub-Category Selection */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-400">Sub-Kategori <span className="text-xs text-slate-500">(Optional)</span></label>
+              {selectedCategoryId && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowSubCategorySearch(!showSubCategorySearch)}
+                  className="h-6 text-xs text-blue-400 hover:text-blue-300"
+                >
+                  <Edit2 className="h-3 w-3 mr-1" />
+                  {showSubCategorySearch ? 'Tutup' : 'Pilih Sub-Kategori'}
+                </Button>
+              )}
+            </div>
+
+            {!selectedCategoryId && (
+              <div className="bg-slate-800/30 rounded-lg px-4 py-3 text-slate-500 text-sm italic">
+                Pilih kategori terlebih dahulu untuk menambah sub-kategori
+              </div>
+            )}
+
+            {selectedCategoryId && showSubCategorySearch && (
+              <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-3">
+                {/* Search Input */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cari sub-kategori..."
+                    value={subCategorySearchTerm}
+                    onChange={(e) => setSubCategorySearchTerm(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Scrollable Sub-Category List (Max 7 items) */}
+                <div className="max-h-[200px] overflow-y-auto space-y-1">
+                  {subCategories
+                    .filter(sub => 
+                      sub.name.toLowerCase().includes(subCategorySearchTerm.toLowerCase())
+                    )
+                    .map((sub) => (
+                      <div
+                        key={sub.id}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <button
+                          onClick={() => {
+                            setSelectedSubCategoryId(sub.id)
+                            setShowSubCategorySearch(false)
+                            setSubCategorySearchTerm('')
+                          }}
+                          className={`flex-1 text-left px-3 py-2 rounded text-sm transition-colors ${
+                            selectedSubCategoryId === sub.id
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          {sub.name}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`Hapus sub-kategori "${sub.name}"?`)) {
+                              try {
+                                await supabase
+                                  .from('sub_categories')
+                                  .delete()
+                                  .eq('id', sub.id)
+                                setSubCategories(prev => prev.filter(s => s.id !== sub.id))
+                                if (selectedSubCategoryId === sub.id) {
+                                  setSelectedSubCategoryId(null)
+                                }
+                                alert('✅ Sub-kategori dihapus!')
+                              } catch (err) {
+                                alert('❌ Gagal menghapus sub-kategori')
+                              }
+                            }
+                          }}
+                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors"
+                          title="Hapus sub-kategori"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  
+                  {subCategories.filter(sub => 
+                    sub.name.toLowerCase().includes(subCategorySearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-xs text-slate-500 text-center py-2">
+                      Tidak ada sub-kategori ditemukan
+                    </p>
+                  )}
+                </div>
+
+                {/* Add New Sub-Category Button */}
+                <div className="pt-2 border-t border-slate-700">
+                  <button
+                    onClick={() => setShowAddSubCategoryModal(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-green-400 hover:bg-green-900/20 rounded transition-colors border border-dashed border-green-700"
+                  >
+                    <span className="text-lg">+</span>
+                    Tambah Sub-Kategori Baru
+                  </button>
+                </div>
+
+                {/* Current Selection */}
+                {selectedSubCategoryId && (
+                  <div className="pt-2 border-t border-slate-700">
+                    <p className="text-xs text-slate-400">
+                      Sub-kategori terpilih: 
+                      <span className="text-blue-400 font-medium ml-1">
+                        {subCategories.find(s => s.id === selectedSubCategoryId)?.name || '-'}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Display Selected Sub-Category (when search is closed) */}
+            {!showSubCategorySearch && selectedSubCategoryId && (
+              <div className="bg-slate-800/50 rounded-lg px-4 py-3 text-white flex items-center justify-between">
+                <span>{subCategories.find(s => s.id === selectedSubCategoryId)?.name || '-'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedSubCategoryId(null)}
+                  className="h-6 text-xs text-red-400 hover:text-red-300"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Hapus
+                </Button>
+              </div>
+            )}
+
+            {!showSubCategorySearch && !selectedSubCategoryId && selectedCategoryId && (
+              <div className="bg-slate-800/50 rounded-lg px-4 py-3 text-slate-500 text-sm italic">
+                Belum ada sub-kategori dipilih (opsional)
+              </div>
+            )}
+          </div>
+
           <DialogFooter className="gap-3 pt-4 border-t border-slate-700">
             <Button
               variant="outline"
@@ -1060,6 +1288,72 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
                   Ya, Hapus Kategori
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ Add Sub-Category Modal */}
+      <Dialog open={showAddSubCategoryModal} onOpenChange={setShowAddSubCategoryModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-green-400">
+              Tambah Sub-Kategori Baru
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">
+                Nama Sub-Kategori
+              </label>
+              <input
+                type="text"
+                value={newSubCategoryName}
+                onChange={(e) => setNewSubCategoryName(e.target.value)}
+                placeholder="Contoh: Panel Surya Monocrystalline"
+                className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddSubCategory()
+                  }
+                }}
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Kategori induk: <span className="text-blue-400">{categories.find(c => c.id === selectedCategoryId)?.name}</span>
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddSubCategoryModal(false)
+                setNewSubCategoryName('')
+              }}
+              className="border-slate-600"
+              disabled={savingSubCategory}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleAddSubCategory}
+              className="bg-green-600 hover:bg-green-700"
+              disabled={savingSubCategory}
+            >
+              {savingSubCategory ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Simpan Sub-Kategori
                 </>
               )}
             </Button>

@@ -5,7 +5,9 @@ import type { CategoryCount } from '@/hooks/useProducts'
 interface CategorySidebarProps {
   categories: CategoryCount[] 
   selectedCategory: number | null // GANTI: Pakai number (ID), bukan string
+  selectedSubCategory?: number | null
   onSelectCategory: (categoryId: number | null) => void
+  onSelectSubCategory?: (subCategoryId: number | null) => void
   totalCount?: number 
 }
 

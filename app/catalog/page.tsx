@@ -27,6 +27,8 @@ export default function CatalogPage() {
   const router = useRouter()
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [selectedSubCategory, setSelectedSubCategory] = useState<number | null>(null)
+
   // --- AUTH CHECK ---
   useEffect(() => {
     const checkAuth = async () => {
@@ -108,9 +110,11 @@ export default function CatalogPage() {
           <div className="lg:col-span-1">
             <CategorySidebar
               categories={categories}
-              totalCount={globalTotalCount} // Tampilkan total absolut (10444) di sidebar
               selectedCategory={selectedCategory}
-              onSelectCategory={handleCategorySelect} 
+              selectedSubCategory={selectedSubCategory}  // ✅ TAMBAHKAN
+              onSelectCategory={setSelectedCategory}
+              onSelectSubCategory={setSelectedSubCategory}  // ✅ TAMBAHKAN
+              totalCount={totalCount}
             />
           </div>
           
