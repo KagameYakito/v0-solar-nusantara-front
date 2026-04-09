@@ -302,15 +302,26 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
     try {
       setDeletingCategory(true)
       
-      // ✅ 1. Unset this category from all products
+      // ✅ 1. Delete all sub-categories first
+      const { error: deleteSubCatsError } = await supabase
+        .from('sub_categories')
+        .delete()
+        .eq('category_id', categoryToDelete)
+      
+      if (deleteSubCatsError) throw deleteSubCatsError
+      
+      // ✅ 2. Unset this category from all products
       const { error: updateError } = await supabase
         .from('products')
-        .update({ category_id: null })
+        .update({ 
+          category_id: null,
+          sub_category_id: null 
+        })
         .eq('category_id', categoryToDelete)
       
       if (updateError) throw updateError
       
-      // ✅ 2. Delete the category
+      // ✅ 3. Delete the category
       const { error: deleteError } = await supabase
         .from('categories')
         .delete()
@@ -318,12 +329,14 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       
       if (deleteError) throw deleteError
       
-      // ✅ 3. Remove from local state
+      // ✅ 4. Remove from local state
       setCategories(prev => prev.filter(c => c.id !== categoryToDelete))
+      setSubCategories([]) // Clear sub-categories
       
-      // ✅ 4. Clear selection if it was the selected category
+      // ✅ 5. Clear selection if it was the selected category
       if (selectedCategoryId === categoryToDelete) {
         setSelectedCategoryId(null)
+        setSelectedSubCategoryId(null)
       }
       
       setShowDeleteConfirmModal(false)
@@ -547,6 +560,8 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       }
 
       console.log(' Data to update:', updateData)
+      console.log('🔍 sub_category_id value:', selectedSubCategoryId)
+      console.log('🔍 selectedCategoryId value:', selectedCategoryId)
 
       // Update products table
       console.log('🔄 Updating products table...')
