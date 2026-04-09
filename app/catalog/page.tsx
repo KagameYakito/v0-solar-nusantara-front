@@ -48,6 +48,16 @@ export default function CatalogPage() {
     checkAuth()
   }, [router])
 
+  // --- DEBUG LOG ---
+  useEffect(() => {
+    console.log('🔍 State changed:', {
+      selectedCategory,
+      selectedSubCategory,
+      searchTerm,
+      currentPage
+    });
+  }, [selectedCategory, selectedSubCategory, searchTerm, currentPage]);
+
   // --- DEBOUNCE SEARCH ---
   const handleSearchChange = (value: string) => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -68,7 +78,8 @@ export default function CatalogPage() {
     currentPage,
     ITEMS_PER_PAGE,
     searchTerm,
-    selectedCategory
+    selectedCategory,
+    selectedSubCategory 
   );
 
   // Hitung total halaman berdasarkan TOTAL HASIL FILTER (bukan global)
