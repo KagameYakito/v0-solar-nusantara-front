@@ -134,34 +134,51 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   }, [])
 
   useEffect(() => {
-    if (product) {
-      console.log('📦 Product received:', product)
-      setEditedProduct({ ...product })
-      setImagePreview(product.gambar_url)
-      setSelectedCategoryId(product.category_id || null)
-      setSelectedSubCategoryId(product.sub_category_id || null)  // ✅ Set sub-category
-      
-      // ✅ Fetch sub-categories if category is selected
-      if (product.category_id) {
-        fetchSubCategories(product.category_id)
-      }
-      
-      if (product.spesifikasi) {
-        try {
-          const specs = typeof product.spesifikasi === 'string' 
-            ? JSON.parse(product.spesifikasi)
-            : product.spesifikasi
-          setSpecText(JSON.stringify(specs, null, 2))
-        } catch (e) {
-          console.error('Failed to parse specs:', e)
+    const loadProductData = async () => {
+      if (product) {
+        console.log('📦 Product received:', product)
+        setEditedProduct({ ...product })
+        setImagePreview(product.gambar_url)
+        setSelectedCategoryId(product.category_id || null)
+        
+        // ✅ Fetch sub-categories FIRST, then set selected
+        if (product.category_id) {
+          console.log('🔄 Fetching sub-categories for category:', product.category_id)
+          await fetchSubCategories(product.category_id)
+          
+          // ✅ Set selected sub-category AFTER fetch completes
+          if (product.sub_category_id) {
+            console.log('⏳ Waiting 100ms for sub-categories to load...')
+            setTimeout(() => {
+              setSelectedSubCategoryId(product.sub_category_id)
+              console.log('✅ Set selectedSubCategoryId to:', product.sub_category_id)
+            }, 100)
+          } else {
+            setSelectedSubCategoryId(null)
+          }
+        } else {
+          setSubCategories([])
+          setSelectedSubCategoryId(null)
+        }
+        
+        if (product.spesifikasi) {
+          try {
+            const specs = typeof product.spesifikasi === 'string' 
+              ? JSON.parse(product.spesifikasi)
+              : product.spesifikasi
+            setSpecText(JSON.stringify(specs, null, 2))
+          } catch (e) {
+            console.error('Failed to parse specs:', e)
+          }
         }
       }
+      
+      // ✅ Fetch categories from database
+      fetchCategories()
     }
     
-    // ✅ Fetch categories from database
-    fetchCategories()
+    loadProductData()
   }, [product])
-
   useEffect(() => {
     if (selectedCategoryId) {
       console.log('🔄 Category changed, fetching sub-categories for:', selectedCategoryId)
@@ -192,16 +209,25 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   // ✅ Function to fetch sub-categories
   const fetchSubCategories = async (categoryId: number) => {
     try {
+      console.log('📡 Fetching sub-categories for category ID:', categoryId)
       const { data, error } = await supabase
         .from('sub_categories')
         .select('id, name, slug, category_id')
         .eq('category_id', categoryId)
         .order('name', { ascending: true })
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ Error fetching sub-categories:', error)
+        throw error
+      }
+      
+      console.log('✅ Sub-categories fetched:', data)
       setSubCategories(data || [])
+      
+      return data
     } catch (err) {
       console.error('Failed to fetch sub-categories:', err)
+      return []
     }
   }
 
