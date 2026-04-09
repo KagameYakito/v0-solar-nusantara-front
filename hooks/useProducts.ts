@@ -88,14 +88,18 @@ export function useProducts(
         }
 
         // 3. QUERY PRODUK
+        console.log('📊 Filter params:', { selectedSubCategoryId, selectedCategoryId });
+
         let query = supabase.from('products').select('*', { count: 'exact' });
 
         // ✅ FILTER BY SUB-CATEGORY (Lebih Prioritas)
         if (selectedSubCategoryId !== null) {
+          console.log('🎯 Filtering by sub_category_id:', selectedSubCategoryId);
           query = query.eq('sub_category_id', selectedSubCategoryId);
         }
         // Filter by category (jika tidak ada sub-category)
         else if (selectedCategoryId !== null) {
+          console.log('🎯 Filtering by category_id:', selectedCategoryId);
           query = query.eq('category_id', selectedCategoryId);
         }
 
