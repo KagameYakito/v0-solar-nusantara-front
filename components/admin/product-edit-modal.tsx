@@ -715,13 +715,35 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
         console.log('➕ Inserting new product...')
         
         // Generate SKU if empty
-        if (!updateData.sku) {
-          const { data: countData } = await supabase
+        if (!updateData.sku || updateData.sku.trim() === '') {
+          // ✅ Find the highest existing SKU number and add 1
+          const { data: existingProducts } = await supabase
             .from('products')
-            .select('*', { count: 'exact', head: true })
+            .select('sku')
+            .order('id', { ascending: false })
+            .limit(100) // Get last 100 to be 
           
-          const newSku = `SKU-${(countData?.length || 0) + 1}`
-          updateData.sku = newSku
+          let maxSkuNum = 0
+          
+          if (existingProducts && existingProducts.length > 0) {
+            // Extract numbers from SKU-XXX format
+            for (const prod of existingProducts) {
+              if (prod.sku) {
+                const match = prod.sku.match(/SKU-(\d+)/)
+                if (match) {
+                  const num = parseInt(match[1])
+                  if (num > maxSkuNum) {
+                    maxSkuNum = num
+                  }
+                }
+              }
+            }
+          }
+          
+          const newSkuNum = maxSkuNum + 1
+          updateData.sku = `SKU-${newSkuNum}`
+          
+          console.log('🏷️ Auto-generated SKU:', updateData.sku, `(max was: ${maxSkuNum})`)
         }
         
         const { data: insertResult, error: insertError } = await supabase
@@ -767,7 +789,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
           console.error('⚠️ Failed to insert to latest_updates:', insertError)
         }
       } else if (resultData && resultData.length > 0) {
-        // For ADD mode, use the newly created product ID
+        // For ADD mode, use newly created product ID
         console.log('📝 Inserting to latest_updates for new product...')
         const newProductId = resultData[0].id
         const { error: insertError } = await supabase
