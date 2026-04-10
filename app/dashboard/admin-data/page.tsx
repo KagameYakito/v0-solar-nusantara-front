@@ -220,46 +220,72 @@ export default function AdminDataDashboard() {
     
     try {
       setDeletingProduct(true)
+      console.log('🗑️ Starting delete for product ID:', productToDelete)
       
-      // 1. Delete from latest_updates
-      await supabase
+      // 1. Delete from latest_updates FIRST
+      const { error: latestError } = await supabase
         .from('latest_updates')
         .delete()
         .eq('product_id', productToDelete)
       
-      // 2. Delete product images from storage (optional)
-      const { data: productData } = await supabase
+      if (latestError) {
+        console.error('⚠️ Error deleting from latest_updates:', latestError)
+      }
+      
+      // 2. Get product data before delete (for image deletion)
+      const { data: productData, error: fetchError } = await supabase
         .from('products')
         .select('gambar_url')
         .eq('id', productToDelete)
         .single()
       
+      if (fetchError) {
+        console.error('⚠️ Error fetching product data:', fetchError)
+      }
+      
+      // 3. Delete product images from storage (optional)
       if (productData?.gambar_url) {
-        const imagePath = productData.gambar_url.split('/').pop()
-        if (imagePath) {
-          await supabase.storage
-            .from('product-images')
-            .remove([imagePath])
+        try {
+          const imagePath = productData.gambar_url.split('/').pop()
+          if (imagePath && imagePath !== 'null') {
+            console.log('🗑️ Deleting image from storage:', imagePath)
+            const { error: storageError } = await supabase.storage
+              .from('product-images')
+              .remove([imagePath])
+            
+            if (storageError) {
+              console.error('⚠️ Error deleting image:', storageError)
+            }
+          }
+        } catch (imgErr) {
+          console.error('⚠️ Error in image deletion process:', imgErr)
         }
       }
       
-      // 3. Delete the product
-      const { error } = await supabase
+      // 4. Delete the product
+      console.log('🗑️ Deleting product from database...')
+      const { error: deleteError } = await supabase
         .from('products')
         .delete()
         .eq('id', productToDelete)
       
-      if (error) throw error
+      if (deleteError) {
+        console.error('❌ Delete error:', deleteError)
+        throw deleteError
+      }
       
-      // 4. Refresh data
+      console.log('✅ Product deleted successfully!')
+      
+      // 5. Refresh data
       await fetchProducts()
       
       setShowDeleteConfirmModal(false)
       setProductToDelete(null)
       alert('✅ Produk berhasil dihapus!')
     } catch (err: any) {
-      console.error('Failed to delete product:', err)
-      alert('❌ Gagal menghapus produk: ' + err.message)
+      console.error('💥 Failed to delete product:', err)
+      const errorMsg = err.message || 'Unknown error'
+      alert('❌ Gagal menghapus produk: ' + errorMsg)
     } finally {
       setDeletingProduct(false)
     }
