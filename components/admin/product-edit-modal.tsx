@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { X, Upload, Save, Loader2, Edit2, Trash2, Image as ImageIcon, Crop } from 'lucide-react'
+import { X, Upload, Save, Loader2, Edit2, Trash2, Plus, Image as ImageIcon, Crop } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { 
   Dialog, 
@@ -1328,10 +1328,15 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Menyimpan...
                 </>
+              ) : product ? (
+                <>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Ubah Data
+                </>
               ) : (
                 <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Ubah Data
+                  <Plus className="h-4 w-4 mr-2" />
+                  + Buat Data
                 </>
               )}
             </Button>
