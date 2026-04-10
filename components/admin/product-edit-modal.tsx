@@ -104,6 +104,44 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [savingSubCategory, setSavingSubCategory] = useState(false)
 
+  // ✅ Helper functions untuk konversi spesifikasi
+  const specsToJson = (text: string): any => {
+    const specs: any = {}
+    const lines = text.split('\n')
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (!trimmedLine) continue
+      
+      const colonIndex = trimmedLine.indexOf(':')
+      if (colonIndex > 0) {
+        const key = trimmedLine.substring(0, colonIndex).trim()
+        const value = trimmedLine.substring(colonIndex + 1).trim()
+        if (key && value) {
+          specs[key] = value
+        }
+      }
+    }
+    
+    return specs
+  }
+
+  const jsonToSpecsText = (specs: any): string => {
+    if (!specs) return ''
+    
+    if (typeof specs === 'string') {
+      try {
+        specs = JSON.parse(specs)
+      } catch {
+        return specs
+      }
+    }
+    
+    return Object.entries(specs)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n')
+  }
+
   useEffect(() => {
     if (product) {
       // MODE EDIT
@@ -113,12 +151,11 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       
       if (product.spesifikasi) {
         try {
-          const specs = typeof product.spesifikasi === 'string' 
-            ? JSON.parse(product.spesifikasi)
-            : product.spesifikasi
-          setSpecText(JSON.stringify(specs, null, 2))
+          // ✅ Convert JSON ke format teks yang mudah dibaca
+          setSpecText(jsonToSpecsText(product.spesifikasi))
         } catch (e) {
           console.error('Failed to parse specs:', e)
+          setSpecText('')
         }
       }
     } else {
@@ -606,10 +643,17 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
       // Parse specifications if edited
       if (editableFields.specifications) {
         try {
-          specs = JSON.parse(specText)
+          // ✅ Convert dari format teks ke JSON
+          specs = specsToJson(specText)
           console.log(' Parsed specs:', specs)
+          
+          // Validasi: harus ada minimal 1 spesifikasi
+          if (Object.keys(specs).length === 0 && specText.trim() !== '') {
+            alert('❌ Format spesifikasi tidak valid! Gunakan format:\nNama: Value\nContoh:\nMerk: Goodwe\nVoltage: 12V')
+            return
+          }
         } catch (err) {
-          alert('❌ Format spesifikasi JSON tidak valid!')
+          alert('❌ Gagal parse spesifikasi: ' + (err as Error).message)
           return
         }
       }
@@ -957,8 +1001,13 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
                 <textarea
                   value={specText}
                   onChange={(e) => setSpecText(e.target.value)}
-                  className="w-full bg-slate-800 border border-blue-500 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px]"
-                  placeholder='{"Merk": "Goodwe", "Tipe": "Battery", ...}'
+                  className="w-full bg-slate-800 border border-blue-500 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[200px] font-sans"
+                  placeholder={`Masukkan spesifikasi (satu per baris):
+                Merk: Goodwe
+                Tipe: LiFePO4 Battery
+                Voltage: 12V
+                Capacity: 100Ah
+                Nominal Current: 50A`}
                 />
               ) : (
                 <div className="bg-slate-800/50 rounded-lg p-4">
