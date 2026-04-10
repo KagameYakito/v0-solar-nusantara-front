@@ -61,6 +61,44 @@ interface EditableField {
   image: boolean
 }
 
+// ✅ Helper functions untuk konversi spesifikasi
+  const specsToJson = (text: string): any => {
+    const specs: any = {}
+    const lines = text.split('\n')
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (!trimmedLine) continue
+      
+      const colonIndex = trimmedLine.indexOf(':')
+      if (colonIndex > 0) {
+        const key = trimmedLine.substring(0, colonIndex).trim()
+        const value = trimmedLine.substring(colonIndex + 1).trim()
+        if (key && value) {
+          specs[key] = value
+        }
+      }
+    }
+    
+    return specs
+  }
+
+  const jsonToSpecsText = (specs: any): string => {
+    if (!specs) return ''
+    
+    if (typeof specs === 'string') {
+      try {
+        specs = JSON.parse(specs)
+      } catch {
+        return specs
+      }
+    }
+    
+    return Object.entries(specs)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n')
+  }
+
 export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEditModalProps) {
   const [editedProduct, setEditedProduct] = useState<Product | null>(null)
   const [editableFields, setEditableFields] = useState<EditableField>({
@@ -103,44 +141,6 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   const [showAddSubCategoryModal, setShowAddSubCategoryModal] = useState(false)
   const [newSubCategoryName, setNewSubCategoryName] = useState('')
   const [savingSubCategory, setSavingSubCategory] = useState(false)
-
-  // ✅ Helper functions untuk konversi spesifikasi
-  const specsToJson = (text: string): any => {
-    const specs: any = {}
-    const lines = text.split('\n')
-    
-    for (const line of lines) {
-      const trimmedLine = line.trim()
-      if (!trimmedLine) continue
-      
-      const colonIndex = trimmedLine.indexOf(':')
-      if (colonIndex > 0) {
-        const key = trimmedLine.substring(0, colonIndex).trim()
-        const value = trimmedLine.substring(colonIndex + 1).trim()
-        if (key && value) {
-          specs[key] = value
-        }
-      }
-    }
-    
-    return specs
-  }
-
-  const jsonToSpecsText = (specs: any): string => {
-    if (!specs) return ''
-    
-    if (typeof specs === 'string') {
-      try {
-        specs = JSON.parse(specs)
-      } catch {
-        return specs
-      }
-    }
-    
-    return Object.entries(specs)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n')
-  }
 
   useEffect(() => {
     if (product) {
@@ -192,22 +192,31 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   useEffect(() => {
     const loadProductData = async () => {
       if (product) {
-        console.log('📦 Product received:', product)
+        // MODE EDIT
+        console.log('📦 Product received (EDIT MODE):', product)
         setEditedProduct({ ...product })
         setImagePreview(product.gambar_url)
         setSelectedCategoryId(product.category_id || null)
         
-        // ✅ Fetch sub-categories FIRST, then set selected
+        // ✅ Convert specs to user-friendly text format
+        if (product.spesifikasi) {
+          try {
+            setSpecText(jsonToSpecsText(product.spesifikasi))
+          } catch (e) {
+            console.error('Failed to parse specs:', e)
+            setSpecText('')
+          }
+        }
+        
+        // ✅ Fetch sub-categories for selected category
         if (product.category_id) {
           console.log('🔄 Fetching sub-categories for category:', product.category_id)
           await fetchSubCategories(product.category_id)
           
-          // ✅ Set selected sub-category AFTER fetch completes
+          // Set selected sub-category AFTER fetch completes
           if (product.sub_category_id) {
-            console.log('⏳ Waiting 100ms for sub-categories to load...')
             setTimeout(() => {
               setSelectedSubCategoryId(product.sub_category_id)
-              console.log('✅ Set selectedSubCategoryId to:', product.sub_category_id)
             }, 100)
           } else {
             setSelectedSubCategoryId(null)
@@ -217,16 +226,25 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
           setSelectedSubCategoryId(null)
         }
         
-        if (product.spesifikasi) {
-          try {
-            const specs = typeof product.spesifikasi === 'string' 
-              ? JSON.parse(product.spesifikasi)
-              : product.spesifikasi
-            setSpecText(JSON.stringify(specs, null, 2))
-          } catch (e) {
-            console.error('Failed to parse specs:', e)
-          }
-        }
+      } else {
+        // MODE ADD - Initialize dengan data kosong
+        console.log('🆕 Creating new product (ADD MODE)')
+        setEditedProduct({
+          id: '',
+          nama_produk: '',
+          sku: '',
+          gambar_url: null,
+          stok: 1,
+          spesifikasi: {},
+          category_id: null,
+          sub_category_id: null,
+          updated_at: null
+        })
+        setImagePreview(null)
+        setSpecText('')
+        setSelectedCategoryId(null)
+        setSelectedSubCategoryId(null)
+        setSubCategories([])
       }
       
       // ✅ Fetch categories from database
@@ -235,6 +253,7 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
     
     loadProductData()
   }, [product])
+
   useEffect(() => {
     if (selectedCategoryId) {
       console.log('🔄 Category changed, fetching sub-categories for:', selectedCategoryId)
