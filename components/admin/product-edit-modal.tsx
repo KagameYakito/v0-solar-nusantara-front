@@ -396,8 +396,14 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
   }
 
   const enableEdit = (field: keyof EditableField) => {
-    setEditableFields(prev => ({ ...prev, [field]: true }))
-  }
+  // ✅ Tutup semua field dulu, lalu buka yang dipilih
+  setEditableFields({
+    name: field === 'name',
+    stock: field === 'stock',
+    specifications: field === 'specifications',
+    image: field === 'image'
+  })
+}
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -913,10 +919,16 @@ export function ProductEditModal({ product, isOpen, onClose, onSave }: ProductEd
               </div>
               {editableFields.stock ? (
                 <input
-                  type="number"
-                  value={editedProduct.stok || 0}
-                  onChange={(e) => setEditedProduct({ ...editedProduct, stok: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-slate-800 border border-blue-500 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={editedProduct.stok?.toString() || '0'}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '') // Hanya angka
+                    setEditedProduct({ ...editedProduct, stok: parseInt(value) || 0 })
+                  }}
+                  className="w-full bg-slate-800 border border-blue-500 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  placeholder="Masukkan stok..."
                 />
               ) : (
                 <div className="bg-slate-800/50 rounded-lg px-4 py-3 text-white">
