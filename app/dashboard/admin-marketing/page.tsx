@@ -1453,33 +1453,60 @@ export default function AdminMarketingDashboard() {
                           {/* ✅ AKSI */}
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => openEditPriceModal(product.id, product.harga)}
-                                className="bg-blue-600 hover:bg-blue-700 text-xs"
-                              >
-                                <Edit2 className="h-3 w-3 mr-1" />
-                                Edit Harga
-                              </Button>
-                              {product.auction_active ? (
-                                <Button
-                                  size="sm"
-                                  onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
-                                  variant="destructive"
-                                  className="text-xs"
-                                >
-                                  <X className="h-3 w-3 mr-1" />
-                                  Batalkan Lelang
-                                </Button>
+                              {/* ✅ LOGIKA BERBEDA UNTUK SETIAP VIEW */}
+                              {filterView === 'auction' && product.auction_active ? (
+                                // ✅ VIEW "SEDANG LELANG": Edit Info lelang
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => openAuctionModal(product.id, true)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-xs"
+                                  >
+                                    <Edit2 className="h-3 w-3 mr-1" />
+                                    Edit Info
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
+                                    variant="destructive"
+                                    className="text-xs"
+                                  >
+                                    <X className="h-3 w-3 mr-1" />
+                                    Batalkan Lelang
+                                  </Button>
+                                </>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => openAuctionModal(product.id, false)}
-                                  className="bg-orange-600 hover:bg-orange-700 text-xs"
-                                >
-                                  <Gavel className="h-3 w-3 mr-1" />
-                                  Jadwalkan Lelang
-                                </Button>
+                                // ✅ VIEW "SEMUA PRODUK" & "PERMINTAAN": Edit harga katalog
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => openEditPriceModal(product.id, product.harga)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-xs"
+                                  >
+                                    <Edit2 className="h-3 w-3 mr-1" />
+                                    Edit Harga
+                                  </Button>
+                                  {product.auction_active ? (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
+                                      variant="destructive"
+                                      className="text-xs"
+                                    >
+                                      <X className="h-3 w-3 mr-1" />
+                                      Batalkan Lelang
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openAuctionModal(product.id, false)}
+                                      className="bg-orange-600 hover:bg-orange-700 text-xs"
+                                    >
+                                      <Gavel className="h-3 w-3 mr-1" />
+                                      Jadwalkan Lelang
+                                    </Button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </td>
