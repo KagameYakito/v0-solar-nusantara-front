@@ -1311,6 +1311,47 @@ export default function AdminMarketingDashboard() {
                               )}
                             </div>
                           </td>
+
+                          {/* ✅ BUG 2 FIXED: KOLOM TANGGAL */}
+                          <td className="px-4 py-3 text-xs text-slate-500">
+                            {product.auction_active && product.auction_end_time ? (
+                              // Untuk produk lelang: tampilkan kapan lelang dimulai
+                              <div>
+                                <p className="text-slate-400">Dimulai:</p>
+                                <p className="text-slate-300 font-mono">
+                                  {new Date(product.auction_end_time).toLocaleDateString('id-ID', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                                <p className="text-slate-500 text-[10px]">
+                                  {new Date(product.auction_end_time).toLocaleTimeString('id-ID', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            ) : (
+                              // Untuk produk biasa: tampilkan kapan terakhir update harga
+                              <div>
+                                <p className="text-slate-400">Update:</p>
+                                <p className="text-slate-300 font-mono">
+                                  {new Date(product.created_at).toLocaleDateString('id-ID', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                                <p className="text-slate-500 text-[10px]">
+                                  {new Date(product.created_at).toLocaleTimeString('id-ID', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
                               <Button
