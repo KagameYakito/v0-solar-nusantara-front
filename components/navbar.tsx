@@ -618,45 +618,78 @@ export function Navbar() {
         )}
 
         {/* ✅ ARROW ANIMATION - Pointing to Dashboard Button */}
+        {/* ✅ ARROW ANIMATION - Pointing to Dashboard Button */}
         {showArrowAnimation && (
-          <div className="fixed z-[70] pointer-events-none animate-in fade-in duration-500">
-            {/* Arrow Position - Adjust based on screen size */}
-            <div className="hidden md:block" style={{
-              top: '90px',
-              right: '15%',
-              position: 'fixed'
-            }}>
-              <div className="relative">
-                {/* Animated Arrow */}
-                <ArrowRight 
-                  className="h-12 w-12 text-orange-500 animate-pulse" 
-                  style={{
-                    animation: 'bounce 1s infinite'
-                  }}
-                />
-                {/* Tooltip */}
-                <div className="absolute -top-10 left-0 bg-orange-600 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
-                  Klik Dashboard untuk isi profil!
-                  <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-orange-600 rotate-45"></div>
-                </div>
-              </div>
-            </div>
+          <>
+            {/* Add CSS Animation */}
+            <style jsx>{`
+              @keyframes arrowBounce {
+                0%, 100% { 
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+                8.33% { 
+                  transform: translateX(15px); 
+                }
+                16.67% { 
+                  transform: translateX(0); 
+                }
+                25% { 
+                  transform: translateX(15px); 
+                }
+                33.33% { 
+                  transform: translateX(0); 
+                }
+                41.67% { 
+                  transform: translateX(15px); 
+                }
+                50% { 
+                  transform: translateX(0); 
+                }
+                80% {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+                100% { 
+                  opacity: 0;
+                  transform: translateX(0);
+                }
+              }
+            `}</style>
             
-            {/* Mobile Arrow Position */}
-            <div className="md:hidden block" style={{
-              top: '90px',
-              right: '10px',
-              position: 'fixed'
-            }}>
+            {/* Desktop Arrow Position - Pointing to Dashboard button */}
+            <div 
+              className="hidden md:block fixed z-[70] pointer-events-none"
+              style={{
+                top: '85px',
+                right: '175px', // Adjust to point at Dashboard button
+              }}
+            >
               <ArrowRight 
-                className="h-10 w-10 text-orange-500 animate-pulse"
+                className="h-12 w-12 text-orange-500"
                 style={{
-                  transform: 'rotate(90deg)',
-                  animation: 'bounce 1s infinite'
+                  animation: 'arrowBounce 6s ease-in-out forwards'
                 }}
               />
             </div>
-          </div>
+            
+            {/* Mobile Arrow Position */}
+            <div 
+              className="md:hidden block fixed z-[70] pointer-events-none"
+              style={{
+                top: '85px',
+                right: '15px',
+              }}
+            >
+              <ArrowRight 
+                className="h-10 w-10 text-orange-500"
+                style={{
+                  transform: 'rotate(90deg)',
+                  animation: 'arrowBounce 6s ease-in-out forwards'
+                }}
+              />
+            </div>
+          </>
         )}
       </div>
     </nav>
