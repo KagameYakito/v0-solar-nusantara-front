@@ -1205,41 +1205,104 @@ export default function AdminMarketingDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-300">
                   <thead className="bg-slate-800 uppercase font-medium">
-                    <tr>
-                      <th className="px-4 py-3 rounded-tl-lg">No</th>
-                      <th className="px-4 py-3">Nama Produk</th>
-                      <th className="px-4 py-3">Harga Produk</th>
-                      <th className="px-4 py-3">Info Lelang</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Tanggal</th>
-                      <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
-                    </tr>
+                    {filterView === 'auction' ? (
+                      // ✅ TABEL KHUSUS UNTUK VIEW "SEDANG LELANG"
+                      <tr>
+                        <th className="px-4 py-3 rounded-tl-lg">No</th>
+                        <th className="px-4 py-3">Gambar</th>
+                        <th className="px-4 py-3">Nama Produk</th>
+                        <th className="px-4 py-3">Harga Lelang</th>
+                        <th className="px-4 py-3">Info Lelang</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Tanggal Mulai</th>
+                        <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
+                      </tr>
+                    ) : (
+                      // ✅ TABEL UNTUK "SEMUA PRODUK" & "PERMINTAAN"
+                      <tr>
+                        <th className="px-4 py-3 rounded-tl-lg">No</th>
+                        <th className="px-4 py-3">Nama Produk</th>
+                        <th className="px-4 py-3">Harga Produk</th>
+                        <th className="px-4 py-3">Info Lelang</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Tanggal</th>
+                        <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {products.map((product, index) => {
                       const globalIndex = startIndex + index
                       const isBidDeadlineVisible = showBidDeadline[product.id]
+                      
+                      // ✅ Logic harga untuk lelang (dinamis)
+                      const auctionPrice = product.current_bid_price && product.current_bid_price > 0
+                        ? product.current_bid_price
+                        : product.auction_start_price || 0
+                      
+                      // ✅ Ambil gambar untuk lelang
+                      const auctionImage = product.auction_gallery_urls && product.auction_gallery_urls.length > 0
+                        ? product.auction_gallery_urls[0]
+                        : product.gambar_url || null
+                      
                       return (
                         <tr key={product.id} className="hover:bg-slate-800/50">
                           <td className="px-4 py-3 text-slate-400">{globalIndex}</td>
+                          
+                          {/* ✅ KOLOM GAMBAR - Hanya untuk view "Sedang Lelang" */}
+                          {filterView === 'auction' && (
+                            <td className="px-4 py-3">
+                              {auctionImage ? (
+                                <img
+                                  src={auctionImage}
+                                  alt={product.nama_produk || 'Produk'}
+                                  className="w-16 h-16 object-cover rounded-lg border border-slate-700"
+                                  onError={(e) => {
+                                    e.currentTarget.src = 'https://via.placeholder.com/64?text=No+Image'
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-16 h-16 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700">
+                                  <ImageIcon className="h-8 w-8 text-slate-600" />
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          
                           <td className="px-4 py-3 font-medium text-white">
                             {product.nama_produk || 'Produk Tanpa Nama'}
                           </td>
-                          <td className="px-4 py-3">
-                            <span className="text-white font-mono">
-                              {formatRupiah(product.harga || 0)}
-                            </span>
-                          </td>
+                          
+                          {/* ✅ HARGA - Berbeda untuk auction vs semua produk */}
+                          {filterView === 'auction' ? (
+                            <td className="px-4 py-3">
+                              <span className="text-orange-400 font-mono font-bold">
+                                {formatRupiah(auctionPrice)}
+                              </span>
+                              {product.current_bid_price && product.current_bid_price > 0 && (
+                                <p className="text-xs text-green-400 mt-1">(Harga Bid)</p>
+                              )}
+                            </td>
+                          ) : (
+                            <td className="px-4 py-3">
+                              <span className="text-white font-mono">
+                                {formatRupiah(product.harga || 0)}
+                              </span>
+                            </td>
+                          )}
+                          
+                          {/* ✅ INFO LELANG */}
                           <td className="px-4 py-3">
                             {product.auction_active && product.auction_end_time ? (
                               <div className="space-y-2">
                                 <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
                                   <Clock className="h-3 w-3" />
-                                  <span>Batas Lelang: {timeRemaining[product.id]?.auction || 'Loading...'}</span>
+                                  <span>Batas: {timeRemaining[product.id]?.auction || '...'}</span>
                                 </div>
                                 
-                                {/* ✅ FIXED: Hanya tampilkan bid deadline jika ada bid yang valid */}
-                                {product.current_bid_price && 
+                                {/* ✅ Detail bid deadline - Hanya untuk view auction */}
+                                {filterView === 'auction' && 
+                                product.current_bid_price && 
                                 product.current_bid_price > 0 && 
                                 product.current_bid_price > (product.auction_start_price || 0) && 
                                 product.bid_deadline_time && (
@@ -1255,11 +1318,7 @@ export default function AdminMarketingDashboard() {
                                         onClick={() => toggleBidDeadlineVisibility(product.id)}
                                         className="h-6 p-1 text-slate-400 hover:text-white"
                                       >
-                                        {isBidDeadlineVisible ? (
-                                          <EyeOff className="h-3 w-3" />
-                                        ) : (
-                                          <Eye className="h-3 w-3" />
-                                        )}
+                                        {isBidDeadlineVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                                       </Button>
                                     </div>
                                     {isBidDeadlineVisible && timeRemaining[product.id]?.bidDeadline && timeRemaining[product.id]?.bidDeadline !== 'Loading...' ? (
@@ -1267,12 +1326,10 @@ export default function AdminMarketingDashboard() {
                                         {timeRemaining[product.id]?.bidDeadline}
                                       </div>
                                     ) : (
-                                      <div className="text-slate-600 text-xs italic">
-                                        [Hidden - Klik 👁 untuk lihat]
-                                      </div>
+                                      <div className="text-slate-600 text-xs italic">[Hidden]</div>
                                     )}
                                     <div className="text-slate-500 text-xs mt-1">
-                                      Current Bid: {formatRupiah(product.current_bid_price)}
+                                      Current: {formatRupiah(product.current_bid_price)}
                                     </div>
                                     <div className="mt-2 flex gap-1">
                                       <Button
@@ -1291,15 +1348,19 @@ export default function AdminMarketingDashboard() {
                                   <DollarSign className="h-3 w-3" />
                                   <span>Start: {formatRupiah(product.auction_start_price || 0)}</span>
                                 </div>
-                                <div className="flex items-center gap-1 text-purple-400 text-xs">
-                                  <TrendingUp className="h-3 w-3" />
-                                  <span>Kelipatan: {formatRupiah(product.auction_increment || 0)}</span>
-                                </div>
+                                {filterView === 'auction' && (
+                                  <div className="flex items-center gap-1 text-purple-400 text-xs">
+                                    <TrendingUp className="h-3 w-3" />
+                                    <span>Kelipatan: {formatRupiah(product.auction_increment || 0)}</span>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <span className="text-slate-500 text-xs">-</span>
                             )}
                           </td>
+                          
+                          {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
                             <div className="flex gap-2 flex-wrap">
                               {product.is_auction ? (
@@ -1312,77 +1373,84 @@ export default function AdminMarketingDashboard() {
                                   Normal
                                 </Badge>
                               )}
-                              {product.is_request ? (
+                              {/* ✅ HAPUS "Tidak Ada Request" untuk view auction */}
+                              {filterView !== 'auction' && product.is_request && (
                                 <Badge className="bg-orange-600 text-white">
                                   <MessageSquare className="h-3 w-3 mr-1" />
                                   Request
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-slate-800">
-                                  Tidak Ada Request
                                 </Badge>
                               )}
                             </div>
                           </td>
 
-                          {/* ✅ FIXED: KOLOM TANGGAL - Logic yang benar */}
+                          {/* ✅ TANGGAL - Berbeda untuk auction vs semua produk */}
                           <td className="px-4 py-3 text-xs text-slate-500">
-                            {product.auction_active && product.auction_started_at ? (
-                              // ✅ Untuk produk lelang: tampilkan kapan auction DIMULAI (bukan berakhir)
+                            {filterView === 'auction' ? (
+                              // Untuk view auction: tampilkan auction_started_at
+                              product.auction_started_at ? (
+                                <div>
+                                  <p className="text-slate-400">Mulai:</p>
+                                  <p className="text-slate-300 font-mono">
+                                    {new Date(product.auction_started_at).toLocaleDateString('id-ID', {
+                                      day: '2-digit', month: 'short', year: 'numeric'
+                                    })}
+                                  </p>
+                                  <p className="text-slate-500 text-[10px]">
+                                    {new Date(product.auction_started_at).toLocaleTimeString('id-ID', {
+                                      hour: '2-digit', minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                              ) : <span className="text-slate-600">-</span>
+                            ) : product.auction_active && product.auction_started_at ? (
+                              // Untuk semua produk yang sedang lelang
                               <div>
                                 <p className="text-slate-400">Lelang:</p>
                                 <p className="text-slate-300 font-mono">
                                   {new Date(product.auction_started_at).toLocaleDateString('id-ID', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
+                                    day: '2-digit', month: 'short', year: 'numeric'
                                   })}
                                 </p>
                                 <p className="text-slate-500 text-[10px]">
                                   {new Date(product.auction_started_at).toLocaleTimeString('id-ID', {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
+                                    hour: '2-digit', minute: '2-digit'
                                   })}
                                 </p>
                               </div>
                             ) : product.harga_updated_at ? (
-                              // ✅ Untuk produk biasa: tampilkan kapan harga terakhir diupdate
+                              // Untuk produk regular: tampilkan update harga
                               <div>
                                 <p className="text-slate-400">Update Harga:</p>
                                 <p className="text-slate-300 font-mono">
                                   {new Date(product.harga_updated_at).toLocaleDateString('id-ID', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
+                                    day: '2-digit', month: 'short', year: 'numeric'
                                   })}
                                 </p>
                                 <p className="text-slate-500 text-[10px]">
                                   {new Date(product.harga_updated_at).toLocaleTimeString('id-ID', {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
+                                    hour: '2-digit', minute: '2-digit'
                                   })}
                                 </p>
                               </div>
                             ) : (
-                              // Fallback ke created_at
+                              // Fallback
                               <div>
                                 <p className="text-slate-400">Dibuat:</p>
                                 <p className="text-slate-300 font-mono">
                                   {new Date(product.created_at).toLocaleDateString('id-ID', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
+                                    day: '2-digit', month: 'short', year: 'numeric'
                                   })}
                                 </p>
                                 <p className="text-slate-500 text-[10px]">
                                   {new Date(product.created_at).toLocaleTimeString('id-ID', {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
+                                    hour: '2-digit', minute: '2-digit'
                                   })}
                                 </p>
                               </div>
                             )}
                           </td>
+                          
+                          {/* ✅ AKSI */}
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
                               <Button
@@ -1422,6 +1490,8 @@ export default function AdminMarketingDashboard() {
                 </table>
               </div>
             )}
+            
+            {/* ✅ PAGINATION */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-800">
                 <Button
