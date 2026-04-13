@@ -703,7 +703,9 @@ export default function AdminMarketingDashboard() {
         auction_duration_days: durationDays,
         bid_deadline_duration: bidDeadlineDays,
         auction_description: auctionConfig.description,
-        auction_gallery_urls: finalGalleryUrls
+        auction_gallery_urls: finalGalleryUrls,
+        is_auction: true,
+        auction_active: true
       }
       
       if (shouldUpdateEndTime && newEndTime) {
