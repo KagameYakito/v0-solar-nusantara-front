@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, Box, Loader2, AlertCircle, ArrowRight} from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, Box, Loader2, AlertCircle, ArrowRight, ArrowUp} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
 import { supabase } from '@/utils/supabaseClient'
@@ -622,7 +622,7 @@ export function Navbar() {
           <>
             {/* Add CSS Animation */}
             <style jsx>{`
-              @keyframes arrowBounceUp {
+              @keyframes arrowBounceVertical {
                 0%, 100% { 
                   opacity: 1;
                   transform: translateY(0);
@@ -660,32 +660,30 @@ export function Navbar() {
             <div 
               className="hidden md:block fixed z-[70] pointer-events-none"
               style={{
-                top: '135px', // Di bawah navbar
-                right: '185px', // Sejajar dengan tombol Dashboard
+                top: '100px', // Di bawah tombol Dashboard
+                right: '195px', // Sejajar dengan tombol Dashboard
               }}
             >
-              <ArrowRight 
+              <ArrowUp 
                 className="h-12 w-12 text-orange-500"
                 style={{
-                  transform: 'rotate(-90deg)', // ✅ Rotate 90deg counter-clockwise jadi panah atas
-                  animation: 'arrowBounceUp 6s ease-in-out forwards'
+                  animation: 'arrowBounceVertical 6s ease-in-out forwards'
                 }}
               />
             </div>
             
-            {/* Mobile Arrow Position - Pointing UP to Dashboard button */}
+            {/* Mobile Arrow Position */}
             <div 
               className="md:hidden block fixed z-[70] pointer-events-none"
               style={{
-                top: '135px',
+                top: '100px',
                 right: '75px', // Sejajar dengan tombol Dashboard di mobile
               }}
             >
-              <ArrowRight 
+              <ArrowUp 
                 className="h-10 w-10 text-orange-500"
                 style={{
-                  transform: 'rotate(-90deg)', // ✅ Rotate jadi panah atas
-                  animation: 'arrowBounceUp 6s ease-in-out forwards'
+                  animation: 'arrowBounceVertical 6s ease-in-out forwards'
                 }}
               />
             </div>
