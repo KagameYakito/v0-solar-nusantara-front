@@ -113,6 +113,10 @@ export default function AdminMarketingDashboard() {
   const [showProductDetailModal, setShowProductDetailModal] = useState(false)
   const [selectedProducts, setSelectedProducts] = useState<any[]>([])
 
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false)
+  const [cancellingProductId, setCancellingProductId] = useState<string | null>(null)
+  const [cancellingProductName, setCancellingProductName] = useState<string>('')
+
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
     'pending': 2,
@@ -802,6 +806,44 @@ export default function AdminMarketingDashboard() {
     }
   }
 
+  // ✅ Fungsi untuk membuka dialog konfirmasi
+  const openCancelConfirmModal = (productId: string, productName: string) => {
+    setCancellingProductId(productId)
+    setCancellingProductName(productName)
+    setShowCancelConfirmModal(true)
+  }
+
+  // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
+  const confirmCancelAuction = async () => {
+    if (!cancellingProductId) return
+    
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          is_auction: false,
+          auction_active: false
+        })
+        .eq('id', cancellingProductId)
+      
+      if (error) throw error
+      
+      // Update local state
+      setProducts(products.map(p =>
+        p.id === cancellingProductId ? { ...p, is_auction: false, auction_active: false } : p
+      ))
+      
+      setShowCancelConfirmModal(false)
+      setCancellingProductId(null)
+      setCancellingProductName('')
+      
+      alert(`✅ Lelang "${cancellingProductName}" telah dibatalkan dan dianggap selesai.`)
+    } catch (err: any) {
+      alert("❌ Gagal membatalkan lelang: " + err.message)
+    }
+  }
+
+  // ✅ Fungsi lama toggleAuctionStatus (tetap untuk fitur lain jika diperlukan)
   const toggleAuctionStatus = async (productId: string, currentStatus: boolean) => {
     const newStatus = !currentStatus
     try {
@@ -1523,7 +1565,7 @@ export default function AdminMarketingDashboard() {
                                   </Button>
                                   <Button
                                     size="sm"
-                                    onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
+                                    onClick={() => openCancelConfirmModal(product.id, product.nama_produk || 'Produk')}
                                     variant="destructive"
                                     className="text-xs"
                                   >
@@ -1545,7 +1587,7 @@ export default function AdminMarketingDashboard() {
                                   {product.auction_active ? (
                                     <Button
                                       size="sm"
-                                      onClick={() => toggleAuctionStatus(product.id, product.is_auction)}
+                                      onClick={() => openCancelConfirmModal(product.id, product.nama_produk || 'Produk')}
                                       variant="destructive"
                                       className="text-xs"
                                     >
@@ -2034,6 +2076,73 @@ export default function AdminMarketingDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* ✅ MODAL KONFIRMASI BATALKAN LELANG */}
+      {showCancelConfirmModal && (
+        <Dialog open={showCancelConfirmModal} onOpenChange={setShowCancelConfirmModal}>
+          <DialogContent className="bg-slate-900 border-red-700 text-white max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-500">
+                <AlertCircle className="h-6 w-6" />
+                Konfirmasi Batalkan Lelang
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* ✅ PERINGATAN KERAS */}
+              <div className="bg-red-950/50 border-2 border-red-600 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-red-400 font-bold text-sm mb-2">PERINGATAN KERAS!</p>
+                    <p className="text-red-300 text-sm">
+                      Anda akan membatalkan lelang untuk produk:
+                    </p>
+                    <p className="text-white font-bold mt-1">
+                      {cancellingProductName}
+                    </p>
+                    <p className="text-yellow-400 text-sm mt-3 font-semibold">
+                      Lelang akan dihapus dari sistem dan akan dianggap selesai.
+                    </p>
+                    <p className="text-yellow-400 text-sm">
+                      Pikirkan lagi baik-baik!
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* ✅ INFO TAMBAHAN */}
+              <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                <p className="text-slate-400 text-xs">
+                  Tindakan ini <span className="text-red-400 font-bold">TIDAK DAPAT</span> dibatalkan. 
+                  Lelang akan dianggap selesai dan tidak dapat dilanjutkan.
+                </p>
+              </div>
+            </div>
+            
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelConfirmModal(false)
+                  setCancellingProductId(null)
+                  setCancellingProductName('')
+                }}
+                className="border-slate-600"
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={confirmCancelAuction}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Ya, Batalkan Lelang
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
