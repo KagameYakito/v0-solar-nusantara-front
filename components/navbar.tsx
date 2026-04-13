@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, Box, Loader2 } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap, Box, Loader2, AlertCircle, ArrowRight} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
 import { supabase } from '@/utils/supabaseClient'
@@ -28,6 +28,12 @@ export function Navbar() {
   
   // State untuk Loading Indicator (Ganti nama dari isLoadingRole jadi isChecking agar lebih umum)
   const [isChecking, setIsChecking] = useState(false)
+
+   // ✅ NEW STATES FOR NAVIGATION PROTECTION
+   const [showLoginAlert, setShowLoginAlert] = useState(false)
+   const [showProfileAlert, setShowProfileAlert] = useState(false)
+   const [showArrowAnimation, setShowArrowAnimation] = useState(false)
+   const [userProfile, setUserProfile] = useState<any>(null)
 
   // =========================================================================
   // 1. EFEK INISIALISASI TEMA (DARK MODE)
@@ -131,6 +137,93 @@ export function Navbar() {
     }
 
   }, []) // Dependency array kosong agar hanya jalan sekali saat mount
+
+  // ✅ NEW: Fetch user profile untuk check completion
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!isLoggedIn) {
+        setUserProfile(null)
+        return
+      }
+      
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+        
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (error) throw error
+        setUserProfile(data)
+      } catch (err) {
+        console.error("Failed to fetch user profile:", err)
+      }
+    }
+    
+    fetchUserProfile()
+  }, [isLoggedIn])
+
+  // ✅ NEW: Check profile completion percentage
+  const getProfileCompletion = () => {
+    if (!userProfile) return 0
+    
+    const fields = [
+      userProfile.full_name,
+      userProfile.company_name,
+      userProfile.company_type,
+      userProfile.company_address,
+      userProfile.phone_number
+    ]
+    
+    const filled = fields.filter(f => f && f.trim() !== '').length
+    return Math.round((filled / fields.length) * 100)
+  }
+
+  // ✅ NEW: Handler untuk Products link
+  const handleProductsClick = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    
+    if (!isLoggedIn) {
+      setShowLoginAlert(true)
+      setTimeout(() => setShowLoginAlert(false), 3000)
+      return
+    }
+    
+    // User logged in, proceed to catalog
+    router.push('/catalog')
+  }
+
+  // ✅ NEW: Handler untuk Auctions link
+  const handleAuctionsClick = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    
+    // Check 1: Must be logged in
+    if (!isLoggedIn) {
+      setShowLoginAlert(true)
+      setTimeout(() => setShowLoginAlert(false), 3000)
+      return
+    }
+    
+    // Check 2: Only apply restriction for 'user' role
+    if (userRole === 'user') {
+      const completion = getProfileCompletion()
+      
+      if (completion < 100) {
+        setShowProfileAlert(true)
+        setShowArrowAnimation(true)
+        
+        // Hide arrow after 5 seconds
+        setTimeout(() => setShowArrowAnimation(false), 5000)
+        return
+      }
+    }
+    
+    // All checks passed, proceed to auctions
+    router.push('/auctions')
+  }
 
   // =========================================================================
   // FUNGSI UTILITAS & HANDLERS
@@ -272,10 +365,24 @@ export function Navbar() {
     return `${localPart.charAt(0)}***@***.${domain.split('.')[1]}`
   }
 
+  interface NavLink {
+    href: string
+    label: string
+    onClick?: (e: React.MouseEvent) => void
+  }
+
   // Definisi Link Navigasi
-  const navLinks = [
-    { href: '#products', label: 'Products' },
-    { href: '/auctions', label: 'Auctions' },
+  const navLinks: NavLink[] = [
+    { 
+      href: '/catalog', 
+      label: 'Products',
+      onClick: handleProductsClick 
+    },
+    { 
+      href: '/auctions', 
+      label: 'Auctions',
+      onClick: handleAuctionsClick 
+    },
     { href: '#contact', label: 'Contact' },
   ]
 
@@ -302,13 +409,13 @@ export function Navbar() {
           {/* NAV LINKS - Centered absolute */}
           <div className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 items-center space-x-1">
             {navLinks.map((link) => (
-              <Link
+              <button
                 key={link.href}
-                href={link.href}
-                className="px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+                onClick={link.onClick}  // ✅ Call onClick handler
+                className="px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors cursor-pointer"
               >
                 {link.label}
-              </Link>
+              </button>
             ))}
           </div>
 
@@ -412,14 +519,16 @@ export function Navbar() {
         {isOpen && (
           <div className="md:hidden pb-4 space-y-2">
             {navLinks.map((link) => (
-              <Link
+              <button
                 key={link.href}
-                href={link.href}
-                className="block px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-secondary/10 rounded-lg transition-colors"
-                onClick={() => setIsOpen(false)}
+                onClick={(e) => {
+                  link.onClick?.(e)  // ✅ Optional chaining
+                  setIsOpen(false)
+                }}
+                className="block w-full text-left px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-secondary/10 rounded-lg transition-colors"
               >
                 {link.label}
-              </Link>
+              </button>
             ))}
             <div className="px-4 pt-4 space-y-2 border-t border-border mt-2">
               {!isLoggedIn ? (
@@ -489,6 +598,63 @@ export function Navbar() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+        {/* ✅ ALERT: Login Required */}
+        {showLoginAlert && (
+          <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-red-600/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-2xl z-[60] animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-3 border border-red-400/30">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-semibold">Login terlebih dahulu untuk akses!</span>
+          </div>
+        )}
+
+        {/* ✅ ALERT: Profile Incomplete */}
+        {showProfileAlert && (
+          <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-orange-600/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-2xl z-[60] animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-3 border border-orange-400/30">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-semibold">Lengkapi profil perusahaan terlebih dahulu!</span>
+          </div>
+        )}
+
+        {/* ✅ ARROW ANIMATION - Pointing to Dashboard Button */}
+        {showArrowAnimation && (
+          <div className="fixed z-[70] pointer-events-none animate-in fade-in duration-500">
+            {/* Arrow Position - Adjust based on screen size */}
+            <div className="hidden md:block" style={{
+              top: '90px',
+              right: '15%',
+              position: 'fixed'
+            }}>
+              <div className="relative">
+                {/* Animated Arrow */}
+                <ArrowRight 
+                  className="h-12 w-12 text-orange-500 animate-pulse" 
+                  style={{
+                    animation: 'bounce 1s infinite'
+                  }}
+                />
+                {/* Tooltip */}
+                <div className="absolute -top-10 left-0 bg-orange-600 text-white px-3 py-2 rounded-lg text-sm whitespace-nowrap shadow-lg">
+                  Klik Dashboard untuk isi profil!
+                  <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-orange-600 rotate-45"></div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Mobile Arrow Position */}
+            <div className="md:hidden block" style={{
+              top: '90px',
+              right: '10px',
+              position: 'fixed'
+            }}>
+              <ArrowRight 
+                className="h-10 w-10 text-orange-500 animate-pulse"
+                style={{
+                  transform: 'rotate(90deg)',
+                  animation: 'bounce 1s infinite'
+                }}
+              />
             </div>
           </div>
         )}

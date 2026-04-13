@@ -221,7 +221,7 @@ export function Hero() {
         {showLoginPrompt && (
           <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-red-600/90 backdrop-blur-sm text-white px-8 py-4 rounded-xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-3 border border-red-400/30">
             <Lock className="h-6 w-6" />
-            <span className="font-bold">Access Denied: Session Expired or Not Logged In!</span>
+            <span className="font-bold">Login Terlebih Dahulu Untuk Akses!</span>
           </div>
         )}
 
