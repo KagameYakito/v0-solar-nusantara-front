@@ -275,7 +275,7 @@ export function Navbar() {
   // Definisi Link Navigasi
   const navLinks = [
     { href: '#products', label: 'Products' },
-    { href: '#solutions', label: 'Auctions' },
+    { href: '/auctions', label: 'Auctions' },
     { href: '#contact', label: 'Contact' },
   ]
 
