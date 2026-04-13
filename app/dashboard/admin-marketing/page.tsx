@@ -717,6 +717,11 @@ export default function AdminMarketingDashboard() {
         updateData.bid_deadline_time = initialBidDeadline.toISOString()
       }
       
+      // ✅ Set auction_started_at untuk lelang baru
+      if (!isEditingAuction) {
+        updateData.auction_started_at = new Date().toISOString()
+      }
+
       const { error } = await supabase
         .from('products')
         .update(updateData)
