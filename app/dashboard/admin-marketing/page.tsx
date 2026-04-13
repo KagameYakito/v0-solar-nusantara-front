@@ -548,7 +548,8 @@ export default function AdminMarketingDashboard() {
           newTimeRemaining[product.id] = { auction: 'SELESAI', bidDeadline: '' }
         }
         
-        if (bidDeadline > 0 && product.auction_active && product.current_bid_price && product.current_bid_price > 0) {
+        // ✅ Tampilkan bid deadline jika ada, meskipun belum ada bid
+        if (bidDeadline > 0 && product.auction_active) {
           const bidDistance = bidDeadline - now
           if (bidDistance > 0) {
             const days = Math.floor(bidDistance / (1000 * 60 * 60 * 24))
@@ -557,7 +558,7 @@ export default function AdminMarketingDashboard() {
             const seconds = Math.floor((bidDistance % (1000 * 60)) / 1000)
             newTimeRemaining[product.id].bidDeadline = `${days}h ${hours}j ${minutes}m ${seconds}d`
           } else {
-            newTimeRemaining[product.id].bidDeadline = 'DEADLINE'
+            newTimeRemaining[product.id].bidDeadline = 'EXPIRED'
           }
         }
       })
@@ -1351,7 +1352,7 @@ export default function AdminMarketingDashboard() {
                                 {product.bid_deadline_time && product.bid_deadline_duration && (
                                   <div className="flex items-center gap-1 text-yellow-400 text-xs font-mono bg-yellow-900/20 px-2 py-1 rounded border border-yellow-600/30">
                                     <Timer className="h-3 w-3" />
-                                    <span>Bid Deadline: {timeRemaining[product.id]?.bidDeadline || '...'}</span>
+                                    <span>BD: {timeRemaining[product.id]?.bidDeadline || '...'}</span>
                                   </div>
                                 )}
                                 
