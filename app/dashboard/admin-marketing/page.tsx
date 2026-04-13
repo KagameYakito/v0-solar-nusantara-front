@@ -21,6 +21,8 @@ interface Product {
   harga: number | null
   sku: string | null
   created_at: string
+  harga_updated_at: string | null  // ✅ TAMBAHKAN INI
+  auction_started_at: string | null // ✅ TAMBAHKAN INI
   is_auction: boolean
   is_request: boolean
   auction_start_price: number | null
@@ -1230,7 +1232,12 @@ export default function AdminMarketingDashboard() {
                                   <Clock className="h-3 w-3" />
                                   <span>Batas Lelang: {timeRemaining[product.id]?.auction || 'Loading...'}</span>
                                 </div>
-                                {product.current_bid_price && product.current_bid_price > (product.auction_start_price || 0) && (
+                                
+                                {/* ✅ FIXED: Hanya tampilkan bid deadline jika ada bid yang valid */}
+                                {product.current_bid_price && 
+                                product.current_bid_price > 0 && 
+                                product.current_bid_price > (product.auction_start_price || 0) && 
+                                product.bid_deadline_time && (
                                   <div className="bg-slate-800/50 rounded p-2 border border-slate-700">
                                     <div className="flex items-center justify-between mb-1">
                                       <div className="flex items-center gap-1 text-red-400 text-xs font-mono">
@@ -1250,9 +1257,9 @@ export default function AdminMarketingDashboard() {
                                         )}
                                       </Button>
                                     </div>
-                                    {isBidDeadlineVisible ? (
+                                    {isBidDeadlineVisible && timeRemaining[product.id]?.bidDeadline && timeRemaining[product.id]?.bidDeadline !== 'Loading...' ? (
                                       <div className="text-red-400 text-xs font-mono font-bold">
-                                        {timeRemaining[product.id]?.bidDeadline || 'Loading...'}
+                                        {timeRemaining[product.id]?.bidDeadline}
                                       </div>
                                     ) : (
                                       <div className="text-slate-600 text-xs italic">
@@ -1260,7 +1267,7 @@ export default function AdminMarketingDashboard() {
                                       </div>
                                     )}
                                     <div className="text-slate-500 text-xs mt-1">
-                                      Current Bid: {formatRupiah(product.current_bid_price || 0)}
+                                      Current Bid: {formatRupiah(product.current_bid_price)}
                                     </div>
                                     <div className="mt-2 flex gap-1">
                                       <Button
@@ -1274,6 +1281,7 @@ export default function AdminMarketingDashboard() {
                                     </div>
                                   </div>
                                 )}
+                                
                                 <div className="flex items-center gap-1 text-purple-400 text-xs">
                                   <DollarSign className="h-3 w-3" />
                                   <span>Start: {formatRupiah(product.auction_start_price || 0)}</span>
@@ -1312,30 +1320,48 @@ export default function AdminMarketingDashboard() {
                             </div>
                           </td>
 
-                          {/* ✅ BUG 2 FIXED: KOLOM TANGGAL */}
+                          {/* ✅ FIXED: KOLOM TANGGAL - Logic yang benar */}
                           <td className="px-4 py-3 text-xs text-slate-500">
-                            {product.auction_active && product.auction_end_time ? (
-                              // Untuk produk lelang: tampilkan kapan lelang dimulai
+                            {product.auction_active && product.auction_started_at ? (
+                              // ✅ Untuk produk lelang: tampilkan kapan auction DIMULAI (bukan berakhir)
                               <div>
-                                <p className="text-slate-400">Dimulai:</p>
+                                <p className="text-slate-400">Lelang:</p>
                                 <p className="text-slate-300 font-mono">
-                                  {new Date(product.auction_end_time).toLocaleDateString('id-ID', {
+                                  {new Date(product.auction_started_at).toLocaleDateString('id-ID', {
                                     day: '2-digit',
                                     month: 'short',
                                     year: 'numeric'
                                   })}
                                 </p>
                                 <p className="text-slate-500 text-[10px]">
-                                  {new Date(product.auction_end_time).toLocaleTimeString('id-ID', {
+                                  {new Date(product.auction_started_at).toLocaleTimeString('id-ID', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            ) : product.harga_updated_at ? (
+                              // ✅ Untuk produk biasa: tampilkan kapan harga terakhir diupdate
+                              <div>
+                                <p className="text-slate-400">Update Harga:</p>
+                                <p className="text-slate-300 font-mono">
+                                  {new Date(product.harga_updated_at).toLocaleDateString('id-ID', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                                <p className="text-slate-500 text-[10px]">
+                                  {new Date(product.harga_updated_at).toLocaleTimeString('id-ID', {
                                     hour: '2-digit',
                                     minute: '2-digit'
                                   })}
                                 </p>
                               </div>
                             ) : (
-                              // Untuk produk biasa: tampilkan kapan terakhir update harga
+                              // Fallback ke created_at
                               <div>
-                                <p className="text-slate-400">Update:</p>
+                                <p className="text-slate-400">Dibuat:</p>
                                 <p className="text-slate-300 font-mono">
                                   {new Date(product.created_at).toLocaleDateString('id-ID', {
                                     day: '2-digit',
