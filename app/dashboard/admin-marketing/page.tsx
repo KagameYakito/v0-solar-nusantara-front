@@ -480,6 +480,49 @@ export default function AdminMarketingDashboard() {
     }
   }
 
+  // ✅ Check bid deadline dan auto-end auction
+  useEffect(() => {
+    const checkBidDeadlines = async () => {
+      const now = new Date().getTime()
+      
+      products.forEach(async (product) => {
+        // Check jika bid deadline sudah habis dan ada bid
+        if (product.auction_active && 
+            product.bid_deadline_time && 
+            product.current_bid_price && 
+            product.current_bid_price > 0) {
+          
+          const bidDeadline = new Date(product.bid_deadline_time).getTime()
+          
+          // Jika bid deadline sudah lewat
+          if (bidDeadline < now) {
+            // Auto end auction
+            try {
+              await supabase
+                .from('products')
+                .update({
+                  auction_active: false,
+                  is_auction: false
+                })
+                .eq('id', product.id)
+              
+              alert(`⏰ Lelang "${product.nama_produk}" telah berakhir! Pemenang: ${product.current_bidder_id || 'N/A'}`)
+              
+              // Refresh data
+              fetchProducts()
+            } catch (err) {
+              console.error("Failed to auto-end auction:", err)
+            }
+          }
+        }
+      })
+    }
+    
+    // Check setiap 10 detik
+    const interval = setInterval(checkBidDeadlines, 10000)
+    return () => clearInterval(interval)
+  }, [products])
+
   const [timeRemaining, setTimeRemaining] = useState<Record<string, { auction: string; bidDeadline: string }>>({})
   
   useEffect(() => {
@@ -792,11 +835,15 @@ export default function AdminMarketingDashboard() {
     try {
       const now = new Date()
       const auctionEnd = product.auction_end_time ? new Date(product.auction_end_time) : null
+      
+      // ✅ Hitung bid deadline baru dari sekarang + durasi bid
       const newBidDeadline = new Date()
       newBidDeadline.setDate(newBidDeadline.getDate() + (product.bid_deadline_duration || 3))
       
+      // ✅ Pastikan bid deadline tidak melebihi auction end time
       let finalBidDeadline = newBidDeadline
       if (auctionEnd && newBidDeadline > auctionEnd) {
+        // Jika bid deadline melebihi auction end, set ke auction end
         finalBidDeadline = auctionEnd
       }
       
@@ -818,7 +865,7 @@ export default function AdminMarketingDashboard() {
         } : p
       ))
       
-      alert(`✅ Bid baru diterima! Deadline direset ke ${product.bid_deadline_duration} hari`)
+      alert(`✅ Bid baru diterima! Bid deadline direset ke ${product.bid_deadline_duration} hari`)
     } catch (err: any) {
       alert("❌ Gagal memproses bid: " + err.message)
     }
@@ -1299,6 +1346,14 @@ export default function AdminMarketingDashboard() {
                                   <Clock className="h-3 w-3" />
                                   <span>Batas: {timeRemaining[product.id]?.auction || '...'}</span>
                                 </div>
+
+                                {/* ✅ TAMBAHKAN BID DEADLINE DI SINI - WARNA KUNING */}
+                                {product.bid_deadline_time && product.bid_deadline_duration && (
+                                  <div className="flex items-center gap-1 text-yellow-400 text-xs font-mono bg-yellow-900/20 px-2 py-1 rounded border border-yellow-600/30">
+                                    <Timer className="h-3 w-3" />
+                                    <span>Bid Deadline: {timeRemaining[product.id]?.bidDeadline || '...'}</span>
+                                  </div>
+                                )}
                                 
                                 {/* ✅ Detail bid deadline - Hanya untuk view auction */}
                                 {filterView === 'auction' && 
