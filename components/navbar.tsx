@@ -617,75 +617,75 @@ export function Navbar() {
           </div>
         )}
 
-        {/* ✅ ARROW ANIMATION - Pointing to Dashboard Button */}
-        {/* ✅ ARROW ANIMATION - Pointing to Dashboard Button */}
+        {/* ✅ ARROW ANIMATION - Pointing UP to Dashboard Button */}
         {showArrowAnimation && (
           <>
             {/* Add CSS Animation */}
             <style jsx>{`
-              @keyframes arrowBounce {
+              @keyframes arrowBounceUp {
                 0%, 100% { 
                   opacity: 1;
-                  transform: translateX(0);
+                  transform: translateY(0);
                 }
                 8.33% { 
-                  transform: translateX(15px); 
+                  transform: translateY(-15px); 
                 }
                 16.67% { 
-                  transform: translateX(0); 
+                  transform: translateY(0); 
                 }
                 25% { 
-                  transform: translateX(15px); 
+                  transform: translateY(-15px); 
                 }
                 33.33% { 
-                  transform: translateX(0); 
+                  transform: translateY(0); 
                 }
                 41.67% { 
-                  transform: translateX(15px); 
+                  transform: translateY(-15px); 
                 }
                 50% { 
-                  transform: translateX(0); 
+                  transform: translateY(0); 
                 }
                 80% {
                   opacity: 1;
-                  transform: translateX(0);
+                  transform: translateY(0);
                 }
                 100% { 
                   opacity: 0;
-                  transform: translateX(0);
+                  transform: translateY(0);
                 }
               }
             `}</style>
             
-            {/* Desktop Arrow Position - Pointing to Dashboard button */}
+            {/* Desktop Arrow Position - Pointing UP to Dashboard button */}
             <div 
               className="hidden md:block fixed z-[70] pointer-events-none"
               style={{
-                top: '85px',
-                right: '175px', // Adjust to point at Dashboard button
+                top: '135px', // Di bawah navbar
+                right: '185px', // Sejajar dengan tombol Dashboard
               }}
             >
               <ArrowRight 
                 className="h-12 w-12 text-orange-500"
                 style={{
-                  animation: 'arrowBounce 6s ease-in-out forwards'
+                  transform: 'rotate(-90deg)', // ✅ Rotate 90deg counter-clockwise jadi panah atas
+                  animation: 'arrowBounceUp 6s ease-in-out forwards'
                 }}
               />
             </div>
             
-            {/* Mobile Arrow Position */}
+            {/* Mobile Arrow Position - Pointing UP to Dashboard button */}
             <div 
               className="md:hidden block fixed z-[70] pointer-events-none"
               style={{
-                top: '85px',
-                right: '15px',
+                top: '135px',
+                right: '75px', // Sejajar dengan tombol Dashboard di mobile
               }}
             >
               <ArrowRight 
                 className="h-10 w-10 text-orange-500"
                 style={{
-                  transform: 'rotate(90deg)',
-                  animation: 'arrowBounce 6s ease-in-out forwards'
+                  transform: 'rotate(-90deg)', // ✅ Rotate jadi panah atas
+                  animation: 'arrowBounceUp 6s ease-in-out forwards'
                 }}
               />
             </div>
