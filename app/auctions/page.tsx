@@ -105,7 +105,7 @@ export default function AuctionsPage() {
     try {
       const productIds = products.map(p => p.id)
       const biddersData: Record<string, Bidder[]> = {}
-
+  
       // Fetch bids for each product
       for (const productId of productIds) {
         const { data: bids, error } = await supabase
@@ -120,8 +120,13 @@ export default function AuctionsPage() {
           .eq('product_id', productId)
           .order('bid_amount', { ascending: false })
           .limit(3)
-
-        if (!error && bids) {
+  
+        if (error) {
+          console.error(`Error fetching bids for product ${productId}:`, error)
+        }
+        
+        if (bids) {
+          console.log(`Bidders for product ${productId}:`, bids)
           biddersData[productId] = bids.map((bid: any) => ({
             username: bid.profiles?.username || 'Anonymous',
             bid_amount: bid.bid_amount,
@@ -129,7 +134,8 @@ export default function AuctionsPage() {
           }))
         }
       }
-
+  
+      console.log('All bidders data:', biddersData)
       setBidders(biddersData)
     } catch (err) {
       console.error('Failed to fetch bidders:', err)
@@ -302,10 +308,10 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* ✅ Bidders Log - REAL DATA */}
-                    {productBidders.length > 0 && (
-                      <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50">
-                        <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
+                    {/* ✅ Bidders Log - Dengan Fallback */}
+                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50">
+                      <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
+                      {productBidders.length > 0 ? (
                         <div className="space-y-1.5">
                           {productBidders.map((bidder, index) => (
                             <div key={index} className="flex items-center justify-between text-xs">
@@ -323,8 +329,13 @@ export default function AuctionsPage() {
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="text-center py-3 text-slate-500 text-xs">
+                          <p>Belum ada bidder</p>
+                          <p className="text-slate-600 mt-1">Jadilah yang pertama!</p>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Bid Button */}
                     <Button className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold">
