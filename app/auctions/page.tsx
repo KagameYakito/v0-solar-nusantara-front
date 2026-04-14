@@ -46,7 +46,6 @@ export default function AuctionsPage() {
   const [bidders, setBidders] = useState<Record<string, Bidder[]>>({})
   const [currentImageIndex, setCurrentImageIndex] = useState<Record<string, number>>({})
   const [currentUser, setCurrentUser] = useState<any>(null)
-  
   // Bid Modal State
   const [showBidModal, setShowBidModal] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<AuctionProduct | null>(null)
@@ -58,17 +57,21 @@ export default function AuctionsPage() {
   // Fetch current user
   useEffect(() => {
     const fetchUser = async () => {
+      // ✅ PAKAI 'data:' JANGAN DIHILANGKAN
       const { data: { session } } = await supabase.auth.getSession()
+      
       if (session?.user) {
+        // ✅ PAKAI 'data:' JUGA DI SINI
         const { data: profile } = await supabase
           .from('profiles')
-          .select('username')
+          .select('username, role')  // ✅ Tambah role
           .eq('id', session.user.id)
           .single()
         
         setCurrentUser({
           id: session.user.id,
-          username: profile?.username || 'Anonymous'
+          username: profile?.username || 'Anonymous',
+          role: profile?.role || 'user'  // ✅ Simpan role
         })
       }
     }
@@ -270,7 +273,13 @@ export default function AuctionsPage() {
       router.push('/auth/signin')
       return
     }
-
+  
+    // ✅ BLOCK ADMIN - Tidak boleh place bid
+    if (currentUser.role && currentUser.role.includes('admin')) {
+      alert('❌ Anda adalah admin, fitur ini untuk user!')
+      return
+    }
+  
     setSelectedProduct(product)
     const currentPrice = getCurrentPrice(product)
     const minIncrement = product.auction_increment || 50000
