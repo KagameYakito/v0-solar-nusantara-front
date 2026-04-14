@@ -64,13 +64,13 @@ export default function AuctionsPage() {
         // ✅ PAKAI 'data:' JUGA DI SINI
         const { data: profile } = await supabase
           .from('profiles')
-          .select('username, role')  // ✅ Tambah role
+          .select('full_name, role')  // ✅ Tambah role
           .eq('id', session.user.id)
           .single()
         
         setCurrentUser({
           id: session.user.id,
-          username: profile?.username || 'Anonymous',
+          username: profile?.full_name || 'Anonymous',
           role: profile?.role || 'user'  // ✅ Simpan role
         })
       }
@@ -185,13 +185,13 @@ export default function AuctionsPage() {
           const bidderIds = [...new Set(bids.map((b: any) => b.bidder_id))]
           const { data: profiles } = await supabase
             .from('profiles')
-            .select('id, username')
+            .select('id, full_name')
             .in('id', bidderIds)
 
           biddersData[productId] = bids.map((bid: any) => {
             const profile = profiles?.find((p: any) => p.id === bid.bidder_id)
             return {
-              username: profile?.username || 'Anonymous',
+              username: profile?.full_name || 'Anonymous',
               bid_amount: bid.bid_price,
               bid_time: bid.created_at,
               isCurrentUser: bid.bidder_id === currentUser?.id
