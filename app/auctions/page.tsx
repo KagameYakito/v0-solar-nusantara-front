@@ -189,20 +189,20 @@ export default function AuctionsPage() {
 
               return (
                 <Card key={product.id} className="bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group">
-                  {/* Product Image */}
-                  <div className="relative aspect-[3/4] overflow-hidden bg-slate-800 rounded-t-lg">
+                  {/* Product Image - Diperpendek */}
+                  <div className="relative aspect-[4/3] overflow-hidden bg-slate-800 rounded-t-lg">
                     {image ? (
                       <img
                         src={image}
                         alt={product.nama_produk || 'Product'}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {
-                          e.currentTarget.src = 'https://via.placeholder.com/600x800?text=No+Image'
+                          e.currentTarget.src = 'https://via.placeholder.com/600x450?text=No+Image'
                         }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <ImageIcon className="h-16 w-16 text-slate-600" />
+                        <ImageIcon className="h-12 w-12 text-slate-600" />
                       </div>
                     )}
                     <div className="absolute top-4 left-4">
