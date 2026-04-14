@@ -25,17 +25,31 @@ interface AuctionProduct {
   auction_active: boolean
 }
 
+interface Bidder {
+  username: string
+  bid_amount: number
+  bid_time: string
+}
+
 export default function AuctionsPage() {
   const router = useRouter()
   const [products, setProducts] = useState<AuctionProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [timeRemaining, setTimeRemaining] = useState<Record<string, string>>({})
+  const [bidders, setBidders] = useState<Record<string, Bidder[]>>({})
 
   // Fetch auction products
   useEffect(() => {
     fetchAuctionProducts()
   }, [])
+
+  // Fetch bidders for each product
+  useEffect(() => {
+    if (products.length > 0) {
+      fetchBidders()
+    }
+  }, [products])
 
   // Countdown timer
   useEffect(() => {
@@ -87,6 +101,41 @@ export default function AuctionsPage() {
     }
   }
 
+  const fetchBidders = async () => {
+    try {
+      const productIds = products.map(p => p.id)
+      const biddersData: Record<string, Bidder[]> = {}
+
+      // Fetch bids for each product
+      for (const productId of productIds) {
+        const { data: bids, error } = await supabase
+          .from('auction_bids')
+          .select(`
+            bid_amount,
+            created_at,
+            profiles:user_id (
+              username
+            )
+          `)
+          .eq('product_id', productId)
+          .order('bid_amount', { ascending: false })
+          .limit(3)
+
+        if (!error && bids) {
+          biddersData[productId] = bids.map((bid: any) => ({
+            username: bid.profiles?.username || 'Anonymous',
+            bid_amount: bid.bid_amount,
+            bid_time: bid.created_at
+          }))
+        }
+      }
+
+      setBidders(biddersData)
+    } catch (err) {
+      console.error('Failed to fetch bidders:', err)
+    }
+  }
+
   const formatRupiah = (amount: number | null) => {
     if (!amount) return 'Rp 0'
     return new Intl.NumberFormat('id-ID', {
@@ -94,6 +143,18 @@ export default function AuctionsPage() {
       currency: 'IDR',
       minimumFractionDigits: 0
     }).format(amount)
+  }
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}j ago`
+    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
   }
 
   const filteredProducts = products.filter(product =>
@@ -186,6 +247,7 @@ export default function AuctionsPage() {
             {filteredProducts.map((product) => {
               const image = getProductImage(product)
               const currentPrice = getCurrentPrice(product)
+              const productBidders = bidders[product.id] || []
 
               return (
                 <Card key={product.id} className="bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group">
@@ -212,36 +274,60 @@ export default function AuctionsPage() {
                     </div>
                   </div>
 
-                  {/* Product Info */}
-                  <CardContent className="p-6 space-y-4">
-                    <h3 className="font-bold text-xl text-white line-clamp-2 min-h-[4rem]">
+                  {/* Product Info - Diperketat */}
+                  <CardContent className="p-4 space-y-3">
+                    <h3 className="font-bold text-lg text-white line-clamp-2 min-h-[3rem]">
                       {product.nama_produk || 'Produk Tanpa Nama'}
                     </h3>
 
                     {/* Current Price */}
-                    <div className="flex items-center gap-3">
-                      <DollarSign className="h-6 w-6 text-green-500" />
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-green-500" />
                       <div>
-                        <p className="text-sm text-slate-400">Harga Saat Ini</p>
-                        <p className="text-2xl font-bold text-green-500">
+                        <p className="text-xs text-slate-400">Harga Saat Ini</p>
+                        <p className="text-xl font-bold text-green-500">
                           {formatRupiah(currentPrice)}
                         </p>
                       </div>
                     </div>
 
                     {/* Time Remaining */}
-                    <div className="flex items-center gap-3 bg-slate-800/50 rounded-lg p-3 border border-slate-700">
-                      <Clock className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                    <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-slate-700">
+                      <Clock className="h-4 w-4 text-orange-500 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-400">Sisa Waktu</p>
-                        <p className="text-base font-mono font-semibold text-orange-400 truncate">
+                        <p className="text-xs text-slate-400">Sisa Waktu</p>
+                        <p className="text-sm font-mono font-semibold text-orange-400 truncate">
                           {timeRemaining[product.id] || 'Loading...'}
                         </p>
                       </div>
                     </div>
 
+                    {/* ✅ Bidders Log - REAL DATA */}
+                    {productBidders.length > 0 && (
+                      <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50">
+                        <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
+                        <div className="space-y-1.5">
+                          {productBidders.map((bidder, index) => (
+                            <div key={index} className="flex items-center justify-between text-xs">
+                              <span className="text-slate-300 truncate max-w-[120px]">
+                                {bidder.username}
+                              </span>
+                              <div className="text-right">
+                                <span className="text-green-400 font-mono block">
+                                  {formatRupiah(bidder.bid_amount)}
+                                </span>
+                                <span className="text-slate-500 text-[10px]">
+                                  {formatTime(bidder.bid_time)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bid Button */}
-                    <Button className="w-full bg-green-600 hover:bg-green-700 text-white py-6 text-lg font-semibold">
+                    <Button className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold">
                       Place Bid Sekarang
                     </Button>
                   </CardContent>
