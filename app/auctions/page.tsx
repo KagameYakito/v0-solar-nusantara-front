@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Clock, DollarSign, Loader2, Search, ImageIcon, Filter } from 'lucide-react'
+import { 
+  ArrowLeft, Clock, DollarSign, Loader2, Search, ImageIcon, Filter,
+  ChevronLeft, ChevronRight 
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +41,7 @@ export default function AuctionsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [timeRemaining, setTimeRemaining] = useState<Record<string, string>>({})
   const [bidders, setBidders] = useState<Record<string, Bidder[]>>({})
+  const [currentImageIndex, setCurrentImageIndex] = useState<Record<string, number>>({})
 
   // Fetch auction products
   useEffect(() => {
@@ -105,37 +109,34 @@ export default function AuctionsPage() {
     try {
       const productIds = products.map(p => p.id)
       const biddersData: Record<string, Bidder[]> = {}
-  
-      // Fetch bids for each product
+
       for (const productId of productIds) {
         const { data: bids, error } = await supabase
           .from('auction_bids')
           .select(`
-            bid_amount,
+            bid_price,
             created_at,
-            profiles:user_id (
+            profiles:bidder_id (
               username
             )
           `)
           .eq('product_id', productId)
-          .order('bid_amount', { ascending: false })
+          .order('bid_price', { ascending: false })
           .limit(3)
-  
+
         if (error) {
           console.error(`Error fetching bids for product ${productId}:`, error)
         }
         
         if (bids) {
-          console.log(`Bidders for product ${productId}:`, bids)
           biddersData[productId] = bids.map((bid: any) => ({
             username: bid.profiles?.username || 'Anonymous',
-            bid_amount: bid.bid_amount,
+            bid_amount: bid.bid_price,
             bid_time: bid.created_at
           }))
         }
       }
-  
-      console.log('All bidders data:', biddersData)
+
       setBidders(biddersData)
     } catch (err) {
       console.error('Failed to fetch bidders:', err)
@@ -167,17 +168,39 @@ export default function AuctionsPage() {
     product.nama_produk?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const getProductImage = (product: AuctionProduct) => {
+  const getProductImages = (product: AuctionProduct) => {
+    const images: (string | null)[] = []
+    
     if (product.auction_gallery_urls && product.auction_gallery_urls.length > 0) {
-      return product.auction_gallery_urls[0]
+      images.push(...product.auction_gallery_urls)
     }
-    return product.gambar_url || null
+    
+    if (product.gambar_url && !images.includes(product.gambar_url)) {
+      images.push(product.gambar_url)
+    }
+    
+    return images.length > 0 ? images : [null]
   }
 
   const getCurrentPrice = (product: AuctionProduct) => {
     return product.current_bid_price && product.current_bid_price > 0
       ? product.current_bid_price
       : product.auction_start_price
+  }
+
+  // ✅ FIXED: Fungsi navigasi carousel
+  const nextImage = (productId: string, totalImages: number) => {
+    setCurrentImageIndex(prev => ({
+      ...prev,
+      [productId]: ((prev[productId] || 0) + 1) % totalImages
+    }))
+  }
+
+  const prevImage = (productId: string, totalImages: number) => {
+    setCurrentImageIndex(prev => ({
+      ...prev,
+      [productId]: ((prev[productId] || 0) - 1 + totalImages) % totalImages
+    }))
   }
 
   return (
@@ -251,28 +274,90 @@ export default function AuctionsPage() {
         {!loading && filteredProducts.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {filteredProducts.map((product) => {
-              const image = getProductImage(product)
+              const images = getProductImages(product)
+              const currentIndex = currentImageIndex[product.id] ?? 0
+              const currentImage = images[currentIndex] ?? null
               const currentPrice = getCurrentPrice(product)
               const productBidders = bidders[product.id] || []
 
               return (
                 <Card key={product.id} className="bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group">
-                  {/* Product Image - Diperpendek */}
-                  <div className="relative aspect-[4/3] overflow-hidden bg-slate-800 rounded-t-lg">
-                    {image ? (
-                      <img
-                        src={image}
-                        alt={product.nama_produk || 'Product'}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://via.placeholder.com/600x450?text=No+Image'
-                        }}
-                      />
+                  {/* Product Image dengan Carousel */}
+                  <div className="relative aspect-[4/3] overflow-hidden bg-slate-800 rounded-t-lg group/card">
+                    {currentImage ? (
+                      <>
+                        <img
+                          src={currentImage}
+                          alt={product.nama_produk || 'Product'}
+                          className="w-full h-full object-cover transition-transform duration-300"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://via.placeholder.com/600x450?text=No+Image'
+                          }}
+                        />
+                        
+                        {/* Navigation Arrows - Muncul saat hover */}
+                        {images.length > 1 && (
+                          <>
+                            {/* Tombol Previous */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                prevImage(product.id, images.length)
+                              }}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10"
+                              aria-label="Previous image"
+                            >
+                              <ChevronLeft className="h-5 w-5" />
+                            </button>
+                            
+                            {/* Tombol Next */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                nextImage(product.id, images.length)
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10"
+                              aria-label="Next image"
+                            >
+                              <ChevronRight className="h-5 w-5" />
+                            </button>
+                            
+                            {/* Image Counter/Dots */}
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+                              {images.map((_, idx) => (
+                                <button
+                                  key={`${product.id}-dot-${idx}`}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCurrentImageIndex(prev => ({ ...prev, [product.id]: idx }))
+                                  }}
+                                  className={`w-2 h-2 rounded-full transition-all ${
+                                    idx === currentIndex 
+                                      ? 'bg-white w-6' 
+                                      : 'bg-white/50 hover:bg-white/80'
+                                  }`}
+                                  aria-label={`Go to image ${idx + 1}`}
+                                />
+                              ))}
+                            </div>
+                            
+                            {/* Image Counter Text */}
+                            <div className="absolute top-4 right-4 bg-black/60 text-white px-2 py-1 rounded text-xs">
+                              {currentIndex + 1} / {images.length}
+                            </div>
+                          </>
+                        )}
+                      </>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <ImageIcon className="h-12 w-12 text-slate-600" />
                       </div>
                     )}
+                    
+                    {/* Badge */}
                     <div className="absolute top-4 left-4">
                       <Badge className="bg-purple-600 text-white px-3 py-1">
                         Sedang Lelang
@@ -280,7 +365,7 @@ export default function AuctionsPage() {
                     </div>
                   </div>
 
-                  {/* Product Info - Diperketat */}
+                  {/* Product Info */}
                   <CardContent className="p-4 space-y-3">
                     <h3 className="font-bold text-lg text-white line-clamp-2 min-h-[3rem]">
                       {product.nama_produk || 'Produk Tanpa Nama'}
@@ -308,13 +393,13 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* ✅ Bidders Log - Dengan Fallback */}
+                    {/* Bidders Log */}
                     <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50">
                       <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
                       {productBidders.length > 0 ? (
                         <div className="space-y-1.5">
                           {productBidders.map((bidder, index) => (
-                            <div key={index} className="flex items-center justify-between text-xs">
+                            <div key={`${product.id}-bidder-${index}`} className="flex items-center justify-between text-xs">
                               <span className="text-slate-300 truncate max-w-[120px]">
                                 {bidder.username}
                               </span>
