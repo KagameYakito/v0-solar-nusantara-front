@@ -350,7 +350,7 @@ const submitBid = async () => {
         .from('auction_bids')
         .select('bid_code')
         .eq('bid_code', bidCode)
-        .single()
+        .maybeSingle()
       
       if (!existingBid) {
         isUnique = true
