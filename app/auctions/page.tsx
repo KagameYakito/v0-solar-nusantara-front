@@ -28,6 +28,7 @@ interface AuctionProduct {
   auction_gallery_urls: string[] | null
   gambar_url: string | null
   auction_active: boolean
+  auction_description: string | null
 }
 
 interface Bidder {
@@ -557,6 +558,15 @@ export default function AuctionsPage() {
                         </p>
                       </div>
                     </div>
+
+                    {product.auction_description && (
+                      <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30">
+                        <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          {product.auction_description}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-slate-700">
                       <Clock className="h-4 w-4 text-orange-500 flex-shrink-0" />
