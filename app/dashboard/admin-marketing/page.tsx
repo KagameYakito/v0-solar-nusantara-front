@@ -116,6 +116,7 @@ export default function AdminMarketingDashboard() {
   const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false)
   const [cancellingProductId, setCancellingProductId] = useState<string | null>(null)
   const [cancellingProductName, setCancellingProductName] = useState<string>('')
+  const [descriptionLength, setDescriptionLength] = useState(0)
 
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
@@ -603,6 +604,7 @@ export default function AdminMarketingDashboard() {
         bidDeadlineDays: (product.bid_deadline_duration || 3).toString(),
         description: product.auction_description || ''
       })
+      setDescriptionLength((product.auction_description || '').length)
       setExistingGalleryUrls(product.auction_gallery_urls || [])
       setImagePreviews([])
       setSelectedFiles([])
@@ -1793,17 +1795,38 @@ export default function AdminMarketingDashboard() {
                 </div>
               </div>
               <div>
-                <label className="text-sm text-slate-400 mb-1 block">Deskripsi Kondisi Barang</label>
-                <div className="relative">
-                  <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
-                  <textarea
-                    value={auctionConfig.description}
-                    onChange={(e) => setAuctionConfig({...auctionConfig, description: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-600 rounded pl-10 pr-4 py-2 text-white focus:outline-none focus:border-purple-500 min-h-[100px]"
-                    placeholder="Contoh: Barang display unit, ada goresan minor di sudut..."
-                  />
-                </div>
+              <label className="text-sm text-slate-400 mb-1 block">Deskripsi Kondisi Barang</label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                <textarea
+                  value={auctionConfig.description}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value.length <= 720) {
+                      setAuctionConfig({...auctionConfig, description: value})
+                      setDescriptionLength(value.length)
+                    }
+                  }}
+                  maxLength={720}
+                  className="w-full bg-slate-800 border border-slate-600 rounded pl-10 pr-4 py-2 text-white focus:outline-none focus:border-purple-500 min-h-[100px]"
+                  placeholder="Contoh: Barang display unit, ada goresan minor di sudut..."
+                />
               </div>
+              
+              {/* ✅ CHARACTER COUNTER */}
+              <div className="flex justify-between items-center mt-1">
+                <p className={`text-xs ${
+                  descriptionLength > 700 ? 'text-red-400 font-semibold' : 'text-slate-500'
+                }`}>
+                  {descriptionLength}/720 karakter
+                </p>
+                {descriptionLength > 650 && (
+                  <p className="text-xs text-orange-400">
+                    ⚠️ Hampir penuh
+                  </p>
+                )}
+              </div>
+            </div>
               <div>
                 <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                   <ImageIcon className="h-4 w-4" />
@@ -1915,6 +1938,7 @@ export default function AdminMarketingDashboard() {
                   setSelectedFiles([])
                   setImagePreviews([])
                   setExistingGalleryUrls([])
+                  setDescriptionLength(0)
                 }}
                 className="flex-1 border-slate-600"
                 disabled={auctionLoading || uploadingImage}
