@@ -544,7 +544,7 @@ export default function AuctionsPage() {
                   </div>
 
                   {/* Product Info */}
-                  <CardContent className="p-4 flex flex-col h-full">
+                  <CardContent className="p-4 flex flex-col flex-grow">
                     <h3 className="font-bold text-lg text-white line-clamp-2 min-h-[3rem] mb-3">
                       {product.nama_produk || 'Produk Tanpa Nama'}
                     </h3>
@@ -560,7 +560,7 @@ export default function AuctionsPage() {
                     </div>
 
                     {/* Deskripsi Kondisi Barang - Fixed Height */}
-                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 min-h-[80px] max-h-[80px] overflow-hidden">
+                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 h-[80px] overflow-hidden">
                       <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
                       <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
                         {product.auction_description || 'Tidak ada deskripsi'}
@@ -578,7 +578,7 @@ export default function AuctionsPage() {
                     </div>
 
                     {/* Bidders Log dengan Scroll - Fixed Height */}
-                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 flex-grow min-h-[120px]">
+                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 flex-grow">
                       <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
                       {productBidders.length > 0 ? (
                         <>
