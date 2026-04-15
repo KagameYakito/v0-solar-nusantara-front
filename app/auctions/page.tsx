@@ -559,10 +559,10 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* Deskripsi Kondisi Barang - Fixed Height */}
-                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 h-[80px] overflow-hidden">
+                    {/* ✅ DESKRIPSI - Perlebar Height & Hilangkan Overflow Hidden */}
+                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3">
                       <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
-                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
+                      <p className="text-xs text-slate-300 leading-relaxed">
                         {product.auction_description || 'Tidak ada deskripsi'}
                       </p>
                     </div>
@@ -577,8 +577,8 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* Bidders Log dengan Scroll - Fixed Height */}
-                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 flex-grow">
+                    {/* ✅ BIDDERS - Fixed Height Container */}
+                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 flex-grow min-h-[150px]">
                       <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
                       {productBidders.length > 0 ? (
                         <>
@@ -635,7 +635,7 @@ export default function AuctionsPage() {
                       )}
                     </div>
 
-                    {/* Tombol Place Bid - Always at bottom */}
+                    {/* ✅ TOMBOL - mt-auto untuk dorong ke bawah */}
                     <Button 
                       onClick={() => handlePlaceBid(product)}
                       className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold mt-auto"
