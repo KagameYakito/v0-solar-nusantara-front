@@ -560,7 +560,7 @@ export default function AuctionsPage() {
                     </div>
 
                     {/* Deskripsi - Fixed Height */}
-                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 h-[80px] overflow-hidden">
+                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 h-[120px] overflow-hidden">
                       <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
                       <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
                         {product.auction_description || 'Tidak ada deskripsi'}
