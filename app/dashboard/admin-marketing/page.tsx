@@ -1794,7 +1794,6 @@ export default function AdminMarketingDashboard() {
                   />
                 </div>
               </div>
-              <div>
               <label className="text-sm text-slate-400 mb-1 block">Deskripsi Kondisi Barang</label>
               <div className="relative">
                 <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
@@ -1802,30 +1801,29 @@ export default function AdminMarketingDashboard() {
                   value={auctionConfig.description}
                   onChange={(e) => {
                     const value = e.target.value
-                    if (value.length <= 720) {
+                    if (value.length <= 360) {  // ✅ UBAH KE 360
                       setAuctionConfig({...auctionConfig, description: value})
                       setDescriptionLength(value.length)
                     }
                   }}
-                  maxLength={720}
+                  maxLength={360}  // ✅ UBAH KE 360
                   className="w-full bg-slate-800 border border-slate-600 rounded pl-10 pr-4 py-2 text-white focus:outline-none focus:border-purple-500 min-h-[100px]"
                   placeholder="Contoh: Barang display unit, ada goresan minor di sudut..."
                 />
-              </div>
-              
-              {/* ✅ CHARACTER COUNTER */}
-              <div className="flex justify-between items-center mt-1">
-                <p className={`text-xs ${
-                  descriptionLength > 700 ? 'text-red-400 font-semibold' : 'text-slate-500'
-                }`}>
-                  {descriptionLength}/720 karakter
-                </p>
-                {descriptionLength > 650 && (
-                  <p className="text-xs text-orange-400">
-                    ⚠️ Hampir penuh
+
+                {/* ✅ CHARACTER COUNTER */}
+                <div className="flex justify-between items-center mt-1">
+                  <p className={`text-xs ${
+                    descriptionLength > 350 ? 'text-red-400 font-semibold' : 'text-slate-500'  // ✅ UBAH KE 350
+                  }`}>
+                    {descriptionLength}/360 karakter  // ✅ UBAH KE 360
                   </p>
-                )}
-              </div>
+                  {descriptionLength > 340 && (  // ✅ UBAH KE 340
+                    <p className="text-xs text-orange-400">
+                      ⚠️ Hampir penuh
+                    </p>
+                  )}
+                </div>
             </div>
               <div>
                 <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
