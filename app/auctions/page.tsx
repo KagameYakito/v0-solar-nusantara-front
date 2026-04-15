@@ -543,8 +543,8 @@ export default function AuctionsPage() {
                     </div>
                   </div>
 
-                  {/* Product Info */}
-                  <CardContent className="p-4 flex flex-col flex-grow">
+                  {/* Product Info - FIXED HEIGHT STRUCTURE */}
+                  <CardContent className="p-4">
                     <h3 className="font-bold text-lg text-white line-clamp-2 min-h-[3rem] mb-3">
                       {product.nama_produk || 'Produk Tanpa Nama'}
                     </h3>
@@ -559,15 +559,16 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* ✅ DESKRIPSI - Perlebar Height & Hilangkan Overflow Hidden */}
-                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3">
+                    {/* Deskripsi - Fixed Height */}
+                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 h-[80px] overflow-hidden">
                       <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
-                      <p className="text-xs text-slate-300 leading-relaxed">
+                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
                         {product.auction_description || 'Tidak ada deskripsi'}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-slate-700 mb-3">
+                    {/* Timer - Fixed Height */}
+                    <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-slate-700 mb-3 h-[50px]">
                       <Clock className="h-4 w-4 text-orange-500 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-slate-400">Sisa Waktu</p>
@@ -577,56 +578,46 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* ✅ BIDDERS - Fixed Height Container */}
-                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 flex-grow min-h-[150px]">
+                    {/* Bidders - Fixed Height */}
+                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 h-[150px] overflow-hidden">
                       <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
                       {productBidders.length > 0 ? (
-                        <>
-                          {/* Container dengan max-height dan scroll */}
-                          <div 
-                            className={`space-y-1.5 ${
-                              productBidders.length > 2 ? 'max-h-[120px] overflow-y-auto' : ''
-                            }`}
-                            style={{
-                              scrollbarWidth: 'thin',
-                              scrollbarColor: 'rgba(100, 116, 139, 0.5) transparent'
-                            }}
-                          >
-                            {productBidders.map((bidder, index) => (
-                              <div 
-                                key={`${product.id}-bidder-${index}`} 
-                                className={`flex items-center justify-between text-xs p-1.5 rounded ${
-                                  bidder.isCurrentUser 
-                                    ? 'bg-yellow-500/20 border border-yellow-500/50' 
-                                    : ''
-                                }`}
-                              >
-                                <span className={`truncate max-w-[120px] ${
-                                  bidder.isCurrentUser ? 'text-yellow-400 font-semibold' : 'text-slate-300'
+                        <div 
+                          className={`space-y-1.5 ${
+                            productBidders.length > 2 ? 'max-h-[120px] overflow-y-auto' : ''
+                          }`}
+                          style={{
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: 'rgba(100, 116, 139, 0.5) transparent'
+                          }}
+                        >
+                          {productBidders.map((bidder, index) => (
+                            <div 
+                              key={`${product.id}-bidder-${index}`} 
+                              className={`flex items-center justify-between text-xs p-1.5 rounded ${
+                                bidder.isCurrentUser 
+                                  ? 'bg-yellow-500/20 border border-yellow-500/50' 
+                                  : ''
+                              }`}
+                            >
+                              <span className={`truncate max-w-[120px] ${
+                                bidder.isCurrentUser ? 'text-yellow-400 font-semibold' : 'text-slate-300'
+                              }`}>
+                                {bidder.username} {bidder.isCurrentUser && '(Anda)'}
+                              </span>
+                              <div className="text-right">
+                                <span className={`font-mono block ${
+                                  bidder.isCurrentUser ? 'text-yellow-400 font-bold' : 'text-green-400'
                                 }`}>
-                                  {bidder.username} {bidder.isCurrentUser && '(Anda)'}
+                                  {formatRupiah(bidder.bid_amount)}
                                 </span>
-                                <div className="text-right">
-                                  <span className={`font-mono block ${
-                                    bidder.isCurrentUser ? 'text-yellow-400 font-bold' : 'text-green-400'
-                                  }`}>
-                                    {formatRupiah(bidder.bid_amount)}
-                                  </span>
-                                  <span className="text-slate-500 text-[10px]">
-                                    {formatTime(bidder.bid_time)}
-                                  </span>
-                                </div>
+                                <span className="text-slate-500 text-[10px]">
+                                  {formatTime(bidder.bid_time)}
+                                </span>
                               </div>
-                            ))}
-                          </div>
-                          
-                          {/* Indicator jika ada lebih dari 2 bidders */}
-                          {productBidders.length > 2 && (
-                            <p className="text-xs text-slate-500 text-center mt-2 italic">
-                              Scroll untuk lihat {productBidders.length - 2} bidder lainnya
-                            </p>
-                          )}
-                        </>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <div className="text-center py-8 text-slate-500 text-xs">
                           <p>Belum ada bidder</p>
@@ -635,10 +626,10 @@ export default function AuctionsPage() {
                       )}
                     </div>
 
-                    {/* ✅ TOMBOL - mt-auto untuk dorong ke bawah */}
+                    {/* Tombol - Always at same position */}
                     <Button 
                       onClick={() => handlePlaceBid(product)}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold mt-auto"
+                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
                     >
                       Place Bid Sekarang
                     </Button>
