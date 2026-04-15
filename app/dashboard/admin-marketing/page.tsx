@@ -1801,7 +1801,7 @@ export default function AdminMarketingDashboard() {
                   value={auctionConfig.description}
                   onChange={(e) => {
                     const value = e.target.value
-                    if (value.length <= 360) {  // ✅ UBAH KE 360
+                    if (value.length <= 360) {
                       setAuctionConfig({...auctionConfig, description: value})
                       setDescriptionLength(value.length)
                     }

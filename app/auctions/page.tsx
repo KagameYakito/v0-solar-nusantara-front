@@ -544,13 +544,13 @@ export default function AuctionsPage() {
                   </div>
 
                   {/* Product Info */}
-                  <CardContent className="p-4 space-y-3">
-                    <h3 className="font-bold text-lg text-white line-clamp-2 min-h-[3rem]">
+                  <CardContent className="p-4 flex flex-col h-full">
+                    <h3 className="font-bold text-lg text-white line-clamp-2 min-h-[3rem] mb-3">
                       {product.nama_produk || 'Produk Tanpa Nama'}
                     </h3>
 
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="h-5 w-5 text-green-500" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="h-5 w-5 text-green-500 flex-shrink-0" />
                       <div>
                         <p className="text-xs text-slate-400">Harga Saat Ini</p>
                         <p className="text-xl font-bold text-green-500">
@@ -559,16 +559,15 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {product.auction_description && (
-                      <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30">
-                        <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          {product.auction_description}
-                        </p>
-                      </div>
-                    )}
+                    {/* Deskripsi Kondisi Barang - Fixed Height */}
+                    <div className="bg-blue-900/10 rounded-lg p-2 border border-blue-700/30 mb-3 min-h-[80px] max-h-[80px] overflow-hidden">
+                      <p className="text-xs text-blue-400 font-semibold mb-1">Kondisi Barang:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
+                        {product.auction_description || 'Tidak ada deskripsi'}
+                      </p>
+                    </div>
 
-                    <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-slate-700">
+                    <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg p-2 border border-slate-700 mb-3">
                       <Clock className="h-4 w-4 text-orange-500 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-slate-400">Sisa Waktu</p>
@@ -578,8 +577,8 @@ export default function AuctionsPage() {
                       </div>
                     </div>
 
-                    {/* Bidders Log dengan Scroll */}
-                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50">
+                    {/* Bidders Log dengan Scroll - Fixed Height */}
+                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 flex-grow min-h-[120px]">
                       <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
                       {productBidders.length > 0 ? (
                         <>
@@ -629,16 +628,17 @@ export default function AuctionsPage() {
                           )}
                         </>
                       ) : (
-                        <div className="text-center py-3 text-slate-500 text-xs">
+                        <div className="text-center py-8 text-slate-500 text-xs">
                           <p>Belum ada bidder</p>
                           <p className="text-slate-600 mt-1">Jadilah yang pertama!</p>
                         </div>
                       )}
                     </div>
 
+                    {/* Tombol Place Bid - Always at bottom */}
                     <Button 
                       onClick={() => handlePlaceBid(product)}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold mt-auto"
                     >
                       Place Bid Sekarang
                     </Button>
