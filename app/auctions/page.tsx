@@ -292,100 +292,142 @@ export default function AuctionsPage() {
     setShowBidModal(true)
   }
 
-  const submitBid = async () => {
-    if (!selectedProduct || !currentUser) return
+  // ✅ FUNGSI GENERATE KODE BID RANDOM
+const generateBidCode = () => {
+  const letters = 'ACQPDV' // Hanya huruf A, C, Q, P, D, V
+  const numbers = '0123456789'
+  
+  let code = '#'
+  
+  // 3 huruf random
+  for (let i = 0; i < 3; i++) {
+    code += letters.charAt(Math.floor(Math.random() * letters.length))
+  }
+  
+  // 5 angka random
+  for (let i = 0; i < 5; i++) {
+    code += numbers.charAt(Math.floor(Math.random() * numbers.length))
+  }
+  
+  return code
+}
 
-    const bidValue = parseInt(bidAmount)
-    const currentPrice = getCurrentPrice(selectedProduct)
-    const minIncrement = selectedProduct.auction_increment || 50000
-    const minBid = currentPrice + minIncrement
+const submitBid = async () => {
+  if (!selectedProduct || !currentUser) return
 
-    if (isNaN(bidValue)) {
-      setBidError('Masukkan harga yang valid!')
-      return
-    }
+  const bidValue = parseInt(bidAmount)
+  const currentPrice = getCurrentPrice(selectedProduct)
+  const minIncrement = selectedProduct.auction_increment || 50000
+  const minBid = currentPrice + minIncrement
 
-    if (bidValue <= currentPrice) {
-      setBidError('Harga bid harus lebih tinggi dari harga saat ini!')
-      return
-    }
+  if (isNaN(bidValue)) {
+    setBidError('Masukkan harga yang valid!')
+    return
+  }
 
-    if (bidValue < minBid) {
-      setBidError(`Minimal bid adalah ${formatRupiah(minBid)} (kenaikan ${formatRupiah(minIncrement)})`)
-      return
-    }
+  if (bidValue <= currentPrice) {
+    setBidError('Harga bid harus lebih tinggi dari harga saat ini!')
+    return
+  }
 
-    try {
-      setSubmittingBid(true)
-      setBidError('')
+  if (bidValue < minBid) {
+    setBidError(`Minimal bid adalah ${formatRupiah(minBid)} (kenaikan ${formatRupiah(minIncrement)})`)
+    return
+  }
 
-      const { data: latestBid } = await supabase
+  try {
+    setSubmittingBid(true)
+    setBidError('')
+
+    // Generate unique bid code
+    let bidCode = generateBidCode()
+    let isUnique = false
+    let attempts = 0
+    
+    // Pastikan kode unik
+    while (!isUnique && attempts < 10) {
+      const { data: existingBid } = await supabase
         .from('auction_bids')
-        .select('bid_price')
-        .eq('product_id', selectedProduct.id)
-        .order('bid_price', { ascending: false })
-        .limit(1)
+        .select('bid_code')
+        .eq('bid_code', bidCode)
         .single()
-
-      if (latestBid && latestBid.bid_price >= bidValue) {
-        setBidError('Maaf, harga saat ini telah lebih tinggi! Silakan coba lagi.')
-        return
+      
+      if (!existingBid) {
+        isUnique = true
+      } else {
+        bidCode = generateBidCode()
+        attempts++
       }
+    }
 
-      const { error: insertError } = await supabase
-        .from('auction_bids')
-        .insert({
-          product_id: selectedProduct.id,
-          bidder_id: currentUser.id,
-          bid_price: bidValue,
-          created_at: new Date().toISOString()
-        })
+    const { data: latestBid } = await supabase
+      .from('auction_bids')
+      .select('bid_price')
+      .eq('product_id', selectedProduct.id)
+      .order('bid_price', { ascending: false })
+      .limit(1)
+      .single()
 
-      if (insertError) throw insertError
+    if (latestBid && latestBid.bid_price >= bidValue) {
+      setBidError('Maaf, harga saat ini telah lebih tinggi! Silakan coba lagi.')
+      return
+    }
 
+    const { error: insertError } = await supabase
+      .from('auction_bids')
+      .insert({
+        product_id: selectedProduct.id,
+        bidder_id: currentUser.id,
+        bid_price: bidValue,
+        bid_code: bidCode, // ✅ SIMPAN KODE BID
+        created_at: new Date().toISOString()
+      })
+
+    if (insertError) throw insertError
+
+    await supabase
+      .from('products')
+      .update({ 
+        current_bid_price: bidValue,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', selectedProduct.id)
+
+    const { data: product } = await supabase
+      .from('products')
+      .select('bid_deadline_duration')
+      .eq('id', selectedProduct.id)
+      .single()
+
+    if (product?.bid_deadline_duration) {
+      const newDeadline = new Date()
+      newDeadline.setDate(newDeadline.getDate() + product.bid_deadline_duration)
+      
       await supabase
         .from('products')
-        .update({ 
-          current_bid_price: bidValue,
-          updated_at: new Date().toISOString()
+        .update({
+          bid_deadline_time: newDeadline.toISOString()
         })
         .eq('id', selectedProduct.id)
-
-      const { data: product } = await supabase
-        .from('products')
-        .select('bid_deadline_duration')
-        .eq('id', selectedProduct.id)
-        .single()
-
-      if (product?.bid_deadline_duration) {
-        const newDeadline = new Date()
-        newDeadline.setDate(newDeadline.getDate() + product.bid_deadline_duration)
-        
-        await supabase
-          .from('products')
-          .update({
-            bid_deadline_time: newDeadline.toISOString()
-          })
-          .eq('id', selectedProduct.id)
-      }
-
-      setBidSuccess(true)
-      
-      await fetchBidders()
-      await fetchAuctionProducts()
-
-      setTimeout(() => {
-        setShowBidModal(false)
-        setBidSuccess(false)
-      }, 2000)
-
-    } catch (err: any) {
-      console.error('Failed to submit bid:', err)
-      setBidError('Gagal menempatkan bid. Silakan coba lagi.')
-    } finally {
-      setSubmittingBid(false)
     }
+
+    setBidSuccess(true)
+    
+    await fetchBidders()
+    await fetchAuctionProducts()
+
+    setTimeout(() => {
+      setShowBidModal(false)
+      setBidSuccess(false)
+    }, 2000)
+
+  } catch (err: any) {
+    console.error('Failed to submit bid:', err)
+    setBidError('Gagal menempatkan bid. Silakan coba lagi.')
+  } finally {
+    setSubmittingBid(false)
   }
+}
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">

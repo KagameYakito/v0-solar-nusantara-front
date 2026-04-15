@@ -71,6 +71,15 @@ interface ProductRequest {
   items?: RequestItem[]
 }
 
+interface BidHistory {
+  id: string
+  bid_code: string
+  product_name: string
+  bid_price: number
+  created_at: string
+  product_id: string
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -98,6 +107,9 @@ export default function UserDashboard() {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [selectedStatusItem, setSelectedStatusItem] = useState<RequestItem | null>(null)
   const [showProfileAlert, setShowProfileAlert] = useState(false)
+
+  const [bidHistory, setBidHistory] = useState<BidHistory[]>([])
+  const [bidsLoading, setBidsLoading] = useState(false)
 
   // Form State
   const [formData, setFormData] = useState({
@@ -526,6 +538,80 @@ const fetchWishlist = useCallback(async () => {
 useEffect(() => {
   fetchWishlist()
 }, [fetchWishlist])
+
+const fetchBidHistory = useCallback(async () => {
+  try {
+    setBidsLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) return
+
+    // Fetch bids user ini
+    const { data: bidsData, error } = await supabase
+      .from('auction_bids')
+      .select(`
+        id,
+        bid_code,
+        bid_price,
+        created_at,
+        product_id
+      `)
+      .eq('bidder_id', session.user.id)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    if (!bidsData || bidsData.length === 0) {
+      setBidHistory([])
+      return
+    }
+
+    // Fetch nama produk
+    const productIds = [...new Set(bidsData.map(b => b.product_id))]
+    const { data: productsData } = await supabase
+      .from('products')
+      .select('id, nama_produk')
+      .in('id', productIds)
+
+    // Gabungkan data
+    const historyWithProducts = bidsData.map(bid => {
+      const product = productsData?.find(p => p.id === bid.product_id)
+      return {
+        ...bid,
+        product_name: product?.nama_produk || 'Produk Tidak Diketahui'
+      }
+    })
+
+    setBidHistory(historyWithProducts)
+  } catch (err: any) {
+    console.error("Failed to fetch bid history:", err)
+  } finally {
+    setBidsLoading(false)
+  }
+}, [])
+
+// ✅ LOAD BID HISTORY SAAT TAB BIDS AKTIF
+useEffect(() => {
+  if (activeTab === 'bids') {
+    fetchBidHistory()
+  }
+}, [activeTab, fetchBidHistory])
+
+// ✅ FORMAT TANGGAL INDONESIA
+const formatDateIndonesian = (dateString: string) => {
+  const date = new Date(dateString)
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ]
+  
+  const day = date.getDate()
+  const month = months[date.getMonth()]
+  const year = date.getFullYear()
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  
+  return `${day} ${month} ${year}, ${hours}:${minutes}`
+}
 
 // ✅ REALTIME SUBSCRIPTION - Auto refresh saat ada perubahan
 // ✅ GANTI BAGIAN INI (line 437-450)
@@ -1110,13 +1196,63 @@ const confirmSubmitRequest = async () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12 text-slate-500">
-                <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-lg font-medium">Belum ada riwayat penawaran.</p>
-                <p className="text-sm mt-2">
-                  Ajukan penawaran pada lelang yang tersedia untuk melihat riwayat bid Anda di sini.
-                </p>
-              </div>
+              {bidsLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                  <span className="ml-2 text-slate-400">Memuat riwayat...</span>
+                </div>
+              ) : bidHistory.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg font-medium">Belum ada riwayat penawaran.</p>
+                  <p className="text-sm mt-2">
+                    Ajukan penawaran pada lelang yang tersedia untuk melihat riwayat bid Anda di sini.
+                  </p>
+                  <Link href="/auctions">
+                    <Button className="mt-4 bg-green-600 hover:bg-green-700">
+                      <Gavel className="h-4 w-4 mr-2" />
+                      Lihat Lelang Tersedia
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-800 text-slate-300">
+                      <tr>
+                        <th className="px-4 py-3">No</th>
+                        <th className="px-4 py-3">Kode Bid</th>
+                        <th className="px-4 py-3">Nama Produk</th>
+                        <th className="px-4 py-3 text-right">Harga Bid</th>
+                        <th className="px-4 py-3">Tanggal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {bidHistory.map((bid, index) => (
+                        <tr key={bid.id} className="hover:bg-slate-800/30">
+                          <td className="px-4 py-3 text-slate-400">{index + 1}</td>
+                          <td className="px-4 py-3">
+                            <Badge className="bg-blue-600/20 text-blue-400 border border-blue-600/30 font-mono">
+                              {bid.bid_code || 'N/A'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-white font-medium">
+                            {bid.product_name}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-green-400 font-mono font-bold">
+                              {formatPrice(bid.bid_price)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">
+                            {formatDateIndonesian(bid.created_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
