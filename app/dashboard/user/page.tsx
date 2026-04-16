@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation' 
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -171,6 +171,11 @@ export default function UserDashboard() {
   useEffect(() => {
     fetchProfile()
   }, [fetchProfile])
+
+  const handlePlaceBidFromHistory = (product: BidHistory) => {
+    // Redirect ke halaman auctions dengan parameter highlight
+    router.push(`/auctions?highlight=${product.product_id}`)
+  }
 
   const handleSaveProfile = async () => {
     if (!profile?.id) return
@@ -393,11 +398,6 @@ useEffect(() => {
   const interval = setInterval(updateCountdown, 1000)
   return () => clearInterval(interval)
 }, [bidHistory])
-
-const handlePlaceBidFromHistory = (product: BidHistory) => {
-  // Redirect ke halaman auctions dengan produk tertentu
-  router.push(`/auctions?product=${product.product_id}`)
-}
 
 // ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
 const getStatusBadgeColor = (status: string) => {
