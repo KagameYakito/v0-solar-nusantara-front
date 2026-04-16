@@ -144,30 +144,29 @@ export default function AuctionsPage() {
   }, [products])
 
   useEffect(() => {
-    const productId = searchParams?.get('highlight')
+    // Ambil query param dari URL
+    const params = new URLSearchParams(window.location.search)
+    const productId = params.get('highlight')
+    
     if (productId) {
       setHighlightedProduct(productId)
       
-      // Scroll ke produk setelah render
       const timer = setTimeout(() => {
         const element = document.getElementById(`product-card-${productId}`)
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'start' })
           
-          // Hapus highlight setelah 5 detik
           setTimeout(() => {
             setHighlightedProduct(null)
-            // Bersihkan URL parameter
-            const url = new URL(window.location.href)
-            url.searchParams.delete('highlight')
-            router.replace(url.toString(), { scroll: false })
+            // Bersihkan URL tanpa reload
+            window.history.replaceState({}, '', window.location.pathname)
           }, 5000)
         }
       }, 100)
       
       return () => clearTimeout(timer)
     }
-  }, [searchParams, router])
+  }, [])
 
   const fetchAuctionProducts = async () => {
     try {
