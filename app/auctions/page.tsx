@@ -541,9 +541,9 @@ const submitBid = async () => {
                   id={`product-card-${product.id}`}  // ✅ TAMBAHKAN INI
                   className={`bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group ${
                     highlightedProduct === product.id 
-                      ? 'ring-4 ring-blue-500 ring-offset-4 ring-offset-slate-950 animate-glow' 
+                      ? 'ring-4 ring-blue-500 ring-offset-4 ring-offset-slate-950 animate-pulse border-blue-500' 
                       : ''
-                  }`}  // ✅ GANTI className DI SINI
+                  }`} // ✅ GANTI className DI SINI
                 >
                   {/* Product Image dengan Carousel */}
                   <div className="relative aspect-[4/3] overflow-hidden bg-slate-800 rounded-t-lg group/card">
