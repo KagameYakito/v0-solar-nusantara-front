@@ -78,6 +78,8 @@ interface BidHistory {
   bid_price: number
   created_at: string
   product_id: string
+  current_price: number  // ✅ TAMBAH: Harga saat ini
+  auction_end_time: string 
 }
 
 const supabase = createClient(
@@ -110,6 +112,7 @@ export default function UserDashboard() {
 
   const [bidHistory, setBidHistory] = useState<BidHistory[]>([])
   const [bidsLoading, setBidsLoading] = useState(false)
+  const [bidTimeRemaining, setBidTimeRemaining] = useState<Record<string, string>>({})
 
   // Form State
   const [formData, setFormData] = useState({
@@ -359,6 +362,43 @@ const getStatusMessage = (status: string, adminNotes?: string | null) => {
   }
 }
 
+useEffect(() => {
+  if (bidHistory.length === 0) return
+
+  const updateCountdown = () => {
+    const now = new Date().getTime()
+    const newTimeRemaining: Record<string, string> = {}
+
+    bidHistory.forEach(bid => {
+      if (bid.auction_end_time) {
+        const auctionEnd = new Date(bid.auction_end_time).getTime()
+        const distance = auctionEnd - now
+
+        if (distance > 0) {
+          const days = Math.floor(distance / (1000 * 60 * 60 * 24))
+          const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+          const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))
+          const seconds = Math.floor((distance % (1000 * 60)) / 1000)
+          newTimeRemaining[bid.id] = `${days}h ${hours}j ${minutes}m ${seconds}d`
+        } else {
+          newTimeRemaining[bid.id] = 'SELESAI'
+        }
+      }
+    })
+
+    setBidTimeRemaining(newTimeRemaining)
+  }
+
+  updateCountdown()
+  const interval = setInterval(updateCountdown, 1000)
+  return () => clearInterval(interval)
+}, [bidHistory])
+
+const handlePlaceBidFromHistory = (product: BidHistory) => {
+  // Redirect ke halaman auctions dengan produk tertentu
+  router.push(`/auctions?product=${product.product_id}`)
+}
+
 // ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
 const getStatusBadgeColor = (status: string) => {
   switch (status) {
@@ -546,7 +586,7 @@ const fetchBidHistory = useCallback(async () => {
     
     if (!session) return
 
-    // Fetch bids user ini
+    // Fetch bids user ini - ambil yang terbaru per produk
     const { data: bidsData, error } = await supabase
       .from('auction_bids')
       .select(`
@@ -565,19 +605,31 @@ const fetchBidHistory = useCallback(async () => {
       return
     }
 
-    // Fetch nama produk
-    const productIds = [...new Set(bidsData.map(b => b.product_id))]
+    // ✅ AMBIL HANYA BID TERAKHIR PER PRODUK
+    const latestBidsMap = new Map()
+    bidsData.forEach(bid => {
+      if (!latestBidsMap.has(bid.product_id)) {
+        latestBidsMap.set(bid.product_id, bid)
+      }
+    })
+
+    const latestBids = Array.from(latestBidsMap.values())
+
+    // Fetch nama produk dan info lelang
+    const productIds = [...new Set(latestBids.map(b => b.product_id))]
     const { data: productsData } = await supabase
       .from('products')
-      .select('id, nama_produk')
+      .select('id, nama_produk, current_bid_price, auction_end_time')
       .in('id', productIds)
 
     // Gabungkan data
-    const historyWithProducts = bidsData.map(bid => {
+    const historyWithProducts = latestBids.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
       return {
         ...bid,
-        product_name: product?.nama_produk || 'Produk Tidak Diketahui'
+        product_name: product?.nama_produk || 'Produk Tidak Diketahui',
+        current_price: product?.current_bid_price || bid.bid_price,
+        auction_end_time: product?.auction_end_time || ''
       }
     })
 
@@ -1189,10 +1241,10 @@ const confirmSubmitRequest = async () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
                 <History className="h-5 w-5 text-blue-400" />
-                Riwayat Penawaran
+                Riwayat Penawaran Terakhir
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Semua penawaran yang pernah Anda ajukan.
+                Penawaran terakhir Anda untuk setiap produk lelang.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1206,7 +1258,7 @@ const confirmSubmitRequest = async () => {
                   <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p className="text-lg font-medium">Belum ada riwayat penawaran.</p>
                   <p className="text-sm mt-2">
-                    Ajukan penawaran pada lelang yang tersedia untuk melihat riwayat bid Anda di sini.
+                    Ajukan penawaran pada lelang yang tersedia.
                   </p>
                   <Link href="/auctions">
                     <Button className="mt-4 bg-green-600 hover:bg-green-700">
@@ -1216,41 +1268,65 @@ const confirmSubmitRequest = async () => {
                   </Link>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-800 text-slate-300">
-                      <tr>
-                        <th className="px-4 py-3">No</th>
-                        <th className="px-4 py-3">Kode Bid</th>
-                        <th className="px-4 py-3">Nama Produk</th>
-                        <th className="px-4 py-3 text-right">Harga Bid</th>
-                        <th className="px-4 py-3">Tanggal</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {bidHistory.map((bid, index) => (
-                        <tr key={bid.id} className="hover:bg-slate-800/30">
-                          <td className="px-4 py-3 text-slate-400">{index + 1}</td>
-                          <td className="px-4 py-3">
-                            <Badge className="bg-blue-600/20 text-blue-400 border border-blue-600/30 font-mono">
-                              {bid.bid_code || 'N/A'}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-white font-medium">
-                            {bid.product_name}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-green-400 font-mono font-bold">
-                              {formatPrice(bid.bid_price)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-400 text-xs">
+                <div className="space-y-3">
+                  {bidHistory.map((bid, index) => (
+                    <div 
+                      key={bid.id} 
+                      className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-slate-600 transition-colors"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+                        {/* No */}
+                        <div className="text-slate-400 font-medium">
+                          {index + 1}
+                        </div>
+
+                        {/* Kode Bid */}
+                        <div>
+                          <Badge className="bg-blue-600/20 text-blue-400 border border-blue-600/30 font-mono">
+                            {bid.bid_code || 'N/A'}
+                          </Badge>
+                        </div>
+
+                        {/* Nama Produk */}
+                        <div className="text-white font-medium">
+                          {bid.product_name}
+                        </div>
+
+                        {/* Harga Bid & Current Price */}
+                        <div className="space-y-1">
+                          <div className="text-xs text-slate-400">
+                            Bid Anda: <span className="text-green-400 font-mono font-bold">{formatPrice(bid.bid_price)}</span>
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Harga Sekarang: <span className="text-orange-400 font-mono font-bold">{formatPrice(bid.current_price)}</span>
+                          </div>
+                        </div>
+
+                        {/* Sisa Waktu */}
+                        <div>
+                          <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
+                            <Clock className="h-3 w-3" />
+                            <span>{bidTimeRemaining[bid.id] || 'Loading...'}</span>
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
                             {formatDateIndonesian(bid.created_at)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+                        </div>
+
+                        {/* Aksi - Place Bid Button */}
+                        <div>
+                          <Button
+                            size="sm"
+                            onClick={() => handlePlaceBidFromHistory(bid)}
+                            className="w-full bg-green-600 hover:bg-green-700 text-xs"
+                          >
+                            <Gavel className="h-3 w-3 mr-1" />
+                            Place Bid
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
