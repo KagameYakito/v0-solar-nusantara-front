@@ -146,6 +146,9 @@ export default function AuctionsPage() {
   }, [products])
 
   useEffect(() => {
+    // Check if running in browser
+    if (typeof window === 'undefined') return
+    
     // Ambil query param dari URL
     const params = new URLSearchParams(window.location.search)
     const productId = params.get('highlight')
