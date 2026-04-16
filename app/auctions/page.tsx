@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { 
   ArrowLeft, Clock, DollarSign, Loader2, Search, ImageIcon, Filter,
@@ -40,6 +40,8 @@ interface Bidder {
 
 export default function AuctionsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [highlightedProduct, setHighlightedProduct] = useState<string | null>(null)
   const [products, setProducts] = useState<AuctionProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -140,6 +142,32 @@ export default function AuctionsPage() {
     const interval = setInterval(updateCountdown, 1000)
     return () => clearInterval(interval)
   }, [products])
+
+  useEffect(() => {
+    const productId = searchParams?.get('highlight')
+    if (productId) {
+      setHighlightedProduct(productId)
+      
+      // Scroll ke produk setelah render
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`product-card-${productId}`)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          
+          // Hapus highlight setelah 5 detik
+          setTimeout(() => {
+            setHighlightedProduct(null)
+            // Bersihkan URL parameter
+            const url = new URL(window.location.href)
+            url.searchParams.delete('highlight')
+            router.replace(url.toString(), { scroll: false })
+          }, 5000)
+        }
+      }, 100)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, router])
 
   const fetchAuctionProducts = async () => {
     try {
@@ -507,7 +535,15 @@ const submitBid = async () => {
               const productBidders = bidders[product.id] || []
 
               return (
-                <Card key={product.id} className="bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group">
+                <Card 
+                  key={product.id} 
+                  id={`product-card-${product.id}`}  // ✅ TAMBAHKAN INI
+                  className={`bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group ${
+                    highlightedProduct === product.id 
+                      ? 'ring-4 ring-blue-500 ring-offset-4 ring-offset-slate-950 animate-glow' 
+                      : ''
+                  }`}  // ✅ GANTI className DI SINI
+                >
                   {/* Product Image dengan Carousel */}
                   <div className="relative aspect-[4/3] overflow-hidden bg-slate-800 rounded-t-lg group/card">
                     {currentImage ? (
