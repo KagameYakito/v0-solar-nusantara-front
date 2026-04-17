@@ -511,15 +511,24 @@ export default function AdminMarketingDashboard() {
           if (bidDeadline < now) {
             // Auto end auction
             try {
+              // ✅ TENTUKAN REASON: completed jika ada bid, no_bids jika tidak ada
+              const endReason = product.current_bid_price && product.current_bid_price > 0 
+                ? 'completed' 
+                : 'no_bids'
+              
               await supabase
                 .from('products')
                 .update({
                   auction_active: false,
-                  is_auction: false
+                  is_auction: true,  // ✅ JANGAN UBAH KE FALSE
+                  auction_end_reason: endReason,  // ✅ SIMPAN REASON
+                  auction_ended_at: new Date().toISOString(),  // ✅ SIMPAN WAKTU
+                  // ✅ SIMPAN PEMENANG JIKA ADA
+                  auction_winner_name: product.current_bidder_id || null
                 })
                 .eq('id', product.id)
               
-              alert(`⏰ Lelang "${product.nama_produk}" telah berakhir! Pemenang: ${product.current_bidder_id || 'N/A'}`)
+              alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!`)
               
               // Refresh data
               fetchProducts()
@@ -1587,8 +1596,11 @@ const confirmCancelAuction = async () => {
                                   ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
                                   : 'bg-green-500/20 text-green-400 border-green-500/30'
                               } border`}>
-                                {product.auction_end_reason === 'cancelled' ? 'Dibatalkan' : 
-                                product.auction_end_reason === 'no_bids' ? 'Tidak Ada Bid' : 'Selesai Normal'}
+                                {product.auction_end_reason === 'cancelled' 
+                                  ? 'Selesai dengan Dibatalkan' 
+                                  : product.auction_end_reason === 'no_bids' 
+                                  ? 'Selesai - Tidak Ada Bid' 
+                                  : 'Selesai'}
                               </Badge>
                             ) : product.is_auction && product.auction_active ? (
                               <Badge className="bg-purple-600 text-white animate-pulse">
