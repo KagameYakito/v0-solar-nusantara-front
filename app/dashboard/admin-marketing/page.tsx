@@ -753,6 +753,36 @@ export default function AdminMarketingDashboard() {
       alert(`❌ Produk "${product.nama_produk}" sedang dalam lelang aktif!\n\nHanya 1 produk dengan nama yang sama yang bisa dilelang dalam 1 waktu.\n\nProduk yang sedang aktif: ${duplicateActive.nama_produk}`)
       return
     }
+
+    const duplicateProduct = async (productId: string) => {
+      try {
+        const product = products.find(p => p.id === productId)
+        if (!product) return
+        
+        const newName = `${product.nama_produk} (Batch ${new Date().getFullYear()})`
+        
+        const { data, error } = await supabase
+          .from('products')
+          .insert({
+            nama_produk: newName,
+            harga: product.harga,
+            sku: `${product.sku}-NEW`,
+            gambar_url: product.gambar_url,
+            is_auction: false,
+            is_request: false,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+        
+        if (error) throw error
+        
+        alert(`✅ Produk berhasil di-duplicate: ${newName}`)
+        fetchProducts()
+      } catch (err) {
+        alert("❌ Gagal duplicate produk: " + err)
+      }
+    }
     
     const startPrice = parseInt(auctionConfig.startPrice)
     const increment = parseInt(auctionConfig.increment)
