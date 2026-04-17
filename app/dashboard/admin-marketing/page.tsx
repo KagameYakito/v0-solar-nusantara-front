@@ -8,7 +8,7 @@ import {
   Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check, Gavel, 
   MessageSquare, Clock, DollarSign, TrendingUp, FileText, Timer, Eye, 
   EyeOff, Image as ImageIcon, Upload, Trash2, Save, Search, Bookmark, 
-  CheckCircle2, CheckCircle, XCircle, Hourglass, CreditCard, FileCheck, Lock
+  CheckCircle2, CheckCircle, XCircle, Hourglass, CreditCard, FileCheck, Lock, Plus
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -1074,6 +1074,45 @@ const confirmCancelAuction = async () => {
 
   if (!isAuthorized) return null
 
+  // ✅ FUNGSI DUPLICATE & LELANG PRODUK
+const duplicateAndAuction = async (productId: string) => {
+  try {
+    const product = products.find(p => p.id === productId)
+    if (!product) return
+    
+    // Generate nama baru dengan timestamp unik
+    const newName = `${product.nama_produk} (Batch ${new Date().getFullYear()}-${String(Date.now()).slice(-4)})`
+    
+    // Insert produk baru ke database
+    const { data, error } = await supabase
+      .from('products')
+      .insert({
+        nama_produk: newName,
+        harga: product.harga,
+        sku: `${product.sku || 'SKU'}-${Date.now()}`,
+        gambar_url: product.gambar_url,
+        is_auction: false,
+        is_request: false,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+    
+    if (error) throw error
+    
+    alert(`✅ Produk berhasil di-duplicate: ${newName}`)
+    await fetchProducts()
+    
+    // Auto buka modal lelang untuk produk baru setelah 500ms
+    setTimeout(() => {
+      openAuctionModal(data.id, false)
+    }, 500)
+    
+  } catch (err: any) {
+    alert("❌ Gagal duplicate produk: " + err.message)
+  }
+}
+
   return (
     <div className="p-8 space-y-6 bg-slate-950 min-h-screen text-slate-100">
       {/* HEADER */}
@@ -1765,8 +1804,9 @@ const confirmCancelAuction = async () => {
                           {/* ✅ AKSI */}
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              {filterView === 'finished' ? (
-                                // ✅ UNTUK LELANG SELESAI: Hanya bisa lihat detail
+                            {filterView === 'finished' ? (
+                              // ✅ UNTUK LELANG SELESAI: Bisa duplicate & lelang lagi
+                              <div className="flex justify-end gap-2">
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1776,7 +1816,16 @@ const confirmCancelAuction = async () => {
                                   <Lock className="h-3 w-3 mr-1" />
                                   Selesai
                                 </Button>
-                              ) : filterView === 'auction' && product.auction_active ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => duplicateAndAuction(product.id)}
+                                  className="bg-green-600 hover:bg-green-700 text-xs"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Duplicate & Lelang
+                                </Button>
+                              </div>
+                            ) : filterView === 'auction' && product.auction_active ? (
                                 // ✅ VIEW "SEDANG LELANG": Edit Info lelang
                                 <>
                                   <Button
