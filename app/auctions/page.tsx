@@ -55,6 +55,7 @@ export default function AuctionsPage() {
   const [submittingBid, setSubmittingBid] = useState(false)
   const [bidError, setBidError] = useState('')
   const [bidSuccess, setBidSuccess] = useState(false)
+  const [showFinishedDialog, setShowFinishedDialog] = useState(false)
 
   // Fetch current user
   useEffect(() => {
@@ -298,6 +299,12 @@ export default function AuctionsPage() {
   }
 
   const handlePlaceBid = (product: AuctionProduct) => {
+    // ✅ CEK APAKAH LELANG SUDAH SELESAI
+    if (!product.auction_active) {
+      setShowFinishedDialog(true)
+      return
+    }
+    
     if (!currentUser) {
       alert('Silakan login terlebih dahulu!')
       router.push('/auth/signin')
@@ -616,9 +623,16 @@ const submitBid = async () => {
                     )}
                     
                     <div className="absolute top-4 left-4">
-                      <Badge className="bg-purple-600 text-white px-3 py-1">
-                        Sedang Lelang
-                      </Badge>
+                      {product.auction_active ? (
+                        <Badge className="bg-purple-600 text-white px-3 py-1">
+                          Sedang Lelang
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-pink-600 text-white px-3 py-1">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Lelang Selesai
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
@@ -708,9 +722,14 @@ const submitBid = async () => {
                     {/* Tombol - Always at same position */}
                     <Button 
                       onClick={() => handlePlaceBid(product)}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-base font-semibold"
+                      disabled={!product.auction_active}
+                      className={`w-full py-3 text-base font-semibold ${
+                        product.auction_active
+                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                          : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      }`}
                     >
-                      Place Bid Sekarang
+                      {product.auction_active ? 'Place Bid Sekarang' : 'Lelang Selesai'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -817,6 +836,37 @@ const submitBid = async () => {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ DIALOG LELANG SUDAH SELESAI */}
+      <Dialog open={showFinishedDialog} onOpenChange={setShowFinishedDialog}>
+        <DialogContent className="bg-slate-900 border-pink-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-pink-400">
+              <AlertCircle className="h-5 w-5" />
+              Lelang Sudah Selesai
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Maaf, lelang ini sudah tidak tersedia.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <p className="text-slate-300 text-center">
+              Lelang ini sudah selesai, silakan cari produk lain!
+            </p>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              onClick={() => setShowFinishedDialog(false)}
+              className="w-full bg-pink-600 hover:bg-pink-700"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Tutup
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

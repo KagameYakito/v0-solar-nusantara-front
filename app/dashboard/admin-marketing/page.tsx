@@ -8,7 +8,7 @@ import {
   Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check, Gavel, 
   MessageSquare, Clock, DollarSign, TrendingUp, FileText, Timer, Eye, 
   EyeOff, Image as ImageIcon, Upload, Trash2, Save, Search, Bookmark, 
-  CheckCircle2, XCircle, Hourglass, CreditCard, FileCheck, Lock
+  CheckCircle2, CheckCircle, XCircle, Hourglass, CreditCard, FileCheck, Lock
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,7 @@ interface Product {
   nama_produk: string | null
   harga: number | null
   sku: string | null
+  gambar_url: string | null
   created_at: string
   harga_updated_at: string | null  // ✅ TAMBAHKAN INI
   auction_started_at: string | null // ✅ TAMBAHKAN INI
@@ -539,31 +540,40 @@ export default function AdminMarketingDashboard() {
         const auctionEnd = product.auction_end_time ? new Date(product.auction_end_time).getTime() : 0
         const bidDeadline = product.bid_deadline_time ? new Date(product.bid_deadline_time).getTime() : 0
         
-        const auctionDistance = auctionEnd - now
-        if (auctionDistance > 0 && product.auction_active) {
-          const days = Math.floor(auctionDistance / (1000 * 60 * 60 * 24))
-          const hours = Math.floor((auctionDistance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-          const minutes = Math.floor((auctionDistance % (1000 * 60 * 60)) / (1000 * 60))
-          const seconds = Math.floor((auctionDistance % (1000 * 60)) / 1000)
-          newTimeRemaining[product.id] = {
-            auction: `${days}h ${hours}j ${minutes}m ${seconds}d`,
-            bidDeadline: ''
+        // ✅ CEK APAKAH LELANG MASIH AKTIF
+        if (auctionEnd > 0 && product.auction_active) {
+          const auctionDistance = auctionEnd - now
+          if (auctionDistance > 0) {
+            const days = Math.floor(auctionDistance / (1000 * 60 * 60 * 24))
+            const hours = Math.floor((auctionDistance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+            const minutes = Math.floor((auctionDistance % (1000 * 60 * 60)) / (1000 * 60))
+            const seconds = Math.floor((auctionDistance % (1000 * 60)) / 1000)
+            newTimeRemaining[product.id] = {
+              auction: `${days}h ${hours}j ${minutes}m ${seconds}d`,
+              bidDeadline: ''
+            }
+          } else {
+            newTimeRemaining[product.id] = { auction: '0h 0j 0m 0s', bidDeadline: '' }
+          }
+          
+          // ✅ Tampilkan bid deadline jika ada dan masih aktif
+          if (bidDeadline > 0 && product.auction_active) {
+            const bidDistance = bidDeadline - now
+            if (bidDistance > 0) {
+              const days = Math.floor(bidDistance / (1000 * 60 * 60 * 24))
+              const hours = Math.floor((bidDistance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+              const minutes = Math.floor((bidDistance % (1000 * 60 * 60)) / (1000 * 60))
+              const seconds = Math.floor((bidDistance % (1000 * 60)) / 1000)
+              newTimeRemaining[product.id].bidDeadline = `${days}h ${hours}j ${minutes}m ${seconds}d`
+            } else {
+              newTimeRemaining[product.id].bidDeadline = '0h 0j 0m 0s'
+            }
           }
         } else {
-          newTimeRemaining[product.id] = { auction: 'SELESAI', bidDeadline: '' }
-        }
-        
-        // ✅ Tampilkan bid deadline jika ada, meskipun belum ada bid
-        if (bidDeadline > 0 && product.auction_active) {
-          const bidDistance = bidDeadline - now
-          if (bidDistance > 0) {
-            const days = Math.floor(bidDistance / (1000 * 60 * 60 * 24))
-            const hours = Math.floor((bidDistance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-            const minutes = Math.floor((bidDistance % (1000 * 60 * 60)) / (1000 * 60))
-            const seconds = Math.floor((bidDistance % (1000 * 60)) / 1000)
-            newTimeRemaining[product.id].bidDeadline = `${days}h ${hours}j ${minutes}m ${seconds}d`
-          } else {
-            newTimeRemaining[product.id].bidDeadline = 'EXPIRED'
+          // ✅ LELANG SUDAH SELESAI - TAMPILKAN 0 SEMUA
+          newTimeRemaining[product.id] = { 
+            auction: '0h 0j 0m 0s', 
+            bidDeadline: '0h 0j 0m 0s' 
           }
         }
       })
@@ -1385,7 +1395,8 @@ export default function AdminMarketingDashboard() {
                           
                           {/* ✅ INFO LELANG */}
                           <td className="px-4 py-3">
-                            {product.auction_active && product.auction_end_time ? (
+                            {product.is_auction && product.auction_active && product.auction_end_time ? (
+                              // ✅ TAMPILKAN WAKTU NORMAL JIKA MASIH AKTIF
                               <div className="space-y-2">
                                 <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
                                   <Clock className="h-3 w-3" />
@@ -1399,7 +1410,7 @@ export default function AdminMarketingDashboard() {
                                     <span>BD: {timeRemaining[product.id]?.bidDeadline || '...'}</span>
                                   </div>
                                 )}
-                                
+                                                          
                                 {/* ✅ Detail bid deadline - Hanya untuk view auction */}
                                 {filterView === 'auction' && 
                                 product.current_bid_price && 
@@ -1455,6 +1466,18 @@ export default function AdminMarketingDashboard() {
                                   </div>
                                 )}
                               </div>
+                            ) : product.is_auction && !product.auction_active ? (
+                              // ✅ LELANG SELESAI - TAMPILKAN 0 SEMUA
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1 text-pink-400 text-xs font-mono">
+                                  <Clock className="h-3 w-3" />
+                                  <span>0h 0j 0m 0s</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-pink-400 text-xs font-mono">
+                                  <Timer className="h-3 w-3" />
+                                  <span>0h 0j 0m 0s</span>
+                                </div>
+                              </div>
                             ) : (
                               <span className="text-slate-500 text-xs">-</span>
                             )}
@@ -1463,22 +1486,36 @@ export default function AdminMarketingDashboard() {
                           {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
                             <div className="flex gap-2 flex-wrap">
-                              {product.is_auction ? (
+                              {product.is_auction && product.auction_active ? (
                                 <Badge className="bg-purple-600 text-white animate-pulse">
                                   <Gavel className="h-3 w-3 mr-1" />
                                   Sedang Lelang
+                                </Badge>
+                              ) : product.is_auction && !product.auction_active ? (
+                                // ✅ LELANG SELESAI - WARNA HOT PINK
+                                <Badge className="bg-pink-600 text-white">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Lelang Selesai
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="bg-slate-800">
                                   Normal
                                 </Badge>
                               )}
-                              {/* ✅ HAPUS "Tidak Ada Request" untuk view auction */}
-                              {filterView !== 'auction' && product.is_request && (
-                                <Badge className="bg-orange-600 text-white">
-                                  <MessageSquare className="h-3 w-3 mr-1" />
-                                  Request
-                                </Badge>
+                              
+                              {/* ✅ TAMPILKAN PEMENANG JIKA LELANG SELESAI */}
+                              {product.is_auction && !product.auction_active && (
+                                <div className="w-full mt-1 text-xs">
+                                  {product.current_bidder_id ? (
+                                    <span className="text-pink-400">
+                                      Pemenang: {product.current_bidder_id}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500">
+                                      Tidak ada pemenang
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </td>
