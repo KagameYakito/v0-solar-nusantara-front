@@ -37,6 +37,10 @@ interface Product {
   auction_gallery_urls: string[] | null
   current_bid_price: number | null
   current_bidder_id: string | null
+  finished_auction_id: string | null
+  auction_winner_name: string | null
+  auction_ended_at: string | null
+  auction_end_reason: string | null
 }
 
 interface GroupedWishlistItem {
@@ -707,6 +711,22 @@ export default function AdminMarketingDashboard() {
   const submitAuctionConfig = async () => {
     if (!selectedProductId) return
     
+    // ✅ CEK APAKAH PRODUK DENGAN NAMA SAMA SEDANG DIACTION
+    const product = products.find(p => p.id === selectedProductId)
+    if (!product) return
+    
+    const duplicateActive = products.find(p => 
+      p.nama_produk?.toLowerCase() === product.nama_produk?.toLowerCase() &&
+      p.is_auction === true &&
+      p.auction_active === true &&
+      p.id !== selectedProductId // Exclude current product if editing
+    )
+    
+    if (duplicateActive) {
+      alert(`❌ Produk "${product.nama_produk}" sedang dalam lelang aktif!\n\nHanya 1 produk dengan nama yang sama yang bisa dilelang dalam 1 waktu.\n\nProduk yang sedang aktif: ${duplicateActive.nama_produk}`)
+      return
+    }
+    
     const startPrice = parseInt(auctionConfig.startPrice)
     const increment = parseInt(auctionConfig.increment)
     const durationDays = parseInt(auctionConfig.durationDays)
@@ -829,34 +849,57 @@ export default function AdminMarketingDashboard() {
   }
 
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
-  const confirmCancelAuction = async () => {
-    if (!cancellingProductId) return
+  // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
+const confirmCancelAuction = async () => {
+  if (!cancellingProductId) return
+  
+  try {
+    // 1. Generate finished auction ID
+    const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+    const finishedId = idData || `#${String(Date.now()).slice(-6)}`
     
-    try {
-      const { error } = await supabase
-        .from('products')
-        .update({
-          is_auction: false,
-          auction_active: false
-        })
-        .eq('id', cancellingProductId)
-      
-      if (error) throw error
-      
-      // Update local state
-      setProducts(products.map(p =>
-        p.id === cancellingProductId ? { ...p, is_auction: false, auction_active: false } : p
-      ))
-      
-      setShowCancelConfirmModal(false)
-      setCancellingProductId(null)
-      setCancellingProductName('')
-      
-      alert(`✅ Lelang "${cancellingProductName}" telah dibatalkan dan dianggap selesai.`)
-    } catch (err: any) {
-      alert("❌ Gagal membatalkan lelang: " + err.message)
-    }
+    // 2. Get current bidder info
+    const product = products.find(p => p.id === cancellingProductId)
+    const winnerName = product?.current_bidder_id || null
+    
+    // 3. Update product dengan info finished auction
+    const { error } = await supabase
+      .from('products')
+      .update({
+        is_auction: false,
+        auction_active: false,
+        finished_auction_id: finishedId,
+        auction_winner_name: winnerName,
+        auction_ended_at: new Date().toISOString(),
+        auction_end_reason: 'cancelled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', cancellingProductId)
+    
+    if (error) throw error
+    
+    // Update local state
+    setProducts(products.map(p =>
+      p.id === cancellingProductId ? { 
+        ...p, 
+        is_auction: false, 
+        auction_active: false,
+        finished_auction_id: finishedId,
+        auction_winner_name: winnerName,
+        auction_ended_at: new Date().toISOString(),
+        auction_end_reason: 'cancelled'
+      } : p
+    ))
+    
+    setShowCancelConfirmModal(false)
+    setCancellingProductId(null)
+    setCancellingProductName('')
+    
+    alert(`✅ Lelang "${cancellingProductName}" telah dibatalkan.\nID Selesai: ${finishedId}\nPemenang: ${winnerName || 'Tidak ada'}`)
+  } catch (err: any) {
+    alert("❌ Gagal membatalkan lelang: " + err.message)
   }
+}
 
   // ✅ Fungsi lama toggleAuctionStatus (tetap untuk fitur lain jika diperlukan)
   const toggleAuctionStatus = async (productId: string, currentStatus: boolean) => {
@@ -1334,6 +1377,19 @@ export default function AdminMarketingDashboard() {
                         <th className="px-4 py-3">Tanggal Mulai</th>
                         <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
                       </tr>
+                    ) : filterView === 'finished' ? (
+                      // ✅ TABEL KHUSUS UNTUK VIEW "LELANG SELESAI"
+                      <tr>
+                        <th className="px-4 py-3 rounded-tl-lg">No</th>
+                        <th className="px-4 py-3">Gambar</th>
+                        <th className="px-4 py-3">Nama Produk</th>
+                        <th className="px-4 py-3">Harga Final</th>
+                        <th className="px-4 py-3">ID Selesai</th>
+                        <th className="px-4 py-3">Pemenang</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Tanggal Selesai</th>
+                        <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
+                      </tr>
                     ) : (
                       // ✅ TABEL UNTUK "SEMUA PRODUK" & "PERMINTAAN"
                       <tr>
@@ -1400,6 +1456,13 @@ export default function AdminMarketingDashboard() {
                                 <p className="text-xs text-green-400 mt-1">(Harga Bid)</p>
                               )}
                             </td>
+                          ) : filterView === 'finished' ? (
+                            <td className="px-4 py-3">
+                              <span className="text-orange-400 font-mono font-bold">
+                                {formatRupiah(product.current_bid_price || product.auction_start_price || 0)}
+                              </span>
+                              <p className="text-xs text-slate-500 mt-1">Harga Final</p>
+                            </td>
                           ) : (
                             <td className="px-4 py-3">
                               <span className="text-white font-mono">
@@ -1410,8 +1473,53 @@ export default function AdminMarketingDashboard() {
                           
                           {/* ✅ INFO LELANG */}
                           <td className="px-4 py-3">
-                            {product.is_auction && product.auction_active && product.auction_end_time ? (
-                              // ✅ TAMPILKAN WAKTU NORMAL JIKA MASIH AKTIF
+                            {filterView === 'finished' ? (
+                              // ✅ TAMPILAN KHUSUS UNTUK LELANG SELESAI
+                              <div className="space-y-2">
+                                {/* ID Selesai Lelang */}
+                                <div className="bg-pink-900/20 border border-pink-600/30 rounded px-3 py-2">
+                                  <p className="text-xs text-pink-400 font-semibold mb-1">ID Selesai:</p>
+                                  <p className="text-lg font-mono font-bold text-pink-300">
+                                    {product.finished_auction_id || 'N/A'}
+                                  </p>
+                                </div>
+                                
+                                {/* Pemenang */}
+                                <div className="text-xs">
+                                  <p className="text-slate-400 mb-1">Pemenang:</p>
+                                  {product.auction_winner_name ? (
+                                    <p className="text-green-400 font-semibold">
+                                      {product.auction_winner_name}
+                                    </p>
+                                  ) : (
+                                    <p className="text-slate-500 italic">Tidak ada pemenang</p>
+                                  )}
+                                </div>
+                                
+                                {/* Alasan Selesai */}
+                                <div className="text-xs">
+                                  <p className="text-slate-400 mb-1">Status:</p>
+                                  <Badge className={`${
+                                    product.auction_end_reason === 'cancelled' 
+                                      ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                                      : product.auction_end_reason === 'no_bids'
+                                      ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                                      : 'bg-green-500/20 text-green-400 border-green-500/30'
+                                  } border`}>
+                                    {product.auction_end_reason === 'cancelled' ? 'Dibatalkan' : 
+                                    product.auction_end_reason === 'no_bids' ? 'Tidak Ada Bid' : 'Selesai Normal'}
+                                  </Badge>
+                                </div>
+                                
+                                {/* Tanggal Selesai */}
+                                {product.auction_ended_at && (
+                                  <div className="text-xs text-slate-500">
+                                    Selesai: {new Date(product.auction_ended_at).toLocaleDateString('id-ID')}
+                                  </div>
+                                )}
+                              </div>
+                            ) : product.is_auction && product.auction_active && product.auction_end_time ? (
+                              // ✅ TAMPILAN NORMAL UNTUK LELANG AKTIF
                               <div className="space-y-2">
                                 <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
                                   <Clock className="h-3 w-3" />
@@ -1605,8 +1713,18 @@ export default function AdminMarketingDashboard() {
                           {/* ✅ AKSI */}
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              {/* ✅ LOGIKA BERBEDA UNTUK SETIAP VIEW */}
-                              {filterView === 'auction' && product.auction_active ? (
+                              {filterView === 'finished' ? (
+                                // ✅ UNTUK LELANG SELESAI: Hanya bisa lihat detail
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs border-slate-600"
+                                  disabled
+                                >
+                                  <Lock className="h-3 w-3 mr-1" />
+                                  Selesai
+                                </Button>
+                              ) : filterView === 'auction' && product.auction_active ? (
                                 // ✅ VIEW "SEDANG LELANG": Edit Info lelang
                                 <>
                                   <Button
@@ -1628,6 +1746,7 @@ export default function AdminMarketingDashboard() {
                                   </Button>
                                 </>
                               ) : (
+                                // ... kode aksi untuk view lainnya tetap sama
                                 // ✅ VIEW "SEMUA PRODUK" & "PERMINTAAN": Edit harga katalog
                                 <>
                                   <Button
