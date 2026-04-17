@@ -76,7 +76,7 @@ export default function AdminMarketingDashboard() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   
   // ✅ UPDATED: Include 'wishlist' in filterView
-  const [filterView, setFilterView] = useState<'all' | 'auction' | 'request' | 'wishlist'>('all')
+  const [filterView, setFilterView] = useState<'all' | 'auction' | 'request' | 'wishlist' | 'finished'>('all')
   
   const [showEditPriceModal, setShowEditPriceModal] = useState(false)
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
@@ -351,7 +351,10 @@ export default function AdminMarketingDashboard() {
       }
       
       if (filterView === 'auction') {
-        query = query.eq('is_auction', true)
+        query = query.eq('is_auction', true).eq('auction_active', true)
+      } else if (filterView === 'finished') {
+        // ✅ TAMPILKAN LELANG YANG SUDAH SELESAI/DIBATALKAN
+        query = query.eq('is_auction', true).eq('auction_active', false)
       } else if (filterView === 'request') {
         query = query.eq('is_request', true)
       }
@@ -934,6 +937,7 @@ export default function AdminMarketingDashboard() {
     if (debouncedTerm) return "Tidak ada produk yang sesuai dengan pencarian."
     if (filterView === 'auction') return "Belum ada produk yang sedang dilelang."
     if (filterView === 'wishlist') return "Belum ada data."
+    if (filterView === 'finished') return "Belum ada lelang yang selesai."
     if (filterView === 'request') return "Belum ada permintaan dari client."
     return "Belum ada produk."
   }
@@ -1069,6 +1073,17 @@ export default function AdminMarketingDashboard() {
             >
               <MessageSquare className="h-4 w-4 mr-2" />
               Permintaan Client
+            </Button>
+            <Button
+              variant={filterView === 'finished' ? 'default' : 'outline'}
+              onClick={() => {
+                setFilterView('finished')
+                setCurrentPage(1)
+              }}
+              className={filterView === 'finished' ? 'bg-pink-600 hover:bg-pink-700' : 'border-slate-700'}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Lelang Selesai
             </Button>
           </div>
         </CardContent>
