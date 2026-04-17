@@ -1473,24 +1473,10 @@ const confirmCancelAuction = async () => {
                           {/* ✅ INFO LELANG */}
                           <td className="px-4 py-3">
                             {filterView === 'finished' ? (
-                              // ✅ TAMPILAN KHUSUS UNTUK LELANG SELESAI - LEBIH RAPI
-                              <div className="space-y-1">
-                                {/* ID Selesai Lelang */}
-                                <Badge className="bg-pink-600/20 text-pink-400 border border-pink-600/30 font-mono text-xs">
-                                  {product.finished_auction_id || 'N/A'}
-                                </Badge>
-                                
-                                {/* Pemenang */}
-                                <div className="text-xs mt-2">
-                                  {product.auction_winner_name ? (
-                                    <p className="text-green-400 font-semibold">
-                                      {product.auction_winner_name}
-                                    </p>
-                                  ) : (
-                                    <p className="text-slate-500 italic">Tidak ada pemenang</p>
-                                  )}
-                                </div>
-                              </div>
+                              // ✅ HANYA TAMPILKAN ID SELESAI
+                              <Badge className="bg-pink-600/20 text-pink-400 border border-pink-600/30 font-mono text-xs">
+                                {product.finished_auction_id || 'N/A'}
+                              </Badge>
                             ) : product.is_auction && product.auction_active && product.auction_end_time ? (
                               // ✅ TAMPILAN NORMAL UNTUK LELANG AKTIF
                               <div className="space-y-2">
@@ -1499,15 +1485,13 @@ const confirmCancelAuction = async () => {
                                   <span>Batas: {timeRemaining[product.id]?.auction || '...'}</span>
                                 </div>
 
-                                {/* ✅ TAMBAHKAN BID DEADLINE DI SINI - WARNA KUNING */}
                                 {product.bid_deadline_time && product.bid_deadline_duration && (
                                   <div className="flex items-center gap-1 text-yellow-400 text-xs font-mono bg-yellow-900/20 px-2 py-1 rounded border border-yellow-600/30">
                                     <Timer className="h-3 w-3" />
                                     <span>BD: {timeRemaining[product.id]?.bidDeadline || '...'}</span>
                                   </div>
                                 )}
-                                                          
-                                {/* ✅ Detail bid deadline - Hanya untuk view auction */}
+                                
                                 {filterView === 'auction' && 
                                 product.current_bid_price && 
                                 product.current_bid_price > 0 && 
@@ -1563,7 +1547,6 @@ const confirmCancelAuction = async () => {
                                 )}
                               </div>
                             ) : product.is_auction && !product.auction_active ? (
-                              // ✅ LELANG SELESAI - TAMPILKAN 0 SEMUA
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1 text-pink-400 text-xs font-mono">
                                   <Clock className="h-3 w-3" />
