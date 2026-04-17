@@ -113,6 +113,7 @@ export default function UserDashboard() {
   const [bidHistory, setBidHistory] = useState<BidHistory[]>([])
   const [bidsLoading, setBidsLoading] = useState(false)
   const [bidTimeRemaining, setBidTimeRemaining] = useState<Record<string, string>>({})
+  const [auctionParticipation, setAuctionParticipation] = useState<any[]>([])
 
   // Form State
   const [formData, setFormData] = useState({
@@ -386,7 +387,7 @@ useEffect(() => {
           const seconds = Math.floor((distance % (1000 * 60)) / 1000)
           newTimeRemaining[bid.id] = `${days}h ${hours}j ${minutes}m ${seconds}d`
         } else {
-          newTimeRemaining[bid.id] = 'SELESAI'
+          newTimeRemaining[bid.id] = '0h 0j 0m 0s' 
         }
       }
     })
@@ -416,6 +417,76 @@ const getStatusBadgeColor = (status: string) => {
       return 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
   }
 }
+
+// ✅ FUNGSI FETCH PARTISIPASI LELANG
+const fetchAuctionParticipation = useCallback(async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    // Fetch semua bid user ini
+    const { data: bidsData } = await supabase
+      .from('auction_bids')
+      .select(`
+        product_id,
+        bid_price,
+        created_at,
+        bid_code
+      `)
+      .eq('bidder_id', session.user.id)
+      .order('created_at', { ascending: false })
+
+    if (!bidsData || bidsData.length === 0) {
+      setAuctionParticipation([])
+      return
+    }
+
+    // Ambil unique product_ids
+    const productIds = [...new Set(bidsData.map(b => b.product_id))]
+    
+    // Fetch product info
+    const { data: productsData } = await supabase
+      .from('products')
+      .select(`
+        id,
+        nama_produk,
+        auction_active,
+        auction_end_time,
+        current_bid_price,
+        auction_winner_name,
+        current_bidder_id
+      `)
+      .in('id', productIds)
+
+    // Gabungkan data
+    const participation = bidsData.map(bid => {
+      const product = productsData?.find(p => p.id === bid.product_id)
+      const isWinner = product?.auction_winner_name === session.user?.email || 
+                        product?.auction_winner_name === (profile?.full_name || '') ||
+                        product?.current_bidder_id === session.user.id
+      
+      return {
+        ...bid,
+        product_name: product?.nama_produk || 'Unknown',
+        auction_active: product?.auction_active || false,
+        auction_end_time: product?.auction_end_time,
+        final_price: product?.current_bid_price || bid.bid_price,
+        is_winner: isWinner
+      }
+    })
+
+    setAuctionParticipation(participation)
+  } catch (err) {
+    console.error("Failed to fetch auction participation:", err)
+  }
+}, [])
+
+// ✅ LOAD SAAT TAB AUCTIONS AKTIF
+useEffect(() => {
+  if (activeTab === 'auctions') {
+    fetchAuctionParticipation()
+  }
+}, [activeTab, fetchAuctionParticipation])
 
 // ✅ UPDATE QUANTITY JUGA HARUS SYNC KE DATABASE
 const updateQuantity = async (productId: string, delta: number) => {
@@ -1205,7 +1276,7 @@ const confirmSubmitRequest = async () => {
           </Card>
         </TabsContent>
 
-        {/* TAB 2: RIWAYAT LELANG */}
+        {/* TAB 2: RIWAYAT LELANG - UPDATED */}
         <TabsContent value="auctions" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
@@ -1218,19 +1289,71 @@ const confirmSubmitRequest = async () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12 text-slate-500">
-                <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-lg font-medium">Belum ada partisipasi lelang.</p>
-                <p className="text-sm mt-2">
-                  Ikuti lelang yang tersedia untuk melihat riwayat partisipasi Anda di sini.
-                </p>
-                <Link href="/auction">
-                  <Button className="mt-4 bg-green-600 hover:bg-green-700">
-                    <Gavel className="h-4 w-4 mr-2" />
-                    Lihat Lelang Tersedia
-                  </Button>
-                </Link>
-              </div>
+              {auctionParticipation.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg font-medium">Belum ada partisipasi lelang.</p>
+                  <p className="text-sm mt-2">
+                    Ikuti lelang yang tersedia untuk melihat riwayat partisipasi Anda di sini.
+                  </p>
+                  <Link href="/auctions">
+                    <Button className="mt-4 bg-green-600 hover:bg-green-700">
+                      <Gavel className="h-4 w-4 mr-2" />
+                      Lihat Lelang Tersedia
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {auctionParticipation.map((item, index) => (
+                    <div 
+                      key={`${item.product_id}-${index}`}
+                      className="bg-slate-800/50 rounded-lg p-4 border border-slate-700"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        {/* No */}
+                        <div className="text-slate-400">{index + 1}</div>
+                        
+                        {/* Kode Bid */}
+                        <Badge className="bg-blue-600/20 text-blue-400 font-mono">
+                          {item.bid_code || 'N/A'}
+                        </Badge>
+                        
+                        {/* Nama Produk */}
+                        <div className="text-white font-medium">{item.product_name}</div>
+                        
+                        {/* Harga */}
+                        <div className="text-orange-400 font-mono">
+                          {formatPrice(item.final_price)}
+                        </div>
+                        
+                        {/* Status */}
+                        <div>
+                          {item.is_winner ? (
+                            <Badge className="bg-green-600/20 text-green-400 border border-green-600/30">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Menang
+                            </Badge>
+                          ) : item.auction_active ? (
+                            <Badge className="bg-purple-600/20 text-purple-400">
+                              Berlangsung
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-slate-600/20 text-slate-400">
+                              Selesai
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {/* Tanggal */}
+                        <div className="text-xs text-slate-500">
+                          {formatDateIndonesian(item.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

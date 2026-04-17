@@ -730,6 +730,24 @@ export default function AdminMarketingDashboard() {
       p.auction_active === true &&
       p.id !== selectedProductId // Exclude current product if editing
     )
+
+    const existingFinished = products.find(p => 
+      p.nama_produk?.toLowerCase() === product.nama_produk?.toLowerCase() &&
+      p.is_auction === true &&
+      p.auction_active === false
+    )
+    
+    if (existingFinished) {
+      // Produk ini pernah dilelang dan sudah selesai
+      // Admin harus duplicate produk dulu atau gunakan produk berbeda
+      const confirmReuse = confirm(
+        `Produk "${product.nama_produk}" sudah pernah dilelang sebelumnya.\n\n` +
+        `Apakah Anda yakin ingin melelang produk yang sama lagi?\n\n` +
+        `Saran: Duplicate produk terlebih dahulu untuk menghindari overwrite data.`
+      )
+      
+      if (!confirmReuse) return
+    }
     
     if (duplicateActive) {
       alert(`❌ Produk "${product.nama_produk}" sedang dalam lelang aktif!\n\nHanya 1 produk dengan nama yang sama yang bisa dilelang dalam 1 waktu.\n\nProduk yang sedang aktif: ${duplicateActive.nama_produk}`)
@@ -891,7 +909,7 @@ const confirmCancelAuction = async () => {
     setProducts(products.map(p =>
       p.id === cancellingProductId ? { 
         ...p, 
-        is_auction: false, 
+        is_auction: true, 
         auction_active: false,
         finished_auction_id: finishedId,
         auction_winner_name: winnerName,

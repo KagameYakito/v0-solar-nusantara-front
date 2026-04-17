@@ -425,6 +425,7 @@ const submitBid = async () => {
       .from('products')
       .update({ 
         current_bid_price: bidValue,
+        current_bidder_id: currentUser.id, 
         updated_at: new Date().toISOString()
       })
       .eq('id', selectedProduct.id)
@@ -666,7 +667,10 @@ const submitBid = async () => {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-slate-400">Sisa Waktu</p>
                         <p className="text-sm font-mono font-semibold text-orange-400 truncate">
-                          {timeRemaining[product.id] || 'Loading...'}
+                          {product.auction_active 
+                            ? (timeRemaining[product.id] || 'Loading...')
+                            : '0h 0j 0m 0s'
+                          }
                         </p>
                       </div>
                     </div>
