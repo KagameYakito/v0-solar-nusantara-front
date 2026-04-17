@@ -1378,10 +1378,9 @@ const confirmCancelAuction = async () => {
                         <th className="px-4 py-3 rounded-tr-lg text-right">Aksi</th>
                       </tr>
                     ) : filterView === 'finished' ? (
-                      // ✅ TABEL KHUSUS UNTUK VIEW "LELANG SELESAI"
+                      // ✅ TABEL KHUSUS UNTUK VIEW "LELANG SELESAI" - LEBIH RAPI
                       <tr>
                         <th className="px-4 py-3 rounded-tl-lg">No</th>
-                        <th className="px-4 py-3">Gambar</th>
                         <th className="px-4 py-3">Nama Produk</th>
                         <th className="px-4 py-3">Harga Final</th>
                         <th className="px-4 py-3">ID Selesai</th>
@@ -1474,19 +1473,15 @@ const confirmCancelAuction = async () => {
                           {/* ✅ INFO LELANG */}
                           <td className="px-4 py-3">
                             {filterView === 'finished' ? (
-                              // ✅ TAMPILAN KHUSUS UNTUK LELANG SELESAI
-                              <div className="space-y-2">
+                              // ✅ TAMPILAN KHUSUS UNTUK LELANG SELESAI - LEBIH RAPI
+                              <div className="space-y-1">
                                 {/* ID Selesai Lelang */}
-                                <div className="bg-pink-900/20 border border-pink-600/30 rounded px-3 py-2">
-                                  <p className="text-xs text-pink-400 font-semibold mb-1">ID Selesai:</p>
-                                  <p className="text-lg font-mono font-bold text-pink-300">
-                                    {product.finished_auction_id || 'N/A'}
-                                  </p>
-                                </div>
+                                <Badge className="bg-pink-600/20 text-pink-400 border border-pink-600/30 font-mono text-xs">
+                                  {product.finished_auction_id || 'N/A'}
+                                </Badge>
                                 
                                 {/* Pemenang */}
-                                <div className="text-xs">
-                                  <p className="text-slate-400 mb-1">Pemenang:</p>
+                                <div className="text-xs mt-2">
                                   {product.auction_winner_name ? (
                                     <p className="text-green-400 font-semibold">
                                       {product.auction_winner_name}
@@ -1495,28 +1490,6 @@ const confirmCancelAuction = async () => {
                                     <p className="text-slate-500 italic">Tidak ada pemenang</p>
                                   )}
                                 </div>
-                                
-                                {/* Alasan Selesai */}
-                                <div className="text-xs">
-                                  <p className="text-slate-400 mb-1">Status:</p>
-                                  <Badge className={`${
-                                    product.auction_end_reason === 'cancelled' 
-                                      ? 'bg-red-500/20 text-red-400 border-red-500/30' 
-                                      : product.auction_end_reason === 'no_bids'
-                                      ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                                      : 'bg-green-500/20 text-green-400 border-green-500/30'
-                                  } border`}>
-                                    {product.auction_end_reason === 'cancelled' ? 'Dibatalkan' : 
-                                    product.auction_end_reason === 'no_bids' ? 'Tidak Ada Bid' : 'Selesai Normal'}
-                                  </Badge>
-                                </div>
-                                
-                                {/* Tanggal Selesai */}
-                                {product.auction_ended_at && (
-                                  <div className="text-xs text-slate-500">
-                                    Selesai: {new Date(product.auction_ended_at).toLocaleDateString('id-ID')}
-                                  </div>
-                                )}
                               </div>
                             ) : product.is_auction && product.auction_active && product.auction_end_time ? (
                               // ✅ TAMPILAN NORMAL UNTUK LELANG AKTIF
@@ -1609,22 +1582,28 @@ const confirmCancelAuction = async () => {
                           {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
                             <div className="flex gap-2 flex-wrap">
-                              {product.is_auction && product.auction_active ? (
-                                <Badge className="bg-purple-600 text-white animate-pulse">
-                                  <Gavel className="h-3 w-3 mr-1" />
-                                  Sedang Lelang
-                                </Badge>
-                              ) : product.is_auction && !product.auction_active ? (
-                                // ✅ LELANG SELESAI - WARNA HOT PINK
-                                <Badge className="bg-pink-600 text-white">
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Lelang Selesai
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-slate-800">
-                                  Normal
-                                </Badge>
-                              )}
+                            {filterView === 'finished' ? (
+                              // ✅ STATUS KHUSUS UNTUK LELANG SELESAI
+                              <Badge className={`${
+                                product.auction_end_reason === 'cancelled' 
+                                  ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                                  : product.auction_end_reason === 'no_bids'
+                                  ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                                  : 'bg-green-500/20 text-green-400 border-green-500/30'
+                              } border`}>
+                                {product.auction_end_reason === 'cancelled' ? 'Dibatalkan' : 
+                                product.auction_end_reason === 'no_bids' ? 'Tidak Ada Bid' : 'Selesai Normal'}
+                              </Badge>
+                            ) : product.is_auction && product.auction_active ? (
+                              <Badge className="bg-purple-600 text-white animate-pulse">
+                                <Gavel className="h-3 w-3 mr-1" />
+                                Sedang Lelang
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-slate-800">
+                                Normal
+                              </Badge>
+                            )}
                               
                               {/* ✅ TAMPILKAN PEMENANG JIKA LELANG SELESAI */}
                               {product.is_auction && !product.auction_active && (
@@ -1643,9 +1622,26 @@ const confirmCancelAuction = async () => {
                             </div>
                           </td>
 
-                          {/* ✅ TANGGAL - Berbeda untuk auction vs semua produk */}
+                          {/* ✅ TANGGAL - Berbeda untuk auction vs finished vs semua produk */}
                           <td className="px-4 py-3 text-xs text-slate-500">
-                            {filterView === 'auction' ? (
+                            {filterView === 'finished' ? (
+                              // Untuk finished: tampilkan auction_ended_at
+                              product.auction_ended_at ? (
+                                <div>
+                                  <p className="text-slate-400">Selesai:</p>
+                                  <p className="text-slate-300 font-mono">
+                                    {new Date(product.auction_ended_at).toLocaleDateString('id-ID', {
+                                      day: '2-digit', month: 'short', year: 'numeric'
+                                    })}
+                                  </p>
+                                  <p className="text-slate-500 text-[10px]">
+                                    {new Date(product.auction_ended_at).toLocaleTimeString('id-ID', {
+                                      hour: '2-digit', minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                              ) : <span className="text-slate-600">-</span>
+                            ) : filterView === 'auction' ? (
                               // Untuk view auction: tampilkan auction_started_at
                               product.auction_started_at ? (
                                 <div>
