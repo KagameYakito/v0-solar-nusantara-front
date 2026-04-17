@@ -866,7 +866,7 @@ const confirmCancelAuction = async () => {
     const { error } = await supabase
       .from('products')
       .update({
-        is_auction: false,
+        is_auction: true,
         auction_active: false,
         finished_auction_id: finishedId,
         auction_winner_name: winnerName,
