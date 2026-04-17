@@ -1561,6 +1561,19 @@ const confirmCancelAuction = async () => {
                               <span className="text-slate-500 text-xs">-</span>
                             )}
                           </td>
+
+                          {/* ✅ KOLOM PEMENANG - KHUSUS FINISHED VIEW */}
+                          {filterView === 'finished' && (
+                            <td className="px-4 py-3">
+                              {product.auction_winner_name ? (
+                                <p className="text-green-400 font-semibold text-sm">
+                                  {product.auction_winner_name}
+                                </p>
+                              ) : (
+                                <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
+                              )}
+                            </td>
+                          )}
                           
                           {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
