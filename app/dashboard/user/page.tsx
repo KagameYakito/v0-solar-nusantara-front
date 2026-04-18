@@ -461,9 +461,16 @@ const fetchAuctionParticipation = useCallback(async () => {
     // Gabungkan data
     const participation = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
-      const isWinner = product?.auction_winner_name === session.user?.email || 
-                        product?.auction_winner_name === (profile?.full_name || '') ||
-                        product?.current_bidder_id === session.user.id
+      // ✅ Check if user is winner - compare winner name with user's full name or email, or check if current bidder ID matches
+      const isWinner = !product?.auction_active && (
+        (product?.auction_winner_name && (
+          product.auction_winner_name === session.user?.email || 
+          product.auction_winner_name === (profile?.full_name || '') ||
+          product.auction_winner_name.toLowerCase() === session.user?.email?.toLowerCase() ||
+          product.auction_winner_name.toLowerCase() === (profile?.full_name || '').toLowerCase()
+        )) ||
+        product?.current_bidder_id === session.user.id
+      )
       
       return {
         ...bid,
