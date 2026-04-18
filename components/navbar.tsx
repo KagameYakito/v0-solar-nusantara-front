@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Moon, Sun, Zap, Box, Loader2, AlertCircle, ArrowRight, ArrowUp} from 'lucide-react'
+import { Menu, X, Moon, Sun, LayoutDashboard, Loader2, AlertCircle, ArrowRight, ArrowUp, Languages } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AuthModals, type RegistrationData } from './auth-modals'
 import { supabase } from '@/utils/supabaseClient'
 import { useRouter } from 'next/navigation' // Import Router
+import { useLanguage } from '@/lib/language-context'
 
 export function Navbar() {
   const router = useRouter() // Inisialisasi Router
+  const { language, toggleLanguage, t } = useLanguage()
   
   // State untuk UI Mobile Menu
   const [isOpen, setIsOpen] = useState(false)
@@ -375,15 +377,15 @@ export function Navbar() {
   const navLinks: NavLink[] = [
     { 
       href: '/catalog', 
-      label: 'Products',
+      label: t.nav.products,
       onClick: handleProductsClick 
     },
     { 
       href: '/auctions', 
-      label: 'Auctions',
+      label: t.nav.auctions,
       onClick: handleAuctionsClick 
     },
-    { href: '#contact', label: 'Contact' },
+    { href: '#contact', label: t.nav.contact },
   ]
 
   // =========================================================================
@@ -433,6 +435,17 @@ export function Navbar() {
                 )}
               </button>
 
+              {/* Language Toggle */}
+              <button
+                onClick={toggleLanguage}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:bg-primary/5 hover:border-primary/40 transition-all duration-200"
+                aria-label="Toggle language"
+                title={language === 'EN' ? 'Switch to Bahasa Indonesia' : 'Switch to English'}
+              >
+                <Languages className="h-4 w-4 text-primary/70" />
+                <span className="text-xs font-bold text-foreground/80 tracking-wider">{language}</span>
+              </button>
+
               {!isLoggedIn ? (
                 <>
                   <Button
@@ -441,15 +454,15 @@ export function Navbar() {
                     onClick={handleLoginSubmit}
                     className="text-foreground/70 hover:text-primary hover:bg-primary/5 font-semibold"
                   >
-                    Log In
+                    {t.nav.login}
                   </Button>
                   <Button
                     size="sm"
                     disabled
                     className="bg-muted text-foreground/40 cursor-not-allowed font-semibold"
                   >
-                    <Box className="h-4 w-4 mr-2" />
-                    Dashboard
+                    <LayoutDashboard className="h-4 w-4 mr-2" />
+                    {t.nav.dashboard}
                   </Button>
                 </>
               ) : (
@@ -468,8 +481,8 @@ export function Navbar() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <>
-                        <Box className="h-4 w-4 mr-2" />
-                        Dashboard
+                        <LayoutDashboard className="h-4 w-4 mr-2" />
+                        {t.nav.dashboard}
                       </>
                     )}
                   </Button>
@@ -480,7 +493,7 @@ export function Navbar() {
                     variant="outline"
                     className="border-foreground/30 hover:bg-foreground/5 bg-transparent text-foreground"
                   >
-                    Sign Out
+                    {t.nav.signOut}
                   </Button>
                 </>
               )}
@@ -541,15 +554,15 @@ export function Navbar() {
                     }}
                     className="flex-1 text-foreground/80"
                   >
-                    Log In
+                    {t.nav.login}
                   </Button>
                   <Button
                     size="sm"
                     disabled
                     className="flex-1 text-foreground/50 cursor-not-allowed"
                   >
-                    <Box className="h-4 w-4 mr-1" />
-                    Dashboard
+                    <LayoutDashboard className="h-4 w-4 mr-1" />
+                    {t.nav.dashboard}
                   </Button>
                 </div>
               ) : (
@@ -578,8 +591,8 @@ export function Navbar() {
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <>
-                          <Box className="h-3 w-3 mr-1" />
-                          Dashboard
+                          <LayoutDashboard className="h-3 w-3 mr-1" />
+                          {t.nav.dashboard}
                         </>
                       )}
                     </Button>
@@ -592,8 +605,17 @@ export function Navbar() {
                       variant="outline"
                       className="flex-1 border-foreground/30 text-foreground text-xs"
                     >
-                      Sign Out
+                      {t.nav.signOut}
                     </Button>
+                  </div>
+                  <div className="flex justify-center pt-1">
+                    <button
+                      onClick={toggleLanguage}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:bg-primary/5 hover:border-primary/40 transition-all duration-200"
+                    >
+                      <Languages className="h-4 w-4 text-primary/70" />
+                      <span className="text-xs font-bold text-foreground/80 tracking-wider">{language}</span>
+                    </button>
                   </div>
                 </>
               )}
@@ -604,7 +626,7 @@ export function Navbar() {
         {showLoginAlert && (
           <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-red-600/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-2xl z-[60] animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-3 border border-red-400/30">
             <AlertCircle className="h-5 w-5" />
-            <span className="font-semibold">Login terlebih dahulu untuk akses!</span>
+            <span className="font-semibold">{t.nav.loginAlert}</span>
           </div>
         )}
 
@@ -612,7 +634,7 @@ export function Navbar() {
         {showProfileAlert && (
           <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-orange-600/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-2xl z-[60] animate-in fade-in slide-in-from-top-4 duration-300 flex items-center gap-3 border border-orange-400/30">
             <AlertCircle className="h-5 w-5" />
-            <span className="font-semibold">Lengkapi profil perusahaan terlebih dahulu!</span>
+            <span className="font-semibold">{t.nav.profileAlert}</span>
           </div>
         )}
 
