@@ -29,6 +29,7 @@ interface AuctionProduct {
   gambar_url: string | null
   auction_active: boolean
   auction_description: string | null
+  current_bidder_id: string | null
 }
 
 interface Bidder {
@@ -178,7 +179,8 @@ export default function AuctionsPage() {
         .from('products')
         .select('*')
         .eq('is_auction', true)
-        .eq('auction_active', true)
+        .or('auction_active.eq.true,and(auction_active.eq.false,current_bidder_id.not.is.null)')
+        .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
 
       if (error) throw error
