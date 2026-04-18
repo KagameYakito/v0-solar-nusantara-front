@@ -106,6 +106,9 @@ export default function AdminMarketingDashboard() {
   
   const [showBidDeadline, setShowBidDeadline] = useState<Record<string, boolean>>({})
   
+  // ✅ Store winner names fetched from profiles
+  const [winnerNames, setWinnerNames] = useState<Record<string, string>>({})
+  
   // ✅ WISHLIST ANALYTICS STATE
   const [wishlistItems, setWishlistItems] = useState<GroupedWishlistItem[]>([])
   const [wishlistTotal, setWishlistTotal] = useState(0)
@@ -452,6 +455,43 @@ export default function AdminMarketingDashboard() {
     }
   }, [isAuthorized, fetchProducts])
 
+  // ✅ Fetch winner names for finished auctions that don't have auction_winner_name
+  useEffect(() => {
+    const fetchWinnerNames = async () => {
+      if (filterView !== 'finished') return
+      
+      const productsNeedingNames = products.filter(
+        p => p.is_auction && !p.auction_active && !p.auction_winner_name && p.current_bidder_id
+      )
+      
+      if (productsNeedingNames.length === 0) return
+      
+      const newWinnerNames: Record<string, string> = { ...winnerNames }
+      
+      for (const product of productsNeedingNames) {
+        if (product.current_bidder_id && !newWinnerNames[product.id]) {
+          try {
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', product.current_bidder_id)
+              .single()
+            
+            if (profileData) {
+              newWinnerNames[product.id] = profileData.full_name || profileData.email || product.current_bidder_id
+            }
+          } catch (err) {
+            console.error('Failed to fetch winner name:', err)
+          }
+        }
+      }
+      
+      setWinnerNames(newWinnerNames)
+    }
+    
+    fetchWinnerNames()
+  }, [products, filterView])
+
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
     setEditingPrice((currentPrice || 0).toString())
@@ -516,6 +556,24 @@ export default function AdminMarketingDashboard() {
                 ? 'completed' 
                 : 'no_bids'
               
+              // ✅ Generate finished auction ID
+              const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+              const finishedId = idData || `#${String(Date.now()).slice(-6)}`
+              
+              // ✅ Fetch winner name from profiles if there's a current bidder
+              let winnerName = null
+              if (product.current_bidder_id) {
+                const { data: profileData } = await supabase
+                  .from('profiles')
+                  .select('full_name, email')
+                  .eq('id', product.current_bidder_id)
+                  .single()
+                
+                if (profileData) {
+                  winnerName = profileData.full_name || profileData.email || product.current_bidder_id
+                }
+              }
+              
               await supabase
                 .from('products')
                 .update({
@@ -523,12 +581,13 @@ export default function AdminMarketingDashboard() {
                   is_auction: true,  // ✅ JANGAN UBAH KE FALSE
                   auction_end_reason: endReason,  // ✅ SIMPAN REASON
                   auction_ended_at: new Date().toISOString(),  // ✅ SIMPAN WAKTU
+                  finished_auction_id: finishedId,  // ✅ SIMPAN ID SELESAI
                   // ✅ SIMPAN PEMENANG JIKA ADA
-                  auction_winner_name: product.current_bidder_id || null
+                  auction_winner_name: winnerName
                 })
                 .eq('id', product.id)
               
-              alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!`)
+              alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!${winnerName ? `\nPemenang: ${winnerName}` : ''}`)
               
               // Refresh data
               fetchProducts()
@@ -917,9 +976,22 @@ const confirmCancelAuction = async () => {
     
     // 2. Get current bidder info
     const product = products.find(p => p.id === cancellingProductId)
-    const winnerName = product?.current_bidder_id || null
+    let winnerName = null
     
-    // 3. Update product dengan info finished auction
+    // 3. Fetch winner name from profiles if there's a current bidder
+    if (product?.current_bidder_id) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', product.current_bidder_id)
+        .single()
+      
+      if (profileData) {
+        winnerName = profileData.full_name || profileData.email || product.current_bidder_id
+      }
+    }
+    
+    // 4. Update product dengan info finished auction
     const { error } = await supabase
       .from('products')
       .update({
@@ -1665,6 +1737,14 @@ const duplicateAndAuction = async (productId: string) => {
                                 <p className="text-green-400 font-semibold text-sm">
                                   {product.auction_winner_name}
                                 </p>
+                              ) : winnerNames[product.id] ? (
+                                <p className="text-green-400 font-semibold text-sm">
+                                  {winnerNames[product.id]}
+                                </p>
+                              ) : product.current_bidder_id ? (
+                                <p className="text-yellow-400 font-semibold text-sm italic">
+                                  Loading...
+                                </p>
                               ) : (
                                 <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
                               )}
@@ -1701,11 +1781,15 @@ const duplicateAndAuction = async (productId: string) => {
                             )}
                               
                               {/* ✅ TAMPILKAN PEMENANG JIKA LELANG SELESAI */}
-                              {product.is_auction && !product.auction_active && (
+                              {product.is_auction && !product.auction_active && filterView !== 'finished' && (
                                 <div className="w-full mt-1 text-xs">
-                                  {product.current_bidder_id ? (
+                                  {product.auction_winner_name ? (
                                     <span className="text-pink-400">
-                                      Pemenang: {product.current_bidder_id}
+                                      Pemenang: {product.auction_winner_name}
+                                    </span>
+                                  ) : winnerNames[product.id] ? (
+                                    <span className="text-pink-400">
+                                      Pemenang: {winnerNames[product.id]}
                                     </span>
                                   ) : (
                                     <span className="text-slate-500">
