@@ -1,6 +1,7 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { LanguageProvider } from '@/lib/language-context'
 
 import './globals.css'
 
@@ -46,7 +47,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased"><LanguageProvider>{children}</LanguageProvider></body>
     </html>
   )
 }

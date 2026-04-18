@@ -15,6 +15,7 @@ import {
   Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, 
   MessageSquare, Bookmark, CheckCircle2, XCircle, Lock 
 } from 'lucide-react'
+import { useLanguage } from '@/lib/language-context'
 
 interface Profile {
   id: string
@@ -89,6 +90,7 @@ const supabase = createClient(
 
 export default function UserDashboard() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAuthorized, setIsAuthorized] = useState(false)
@@ -885,7 +887,7 @@ const confirmSubmitRequest = async () => {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
         <Loader2 className="h-8 w-8 animate-spin text-green-500" />
-        <span className="ml-2">Memuat Dashboard...</span>
+        <span className="ml-2">{t.dashboard.loading}</span>
       </div>
     )
   }
@@ -894,10 +896,10 @@ const confirmSubmitRequest = async () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white p-4">
         <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-        <h2 className="text-xl font-bold mb-2">Terjadi Kesalahan</h2>
+        <h2 className="text-xl font-bold mb-2">{t.dashboard.errorTitle}</h2>
         <p className="text-slate-400 mb-4 max-w-md text-center">{error}</p>
         <button onClick={() => window.location.reload()} className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 transition">
-          Coba Lagi
+          {t.dashboard.retryBtn}
         </button>
       </div>
     )
@@ -919,7 +921,7 @@ const confirmSubmitRequest = async () => {
             <div className="bg-slate-800 p-2 rounded-lg group-hover:bg-slate-700 border border-slate-700">
               <ArrowLeft className="h-5 w-5" />
             </div>
-            <span className="text-sm font-medium hidden sm:inline">Back to Home</span>
+            <span className="text-sm font-medium hidden sm:inline">{t.dashboard.backHome}</span>
           </Link>
           {/* ... header content ... */}
         </div>
@@ -928,7 +930,7 @@ const confirmSubmitRequest = async () => {
           <Link href="/catalog">
             <Button className="bg-blue-600 hover:bg-blue-700">
               <ExternalLink className="h-4 w-4 mr-2" />
-              Ke Katalog
+              {t.dashboard.toCatalog}
             </Button>
           </Link>
           <Badge variant="outline" className={`px-4 py-2 ${
@@ -939,12 +941,12 @@ const confirmSubmitRequest = async () => {
             {completionPercentage === 100 ? (
               <>
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Profil Lengkap
+                {t.dashboard.profileComplete}
               </>
             ) : (
               <>
                 <AlertCircle className="h-4 w-4 mr-2" />
-                Profil {completionPercentage}% Lengkap
+                {t.dashboard.profileIncomplete} {completionPercentage}{t.dashboard.profileCompleteSuffix}
               </>
             )}
           </Badge>
@@ -958,10 +960,10 @@ const confirmSubmitRequest = async () => {
               <AlertCircle className="h-5 w-5 text-orange-400" />
               <div>
                 <p className="text-orange-400 font-medium">
-                  Lengkapi profil perusahaan Anda untuk mengikuti lelang
+                  {t.dashboard.profileIncompleteAlert}
                 </p>
                 <p className="text-orange-300/70 text-sm">
-                  Profil yang lengkap meningkatkan kepercayaan seller dan akses ke lelang eksklusif.
+                  {t.dashboard.profileIncompleteAlertDesc}
                 </p>
               </div>
             </div>
@@ -974,7 +976,7 @@ const confirmSubmitRequest = async () => {
         <TabsList className="grid w-full grid-cols-4 bg-slate-900 border border-slate-800">
           <TabsTrigger value="profile" className="data-[state=active]:bg-green-600">
             <Building2 className="h-4 w-4 mr-2" />
-            Profil Perusahaan
+            {t.dashboard.tabs.profile}
           </TabsTrigger>
           <TabsTrigger 
             value="auctions" 
@@ -986,7 +988,7 @@ const confirmSubmitRequest = async () => {
             }}
           >
             <Gavel className="h-4 w-4 mr-2" />
-            Riwayat Lelang
+            {t.dashboard.tabs.auctions}
           </TabsTrigger>
           <TabsTrigger 
             value="bids" 
@@ -998,7 +1000,7 @@ const confirmSubmitRequest = async () => {
             }}
           >
             <History className="h-4 w-4 mr-2" />
-            Riwayat Bid
+            {t.dashboard.tabs.bids}
           </TabsTrigger>
           <TabsTrigger 
             value="requests" 
@@ -1010,7 +1012,7 @@ const confirmSubmitRequest = async () => {
             }}
           >
             <ShoppingCart className="h-4 w-4 mr-2" />
-            Permintaan Produk
+            {t.dashboard.tabs.requests}
           </TabsTrigger>
         </TabsList>
 
@@ -1033,10 +1035,10 @@ const confirmSubmitRequest = async () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-400">
                 <AlertCircle className="h-5 w-5" />
-                Profil Belum Lengkap
+                {t.dashboard.profileModal.title}
               </DialogTitle>
               <DialogDescription className="text-slate-400">
-                Lengkapilah profil terlebih dahulu sebelum mengakses fitur!
+                {t.dashboard.profileModal.desc}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -1048,7 +1050,7 @@ const confirmSubmitRequest = async () => {
                 className="bg-green-600 hover:bg-green-700 w-full"
               >
                 <Edit2 className="h-4 w-4 mr-2" />
-                Isi Profil Sekarang
+                {t.dashboard.profileModal.fillNow}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1061,7 +1063,7 @@ const confirmSubmitRequest = async () => {
               <CardTitle className="flex items-center justify-between text-white">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-green-400" />
-                  Informasi Perusahaan
+                  {t.dashboard.profileCard.title}
                 </div>
                 {!isEditing ? (
                   <Button
@@ -1073,7 +1075,7 @@ const confirmSubmitRequest = async () => {
                     }`}
                   >
                     <Edit2 className="h-4 w-4 mr-2" />
-                    {isProfileLocked() ? `Terkunci (${getLockRemainingDays()} hari)` : 'Edit Profil'}
+                    {isProfileLocked() ? `${t.dashboard.profileCard.locked} (${getLockRemainingDays()} ${t.dashboard.profileCard.lockedDays})` : t.dashboard.profileCard.editProfile}
                   </Button>
                 ) : (
                   <div className="flex gap-2">
@@ -1085,7 +1087,7 @@ const confirmSubmitRequest = async () => {
                       disabled={saving}
                     >
                       <X className="h-4 w-4 mr-2" />
-                      Batal
+                      {t.dashboard.profileCard.cancel}
                     </Button>
                     <Button
                       size="sm"
@@ -1096,12 +1098,12 @@ const confirmSubmitRequest = async () => {
                       {saving ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Menyimpan...
+                          {t.dashboard.profileCard.saving}
                         </>
                       ) : (
                         <>
                           <Save className="h-4 w-4 mr-2" />
-                          Simpan
+                          {t.dashboard.profileCard.save}
                         </>
                       )}
                     </Button>
@@ -1113,17 +1115,16 @@ const confirmSubmitRequest = async () => {
                   <div className="flex items-center gap-2 text-amber-400">
                     <Lock className="h-5 w-5" />
                     <p className="font-medium">
-                      Profil terkunci selama {getLockRemainingDays()} hari lagi
+                      {t.dashboard.profileCard.lockedNotice} {getLockRemainingDays()} {t.dashboard.profileCard.lockedDays}
                     </p>
                   </div>
                   <p className="text-amber-300/70 text-sm mt-2">
-                    Profil terkunci setelah wishlist pertama untuk menjaga integritas data. 
-                    Jika ada kesalahan, hubungi admin.
+                    {t.dashboard.profileCard.lockedNoticeDesc}
                   </p>
                 </div>
               )}
               <CardDescription className="text-slate-400">
-                Lengkapi informasi perusahaan untuk verifikasi dan partisipasi lelang B2B.
+                {t.dashboard.profileCard.cardDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1132,7 +1133,7 @@ const confirmSubmitRequest = async () => {
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <User className="h-4 w-4" />
-                    Nama Lengkap
+                    {t.dashboard.profileCard.fullName}
                   </label>
                   {isEditing ? (
                     <input
@@ -1153,7 +1154,7 @@ const confirmSubmitRequest = async () => {
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <Mail className="h-4 w-4" />
-                    Email
+                    {t.dashboard.profileCard.email}
                   </label>
                   <p className="text-white bg-slate-800/50 rounded px-4 py-2">
                     {profile?.email || '-'}
@@ -1164,7 +1165,7 @@ const confirmSubmitRequest = async () => {
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
-                    Nama Perusahaan
+                    {t.dashboard.profileCard.companyName}
                   </label>
                   {isEditing ? (
                     <input
@@ -1183,14 +1184,14 @@ const confirmSubmitRequest = async () => {
 
                 {/* Tipe Perusahaan */}
                 <div>
-                  <label className="text-sm text-slate-400 mb-1 block">Tipe Perusahaan</label>
+                  <label className="text-sm text-slate-400 mb-1 block">{t.dashboard.profileCard.companyType}</label>
                   {isEditing ? (
                     <select
                       value={formData.company_type}
                       onChange={(e) => setFormData({...formData, company_type: e.target.value})}
                       className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-green-500"
                     >
-                      <option value="">Pilih Tipe</option>
+                      <option value="">{t.dashboard.profileCard.selectType}</option>
                       <option value="PT">PT (Perseroan Terbatas)</option>
                       <option value="CV">CV (Commanditaire Vennootschap)</option>
                       <option value="UD">UD (Usaha Dagang)</option>
@@ -1209,7 +1210,7 @@ const confirmSubmitRequest = async () => {
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <FileText className="h-4 w-4" />
-                    NPWP / Tax ID
+                    {t.dashboard.profileCard.taxId}
                   </label>
                   {isEditing ? (
                     <input
@@ -1230,7 +1231,7 @@ const confirmSubmitRequest = async () => {
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                     <Phone className="h-4 w-4" />
-                    Nomor Telepon
+                    {t.dashboard.profileCard.phone}
                   </label>
                   {isEditing ? (
                     <input
@@ -1252,7 +1253,7 @@ const confirmSubmitRequest = async () => {
               <div>
                 <label className="text-sm text-slate-400 mb-1 block flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  Alamat Perusahaan
+                  {t.dashboard.profileCard.companyAddress}
                 </label>
                 {isEditing ? (
                   <textarea
