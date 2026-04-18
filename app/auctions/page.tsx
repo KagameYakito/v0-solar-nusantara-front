@@ -179,7 +179,7 @@ export default function AuctionsPage() {
         .from('products')
         .select('*')
         .eq('is_auction', true)
-        .or('auction_active.eq.true,current_bidder_id.not.is.null')
+        .or('auction_active.eq.true,and(auction_active.eq.false,current_bidder_id.not.is.null)')
         .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
 
