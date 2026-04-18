@@ -455,21 +455,30 @@ export default function AdminMarketingDashboard() {
     }
   }, [isAuthorized, fetchProducts])
 
-  // ✅ Fetch winner names for finished auctions that don't have auction_winner_name
+  // ✅ Fetch and save winner data for finished auctions missing auction_winner_name or finished_auction_id
   useEffect(() => {
-    const fetchWinnerNames = async () => {
+    const fetchAndSaveWinnerData = async () => {
       if (filterView !== 'finished') return
       
-      const productsNeedingNames = products.filter(
-        p => p.is_auction && !p.auction_active && !p.auction_winner_name && p.current_bidder_id
+      // Find finished auctions missing winner name OR finished_auction_id
+      const productsNeedingUpdate = products.filter(
+        p => p.is_auction && !p.auction_active && (
+          (!p.auction_winner_name && p.current_bidder_id) ||
+          !p.finished_auction_id
+        )
       )
       
-      if (productsNeedingNames.length === 0) return
+      if (productsNeedingUpdate.length === 0) return
       
       const newWinnerNames: Record<string, string> = {}
+      let didUpdate = false
       
-      for (const product of productsNeedingNames) {
-        if (product.current_bidder_id) {
+      for (const product of productsNeedingUpdate) {
+        let winnerName = product.auction_winner_name
+        let finishedId = product.finished_auction_id
+        
+        // Fetch winner name if missing and bidder exists
+        if (!winnerName && product.current_bidder_id) {
           try {
             const { data: profileData } = await supabase
               .from('profiles')
@@ -478,22 +487,55 @@ export default function AdminMarketingDashboard() {
               .single()
             
             if (profileData) {
-              newWinnerNames[product.id] = profileData.full_name || profileData.email || product.current_bidder_id
+              winnerName = profileData.full_name || profileData.email || product.current_bidder_id
             }
           } catch (err) {
             console.error('Failed to fetch winner name:', err)
           }
         }
+        
+        // Generate finished_auction_id if missing
+        if (!finishedId) {
+          try {
+            const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+            finishedId = idData || `#${String(Date.now()).slice(-6)}`
+          } catch {
+            finishedId = `#${String(Date.now()).slice(-6)}`
+          }
+        }
+        
+        // Build update payload for fields that are still missing
+        const updateData: Record<string, string> = {}
+        if (winnerName && !product.auction_winner_name) updateData.auction_winner_name = winnerName
+        if (finishedId && !product.finished_auction_id) updateData.finished_auction_id = finishedId
+        
+        if (Object.keys(updateData).length > 0) {
+          try {
+            await supabase
+              .from('products')
+              .update(updateData)
+              .eq('id', product.id)
+            didUpdate = true
+          } catch (err) {
+            console.error('Failed to save winner data to DB:', err)
+          }
+        }
+        
+        if (winnerName) newWinnerNames[product.id] = winnerName
       }
       
-      // Use functional update to avoid stale closure
       if (Object.keys(newWinnerNames).length > 0) {
         setWinnerNames(prev => ({ ...prev, ...newWinnerNames }))
       }
+      
+      // Refresh products from DB so UI shows the newly saved data
+      if (didUpdate) {
+        fetchProducts()
+      }
     }
     
-    fetchWinnerNames()
-  }, [products, filterView])
+    fetchAndSaveWinnerData()
+  }, [products, filterView, fetchProducts])
 
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
@@ -536,74 +578,79 @@ export default function AdminMarketingDashboard() {
     }
   }
 
-  // ✅ Check bid deadline dan auto-end auction
+  // ✅ Check bid deadline dan auction end time, lalu auto-end auction
   useEffect(() => {
-    const checkBidDeadlines = async () => {
-      const now = new Date().getTime()
-      
-      products.forEach(async (product) => {
-        // Check jika bid deadline sudah habis dan ada bid
-        if (product.auction_active && 
-            product.bid_deadline_time && 
-            product.current_bid_price && 
-            product.current_bid_price > 0) {
+    const autoEndAuction = async (product: Product, reason: string) => {
+      try {
+        const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+        const finishedId = idData || `#${String(Date.now()).slice(-6)}`
+        
+        let winnerName = null
+        if (product.current_bidder_id) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', product.current_bidder_id)
+            .single()
           
-          const bidDeadline = new Date(product.bid_deadline_time).getTime()
-          
-          // Jika bid deadline sudah lewat
-          if (bidDeadline < now) {
-            // Auto end auction
-            try {
-              // ✅ TENTUKAN REASON: completed jika ada bid, no_bids jika tidak ada
-              const endReason = product.current_bid_price && product.current_bid_price > 0 
-                ? 'completed' 
-                : 'no_bids'
-              
-              // ✅ Generate finished auction ID
-              const { data: idData } = await supabase.rpc('generate_finished_auction_id')
-              const finishedId = idData || `#${String(Date.now()).slice(-6)}`
-              
-              // ✅ Fetch winner name from profiles if there's a current bidder
-              let winnerName = null
-              if (product.current_bidder_id) {
-                const { data: profileData } = await supabase
-                  .from('profiles')
-                  .select('full_name, email')
-                  .eq('id', product.current_bidder_id)
-                  .single()
-                
-                if (profileData) {
-                  winnerName = profileData.full_name || profileData.email || product.current_bidder_id
-                }
-              }
-              
-              await supabase
-                .from('products')
-                .update({
-                  auction_active: false,
-                  is_auction: true,  // ✅ JANGAN UBAH KE FALSE
-                  auction_end_reason: endReason,  // ✅ SIMPAN REASON
-                  auction_ended_at: new Date().toISOString(),  // ✅ SIMPAN WAKTU
-                  finished_auction_id: finishedId,  // ✅ SIMPAN ID SELESAI
-                  // ✅ SIMPAN PEMENANG JIKA ADA
-                  auction_winner_name: winnerName
-                })
-                .eq('id', product.id)
-              
-              alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!${winnerName ? `\nPemenang: ${winnerName}` : ''}`)
-              
-              // Refresh data
-              fetchProducts()
-            } catch (err) {
-              console.error("Failed to auto-end auction:", err)
-            }
+          if (profileData) {
+            winnerName = profileData.full_name || profileData.email || product.current_bidder_id
           }
         }
-      })
+        
+        await supabase
+          .from('products')
+          .update({
+            auction_active: false,
+            is_auction: true,
+            auction_end_reason: reason,
+            auction_ended_at: new Date().toISOString(),
+            finished_auction_id: finishedId,
+            auction_winner_name: winnerName
+          })
+          .eq('id', product.id)
+        
+        alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!${winnerName ? `\nPemenang: ${winnerName}` : ''}`)
+        fetchProducts()
+      } catch (err) {
+        console.error("Failed to auto-end auction:", err)
+      }
+    }
+
+    const checkAuctionDeadlines = async () => {
+      const now = new Date().getTime()
+      
+      for (const product of products) {
+        if (!product.auction_active) continue
+
+        const bidDeadlineMs = product.bid_deadline_time ? new Date(product.bid_deadline_time).getTime() : 0
+        const auctionEndMs = product.auction_end_time ? new Date(product.auction_end_time).getTime() : 0
+
+        // ✅ Case 1: bid deadline expired and there is an active bid
+        const bidDeadlineExpired =
+          bidDeadlineMs > 0 &&
+          bidDeadlineMs < now &&
+          product.current_bid_price &&
+          product.current_bid_price > 0
+
+        if (bidDeadlineExpired) {
+          const endReason = 'completed'
+          await autoEndAuction(product, endReason)
+          continue // Skip auction_end_time check for this product
+        }
+
+        // ✅ Case 2: auction end time expired (covers no-bid or bid-deadline-not-set scenarios)
+        if (auctionEndMs > 0 && auctionEndMs < now) {
+          const endReason = product.current_bid_price && product.current_bid_price > 0
+            ? 'completed'
+            : 'no_bids'
+          await autoEndAuction(product, endReason)
+        }
+      }
     }
     
     // Check setiap 10 detik
-    const interval = setInterval(checkBidDeadlines, 10000)
+    const interval = setInterval(checkAuctionDeadlines, 10000)
     return () => clearInterval(interval)
   }, [products])
 
