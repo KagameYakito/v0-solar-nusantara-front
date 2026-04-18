@@ -98,24 +98,32 @@ export default function CatalogPage() {
   if (!isAuthorized) return null
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] to-[#1e293b] animate-fade-in">
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted/30 animate-fade-in">
       {/* Header */}
-      <header className="border-b border-foreground/15 bg-card/50 backdrop-blur p-4 sticky top-0 z-40">
+      <header className="border-b-2 border-border bg-card/80 backdrop-blur-xl shadow-sm p-5 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Lock className="h-5 w-5 text-primary" />
-            Exclusive Product Catalog
-          </h1>
+          <div className="flex items-center gap-3">
+            <img 
+              src="/solar-nusantara-logo.svg" 
+              alt="Solar Nusantara" 
+              className="h-10 w-auto"
+            />
+            <div className="h-8 w-px bg-border" />
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent flex items-center gap-2">
+              <Lock className="h-5 w-5 text-primary" />
+              Product Catalog
+            </h1>
+          </div>
           <Link href="/">
-            <Button variant="outline" className="border-foreground/30 hover:bg-foreground/5 rounded-lg text-foreground flex items-center gap-2 bg-transparent">
+            <Button variant="outline" className="border-2 border-primary/40 hover:bg-primary/10 hover:border-primary rounded-xl text-foreground font-semibold flex items-center gap-2 bg-transparent transition-all duration-200">
               <ArrowLeft className="h-4 w-4" /> Back to Home
             </Button>
           </Link>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <main className="max-w-7xl mx-auto p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           
           {/* SIDEBAR KIRI */}
           <div className="lg:col-span-1">
@@ -136,11 +144,11 @@ export default function CatalogPage() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Cari produk (misal: battery, inverter)..."
+                placeholder="Search products (e.g., battery, inverter)..."
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full bg-card/50 border border-foreground/15 rounded-lg py-3 px-4 pl-10 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full bg-card/60 border-2 border-border rounded-xl py-4 px-4 pl-12 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all duration-200 font-medium placeholder-foreground/50"
               />
-              <svg className="w-5 h-5 text-foreground/50 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <svg className="w-5 h-5 text-primary/70 absolute left-4 top-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
 
             {/* Grid Produk */}
@@ -149,11 +157,11 @@ export default function CatalogPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : error ? (
-              <div className="text-red-500 text-center p-4">Error: {error}</div>
+              <div className="text-red-500 text-center p-8 bg-red-500/10 rounded-xl border-2 border-red-500/20">Error: {error}</div>
             ) : products.length === 0 ? (
-              <div className="text-center p-12 bg-card/30 rounded-lg border border-foreground/10">
-                <p className="text-xl text-foreground/70">Tidak ada produk ditemukan.</p>
-                <p className="text-sm text-foreground/50 mt-2">Coba ubah kategori atau kata kunci pencarian.</p>
+              <div className="text-center p-16 bg-card/60 rounded-2xl border-2 border-border">
+                <p className="text-xl text-foreground/70 font-semibold">No products found.</p>
+                <p className="text-sm text-foreground/50 mt-2">Try changing the category or search keywords.</p>
               </div>
             ) : (
               <>

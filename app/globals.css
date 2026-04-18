@@ -4,50 +4,50 @@
 
 @layer base {
   :root {
-    /* Light mode */
+    /* Light mode - Professional Green Energy Theme */
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --foreground: 210 20% 15%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 210 20% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 216 100% 50%;
+    --popover-foreground: 210 20% 15%;
+    --primary: 200 85% 45%; /* Deep Ocean Blue */
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 100% 50%;
+    --secondary: 142 76% 36%; /* Forest Green */
     --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 216 100% 50%;
+    --muted: 210 15% 96%;
+    --muted-foreground: 210 10% 45%;
+    --accent: 162 70% 40%; /* Teal Green */
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 216 100% 50%;
+    --border: 210 15% 90%;
+    --input: 210 15% 90%;
+    --ring: 200 85% 45%;
     --radius: 0.5rem;
   }
 
   .dark {
-    /* Dark mode - deep navy with electric blue accents */
-    --background: 224 36% 6%;
+    /* Dark mode - Deep Ocean with Green Energy Accents */
+    --background: 210 25% 8%;
     --foreground: 0 0% 98%;
-    --card: 224 36% 10%;
+    --card: 210 25% 12%;
     --card-foreground: 0 0% 98%;
-    --popover: 224 36% 10%;
+    --popover: 210 25% 12%;
     --popover-foreground: 0 0% 98%;
-    --primary: 216 100% 55%;
+    --primary: 200 90% 55%; /* Bright Blue */
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 100% 50%;
+    --secondary: 142 70% 45%; /* Vibrant Green */
     --secondary-foreground: 0 0% 100%;
-    --muted: 224 10% 30%;
+    --muted: 210 15% 25%;
     --muted-foreground: 0 0% 70%;
-    --accent: 216 100% 55%;
+    --accent: 162 65% 50%; /* Bright Teal */
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 224 20% 18%;
-    --input: 224 20% 18%;
-    --ring: 216 100% 55%;
+    --border: 210 20% 20%;
+    --input: 210 20% 20%;
+    --ring: 200 90% 55%;
   }
 }
 

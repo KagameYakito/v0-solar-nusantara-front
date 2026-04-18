@@ -53,35 +53,35 @@ export function Solutions() {
   return (
     <section
       id="solutions"
-      className="relative py-24 px-4 md:px-8"
+      className="relative py-28 px-4 md:px-8"
     >
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 text-foreground">
+        <div className="text-center mb-20">
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
             Industry Solutions
           </h2>
-          <p className="text-foreground/70 text-lg max-w-2xl mx-auto">
+          <p className="text-foreground/70 text-lg max-w-2xl mx-auto font-medium">
             Purpose-built solar systems for commercial, industrial, and grid integration applications.
           </p>
         </div>
 
         {/* Solutions Grid */}
-        <div className="grid md:grid-cols-2 gap-8 mb-16">
+        <div className="grid md:grid-cols-2 gap-8 mb-20">
           {solutions.map((solution, idx) => {
             const Icon = solution.icon
             return (
               <div
                 key={idx}
-                className="group relative bg-card/50 backdrop-blur border border-foreground/15 rounded-xl p-8 hover:border-primary/50 transition-all duration-300"
+                className="group relative bg-card/60 backdrop-blur-sm border-2 border-border hover:border-accent/40 rounded-2xl p-8 hover:shadow-xl hover:shadow-accent/10 transition-all duration-300"
               >
                 {/* Icon Container */}
-                <div className="inline-flex items-center justify-center h-14 w-14 rounded-lg bg-gradient-to-br from-primary to-secondary mb-6 group-hover:shadow-lg group-hover:shadow-primary/40 transition-shadow duration-300">
-                  <Icon className="h-7 w-7 text-white" />
+                <div className="inline-flex items-center justify-center h-16 w-16 rounded-xl bg-gradient-to-br from-accent to-secondary mb-6 group-hover:shadow-lg group-hover:shadow-accent/30 transition-all duration-300">
+                  <Icon className="h-8 w-8 text-white" />
                 </div>
 
                 {/* Title */}
-                <h3 className="text-2xl font-bold mb-3 text-foreground">
+                <h3 className="text-2xl font-bold mb-4 text-foreground">
                   {solution.title}
                 </h3>
 
@@ -94,10 +94,10 @@ export function Solutions() {
                 <ul className="space-y-3">
                   {solution.benefits.map((benefit, i) => (
                     <li key={i} className="flex items-start space-x-3">
-                      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
-                        <div className="w-2 h-2 rounded-full bg-primary" />
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-secondary/20 flex items-center justify-center mt-0.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-secondary" />
                       </div>
-                      <span className="text-sm text-foreground/80">{benefit}</span>
+                      <span className="text-sm text-foreground/80 font-medium">{benefit}</span>
                     </li>
                   ))}
                 </ul>
@@ -107,12 +107,12 @@ export function Solutions() {
         </div>
 
         {/* Key Differentiators */}
-        <div className="bg-card/40 border border-foreground/15 rounded-2xl p-12">
-          <h3 className="text-3xl font-bold text-center mb-12 text-foreground">
+        <div className="bg-gradient-to-br from-primary/5 via-accent/5 to-secondary/5 border-2 border-border rounded-3xl p-12 shadow-lg">
+          <h3 className="text-3xl font-bold text-center mb-16 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             Why Solar Nusantara
           </h3>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-10">
             {[
               {
                 label: 'Industry Experience',
@@ -130,11 +130,11 @@ export function Solutions() {
                 desc: 'Proven financial returns for clients',
               },
             ].map((stat, idx) => (
-              <div key={idx} className="text-center">
-                <div className="text-4xl font-bold text-primary mb-3">
+              <div key={idx} className="text-center p-6 rounded-2xl bg-background/60 border border-border hover:border-primary/30 transition-all duration-200">
+                <div className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
                   {stat.value}
                 </div>
-                <div className="font-semibold text-foreground mb-2">
+                <div className="font-bold text-foreground mb-3 text-lg">
                   {stat.label}
                 </div>
                 <p className="text-sm text-foreground/70">{stat.desc}</p>
