@@ -110,6 +110,8 @@ export default function AdminMarketingDashboard() {
   
   // ✅ Store winner names fetched from profiles
   const [winnerNames, setWinnerNames] = useState<Record<string, string>>({})
+  // ✅ Track which finished-auction product IDs have completed winner fetch (for loading UX)
+  const [winnersFetched, setWinnersFetched] = useState<Set<string>>(new Set())
   
   // ✅ WISHLIST ANALYTICS STATE
   const [wishlistItems, setWishlistItems] = useState<GroupedWishlistItem[]>([])
@@ -462,12 +464,21 @@ export default function AdminMarketingDashboard() {
     const fetchAndSaveWinnerData = async () => {
       if (filterView !== 'finished') return
       
+      const finishedProducts = products.filter(p => p.is_auction && !p.auction_active)
+
+      // Immediately mark products that already have winner data as fetched
+      const alreadyDone = finishedProducts.filter(p => p.auction_winner_name).map(p => p.id)
+      if (alreadyDone.length > 0) {
+        setWinnersFetched(prev => {
+          const next = new Set(prev)
+          alreadyDone.forEach(id => next.add(id))
+          return next
+        })
+      }
+
       // Find finished auctions missing winner name OR finished_auction_id
-      const productsNeedingUpdate = products.filter(
-        p => p.is_auction && !p.auction_active && (
-          (!p.auction_winner_name && p.current_bidder_id) ||
-          !p.finished_auction_id
-        )
+      const productsNeedingUpdate = finishedProducts.filter(
+        p => !p.auction_winner_name || !p.finished_auction_id
       )
       
       if (productsNeedingUpdate.length === 0) return
@@ -478,21 +489,50 @@ export default function AdminMarketingDashboard() {
       for (const product of productsNeedingUpdate) {
         let winnerName = product.auction_winner_name
         let finishedId = product.finished_auction_id
+        let currentBidderId = product.current_bidder_id
         
-        // Fetch winner name if missing and bidder exists
-        if (!winnerName && product.current_bidder_id) {
+        // Fetch winner name if missing and bidder exists in products table
+        if (!winnerName && currentBidderId) {
           try {
             const { data: profileData } = await supabase
               .from('profiles')
               .select('full_name, email')
-              .eq('id', product.current_bidder_id)
+              .eq('id', currentBidderId)
               .single()
             
             if (profileData) {
-              winnerName = profileData.full_name || profileData.email || product.current_bidder_id
+              winnerName = profileData.full_name || profileData.email || currentBidderId
             }
           } catch (err) {
             console.error('Failed to fetch winner name:', err)
+          }
+        }
+        
+        // ✅ Fallback: query auction_bids for the highest bidder when current_bidder_id is not set
+        if (!winnerName && !currentBidderId) {
+          try {
+            const { data: topBid } = await supabase
+              .from('auction_bids')
+              .select('bidder_id, bid_price')
+              .eq('product_id', product.id)
+              .order('bid_price', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            
+            if (topBid?.bidder_id) {
+              currentBidderId = topBid.bidder_id
+              const { data: profileData } = await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', topBid.bidder_id)
+                .single()
+              
+              if (profileData) {
+                winnerName = profileData.full_name || profileData.email || topBid.bidder_id
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch winner from auction_bids:', err)
           }
         }
         
@@ -509,6 +549,7 @@ export default function AdminMarketingDashboard() {
         // Build update payload for fields that are still missing
         const updateData: Record<string, string> = {}
         if (winnerName && !product.auction_winner_name) updateData.auction_winner_name = winnerName
+        if (currentBidderId && !product.current_bidder_id) updateData.current_bidder_id = currentBidderId
         if (finishedId && !product.finished_auction_id) updateData.finished_auction_id = finishedId
         
         if (Object.keys(updateData).length > 0) {
@@ -520,6 +561,7 @@ export default function AdminMarketingDashboard() {
             // Track local updates to apply to state directly (avoids fetchProducts re-trigger)
             localUpdates[product.id] = {
               ...(winnerName && !product.auction_winner_name ? { auction_winner_name: winnerName } : {}),
+              ...(currentBidderId && !product.current_bidder_id ? { current_bidder_id: currentBidderId } : {}),
               ...(finishedId && !product.finished_auction_id ? { finished_auction_id: finishedId } : {}),
             }
           } catch (err) {
@@ -530,6 +572,13 @@ export default function AdminMarketingDashboard() {
         if (winnerName) newWinnerNames[product.id] = winnerName
       }
       
+      // Mark all processed products as fetched
+      setWinnersFetched(prev => {
+        const next = new Set(prev)
+        productsNeedingUpdate.forEach(p => next.add(p.id))
+        return next
+      })
+
       if (Object.keys(newWinnerNames).length > 0) {
         setWinnerNames(prev => ({ ...prev, ...newWinnerNames }))
       }
@@ -1799,12 +1848,12 @@ const duplicateAndAuction = async (productId: string) => {
                                 <p className="text-green-400 font-semibold text-sm">
                                   {winnerNames[product.id]}
                                 </p>
-                              ) : product.current_bidder_id ? (
+                              ) : winnersFetched.has(product.id) ? (
+                                <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
+                              ) : (
                                 <p className="text-yellow-400 font-semibold text-sm italic">
                                   Loading...
                                 </p>
-                              ) : (
-                                <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
                               )}
                             </td>
                           )}

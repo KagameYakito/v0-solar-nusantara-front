@@ -469,7 +469,10 @@ const fetchAuctionParticipation = useCallback(async () => {
           product.auction_winner_name.toLowerCase() === session.user?.email?.toLowerCase() ||
           product.auction_winner_name.toLowerCase() === (profile?.full_name || '').toLowerCase()
         )) ||
-        product?.current_bidder_id === session.user.id
+        product?.current_bidder_id === session.user.id ||
+        // ✅ Fallback: bid price matches current_bid_price and no other winner/bidder set (data not yet backfilled)
+        (!product?.current_bidder_id && !product?.auction_winner_name &&
+          bid.bid_price > 0 && bid.bid_price === product?.current_bid_price)
       )
       
       return {
