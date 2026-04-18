@@ -1,55 +1,15 @@
 'use client'
 
-import { Building2, Factory, Home, TrendingUp } from 'lucide-react'
+import { Building2, Factory, Home, Network } from 'lucide-react'
+import { useLanguage } from '@/lib/language-context'
 
-const solutions = [
-  {
-    icon: Building2,
-    title: 'Commercial Buildings',
-    description:
-      'Optimize energy costs for office complexes and commercial properties with scalable solar solutions.',
-    benefits: [
-      'Reduce utility bills by 60-80%',
-      'Tax incentives & rebates',
-      'Improve property value',
-    ],
-  },
-  {
-    icon: Factory,
-    title: 'Industrial Facilities',
-    description:
-      'Reliable energy for manufacturing and heavy-duty operations with 24/7 system monitoring.',
-    benefits: [
-      'Uninterrupted operations',
-      'Carbon footprint reduction',
-      'ROI in 5-7 years',
-    ],
-  },
-  {
-    icon: Home,
-    title: 'Residential Complexes',
-    description:
-      'Multi-unit residential installations with shared energy management and billing systems.',
-    benefits: [
-      'Community energy sharing',
-      'Lower resident costs',
-      'Sustainable living',
-    ],
-  },
-  {
-    icon: TrendingUp,
-    title: 'Smart Grid Integration',
-    description:
-      'Connect with smart grids and energy trading platforms for maximum efficiency and revenue.',
-    benefits: [
-      'Sell excess energy',
-      'Real-time monitoring',
-      'Predictive analytics',
-    ],
-  },
-]
+const solutionIcons = [Building2, Factory, Home, Network]
 
 export function Solutions() {
+  const { t } = useLanguage()
+  const solutions = t.solutions.items
+  const stats = t.solutions.stats
+
   return (
     <section
       id="solutions"
@@ -59,17 +19,17 @@ export function Solutions() {
         {/* Section Header */}
         <div className="text-center mb-20">
           <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            Industry Solutions
+            {t.solutions.sectionTitle}
           </h2>
           <p className="text-foreground/70 text-lg max-w-2xl mx-auto font-medium">
-            Purpose-built solar systems for commercial, industrial, and grid integration applications.
+            {t.solutions.sectionDesc}
           </p>
         </div>
 
         {/* Solutions Grid */}
         <div className="grid md:grid-cols-2 gap-8 mb-20">
           {solutions.map((solution, idx) => {
-            const Icon = solution.icon
+            const Icon = solutionIcons[idx]
             return (
               <div
                 key={idx}
@@ -109,27 +69,11 @@ export function Solutions() {
         {/* Key Differentiators */}
         <div className="bg-gradient-to-br from-primary/5 via-accent/5 to-secondary/5 border-2 border-border rounded-3xl p-12 shadow-lg">
           <h3 className="text-3xl font-bold text-center mb-16 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Why Solar Nusantara
+            {t.solutions.whyTitle}
           </h3>
 
           <div className="grid md:grid-cols-3 gap-10">
-            {[
-              {
-                label: 'Industry Experience',
-                value: '18+ Years',
-                desc: 'Deep expertise in enterprise solar deployment',
-              },
-              {
-                label: 'System Reliability',
-                value: '99.9%',
-                desc: 'Enterprise-grade monitoring and support',
-              },
-              {
-                label: 'ROI Timeline',
-                value: '5-7 Yrs',
-                desc: 'Proven financial returns for clients',
-              },
-            ].map((stat, idx) => (
+            {stats.map((stat, idx) => (
               <div key={idx} className="text-center p-6 rounded-2xl bg-background/60 border border-border hover:border-primary/30 transition-all duration-200">
                 <div className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-4">
                   {stat.value}
