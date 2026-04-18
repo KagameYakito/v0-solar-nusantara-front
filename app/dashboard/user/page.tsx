@@ -789,6 +789,73 @@ useEffect(() => {
   return () => window.removeEventListener('wishlist-updated', handleWishlistUpdated)
 }, [])
 
+// ✅ REALTIME SUBSCRIPTION - Sinkronkan data lelang secara real-time
+useEffect(() => {
+  let isMounted = true
+  let bidsChannel: ReturnType<typeof supabase.channel> | null = null
+  let productsChannel: ReturnType<typeof supabase.channel> | null = null
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const debouncedRefresh = () => {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      if (!isMounted) return
+      fetchBidHistory()
+      fetchAuctionParticipation()
+    }, 500)
+  }
+
+  const setupAuctionRealtime = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session || !isMounted) return
+
+    // Listen untuk semua bid baru pada auction_bids (termasuk dari pengguna lain)
+    // sehingga harga terkini selalu ter-update di dashboard
+    bidsChannel = supabase
+      .channel('dashboard-auction-bids-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'auction_bids'
+        },
+        () => {
+          debouncedRefresh()
+        }
+      )
+      .subscribe()
+
+    // Listen untuk perubahan produk lelang (current_bid_price, auction_active, current_bidder_id, dst.)
+    productsChannel = supabase
+      .channel('dashboard-products-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'products'
+        },
+        (payload: any) => {
+          // Hanya refresh jika produk yang berubah adalah produk lelang
+          if (payload?.new?.is_auction) {
+            debouncedRefresh()
+          }
+        }
+      )
+      .subscribe()
+  }
+
+  setupAuctionRealtime()
+
+  return () => {
+    isMounted = false
+    if (debounceTimer) clearTimeout(debounceTimer)
+    if (bidsChannel) supabase.removeChannel(bidsChannel)
+    if (productsChannel) supabase.removeChannel(productsChannel)
+  }
+}, [fetchBidHistory, fetchAuctionParticipation])
+
 const confirmSubmitRequest = async () => {
   if (selectedItems.size === 0) {
     alert("❌ Pilih item yang mau di-request!")
@@ -1290,12 +1357,17 @@ const confirmSubmitRequest = async () => {
         <TabsContent value="auctions" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <Gavel className="h-5 w-5 text-purple-400" />
-                Partisipasi Lelang
+              <CardTitle className="flex items-center justify-between text-white">
+                <div className="flex items-center gap-2">
+                  <Gavel className="h-5 w-5 text-purple-400" />
+                  Partisipasi Lelang
+                </div>
+                <Badge className="bg-green-500/10 text-green-400 border border-green-500/30 text-xs animate-pulse">
+                  ● Live
+                </Badge>
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Daftar lelang yang Anda ikuti atau menangkan.
+                Daftar lelang yang Anda ikuti atau menangkan. Data diperbarui secara real-time.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1372,12 +1444,17 @@ const confirmSubmitRequest = async () => {
         <TabsContent value="bids" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <History className="h-5 w-5 text-blue-400" />
-                Riwayat Penawaran Terakhir
+              <CardTitle className="flex items-center justify-between text-white">
+                <div className="flex items-center gap-2">
+                  <History className="h-5 w-5 text-blue-400" />
+                  Riwayat Penawaran Terakhir
+                </div>
+                <Badge className="bg-green-500/10 text-green-400 border border-green-500/30 text-xs animate-pulse">
+                  ● Live
+                </Badge>
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Penawaran terakhir Anda untuk setiap produk lelang.
+                Penawaran terakhir Anda untuk setiap produk lelang. Harga diperbarui secara real-time.
               </CardDescription>
             </CardHeader>
             <CardContent>
