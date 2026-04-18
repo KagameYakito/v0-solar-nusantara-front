@@ -435,17 +435,6 @@ export function Navbar() {
                 )}
               </button>
 
-              {/* Language Toggle */}
-              <button
-                onClick={toggleLanguage}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:bg-primary/5 hover:border-primary/40 transition-all duration-200"
-                aria-label="Toggle language"
-                title={language === 'EN' ? 'Switch to Bahasa Indonesia' : 'Switch to English'}
-              >
-                <Languages className="h-4 w-4 text-primary/70" />
-                <span className="text-xs font-bold text-foreground/80 tracking-wider">{language}</span>
-              </button>
-
               {!isLoggedIn ? (
                 <>
                   <Button
@@ -464,6 +453,17 @@ export function Navbar() {
                     <LayoutDashboard className="h-4 w-4 mr-2" />
                     {t.nav.dashboard}
                   </Button>
+
+                  {/* Language Toggle */}
+                  <button
+                    onClick={toggleLanguage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:bg-primary/5 hover:border-primary/40 transition-all duration-200"
+                    aria-label="Toggle language"
+                    title={language === 'EN' ? 'Switch to Bahasa Indonesia' : 'Switch to English'}
+                  >
+                    <Languages className="h-4 w-4 text-primary/70" />
+                    <span className="text-xs font-bold text-foreground/80 tracking-wider">{language}</span>
+                  </button>
                 </>
               ) : (
                 <>
@@ -495,6 +495,17 @@ export function Navbar() {
                   >
                     {t.nav.signOut}
                   </Button>
+
+                  {/* Language Toggle */}
+                  <button
+                    onClick={toggleLanguage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border hover:bg-primary/5 hover:border-primary/40 transition-all duration-200"
+                    aria-label="Toggle language"
+                    title={language === 'EN' ? 'Switch to Bahasa Indonesia' : 'Switch to English'}
+                  >
+                    <Languages className="h-4 w-4 text-primary/70" />
+                    <span className="text-xs font-bold text-foreground/80 tracking-wider">{language}</span>
+                  </button>
                 </>
               )}
             </div>
