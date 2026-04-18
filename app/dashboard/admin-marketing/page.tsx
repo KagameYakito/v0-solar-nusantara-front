@@ -65,6 +65,8 @@ const supabase = createClient(
 
 const ITEMS_PER_PAGE = 100
 
+const generateFallbackAuctionId = () => `#${String(Date.now()).slice(-6)}`
+
 export default function AdminMarketingDashboard() {
   const router = useRouter()
   
@@ -471,7 +473,7 @@ export default function AdminMarketingDashboard() {
       if (productsNeedingUpdate.length === 0) return
       
       const newWinnerNames: Record<string, string> = {}
-      let didUpdate = false
+      const localUpdates: Record<string, Partial<Product>> = {}
       
       for (const product of productsNeedingUpdate) {
         let winnerName = product.auction_winner_name
@@ -498,9 +500,9 @@ export default function AdminMarketingDashboard() {
         if (!finishedId) {
           try {
             const { data: idData } = await supabase.rpc('generate_finished_auction_id')
-            finishedId = idData || `#${String(Date.now()).slice(-6)}`
+            finishedId = idData || generateFallbackAuctionId()
           } catch {
-            finishedId = `#${String(Date.now()).slice(-6)}`
+            finishedId = generateFallbackAuctionId()
           }
         }
         
@@ -515,7 +517,11 @@ export default function AdminMarketingDashboard() {
               .from('products')
               .update(updateData)
               .eq('id', product.id)
-            didUpdate = true
+            // Track local updates to apply to state directly (avoids fetchProducts re-trigger)
+            localUpdates[product.id] = {
+              ...(winnerName && !product.auction_winner_name ? { auction_winner_name: winnerName } : {}),
+              ...(finishedId && !product.finished_auction_id ? { finished_auction_id: finishedId } : {}),
+            }
           } catch (err) {
             console.error('Failed to save winner data to DB:', err)
           }
@@ -528,14 +534,16 @@ export default function AdminMarketingDashboard() {
         setWinnerNames(prev => ({ ...prev, ...newWinnerNames }))
       }
       
-      // Refresh products from DB so UI shows the newly saved data
-      if (didUpdate) {
-        fetchProducts()
+      // Apply saved fields to local products state directly to avoid fetchProducts re-trigger cycle
+      if (Object.keys(localUpdates).length > 0) {
+        setProducts(prev => prev.map(p =>
+          localUpdates[p.id] ? { ...p, ...localUpdates[p.id] } : p
+        ))
       }
     }
     
     fetchAndSaveWinnerData()
-  }, [products, filterView, fetchProducts])
+  }, [products, filterView])
 
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
@@ -583,7 +591,7 @@ export default function AdminMarketingDashboard() {
     const autoEndAuction = async (product: Product, reason: string) => {
       try {
         const { data: idData } = await supabase.rpc('generate_finished_auction_id')
-        const finishedId = idData || `#${String(Date.now()).slice(-6)}`
+        const finishedId = idData || generateFallbackAuctionId()
         
         let winnerName = null
         if (product.current_bidder_id) {
@@ -652,7 +660,7 @@ export default function AdminMarketingDashboard() {
     // Check setiap 10 detik
     const interval = setInterval(checkAuctionDeadlines, 10000)
     return () => clearInterval(interval)
-  }, [products])
+  }, [products, fetchProducts])
 
   const [timeRemaining, setTimeRemaining] = useState<Record<string, { auction: string; bidDeadline: string }>>({})
   
