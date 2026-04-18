@@ -466,10 +466,10 @@ export default function AdminMarketingDashboard() {
       
       if (productsNeedingNames.length === 0) return
       
-      const newWinnerNames: Record<string, string> = { ...winnerNames }
+      const newWinnerNames: Record<string, string> = {}
       
       for (const product of productsNeedingNames) {
-        if (product.current_bidder_id && !newWinnerNames[product.id]) {
+        if (product.current_bidder_id) {
           try {
             const { data: profileData } = await supabase
               .from('profiles')
@@ -486,7 +486,10 @@ export default function AdminMarketingDashboard() {
         }
       }
       
-      setWinnerNames(newWinnerNames)
+      // Use functional update to avoid stale closure
+      if (Object.keys(newWinnerNames).length > 0) {
+        setWinnerNames(prev => ({ ...prev, ...newWinnerNames }))
+      }
     }
     
     fetchWinnerNames()
