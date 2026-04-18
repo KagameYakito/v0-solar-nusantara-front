@@ -1,16 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
-  <!-- Red Hexagon -->
-  <path d="M50,200 L100,150 L150,150 L200,200 L150,250 L100,250 Z" fill="#E63946" stroke="#E63946" stroke-width="2"/>
-  
-  <!-- Yellow Hexagon -->
-  <path d="M150,150 L200,100 L250,100 L300,150 L250,200 L200,200 Z" fill="#F9C74F" stroke="#F9C74F" stroke-width="2"/>
-  
-  <!-- Blue Hexagon -->
-  <path d="M250,100 L300,50 L350,50 L400,100 L350,150 L300,150 Z" fill="#0077B6" stroke="#0077B6" stroke-width="2"/>
-  
-  <!-- SOLAR Text -->
-  <text x="450" y="160" font-family="Arial, sans-serif" font-size="120" font-weight="700" fill="#0077B6" letter-spacing="8">SOLAR</text>
-  
-  <!-- NUSANTARA Text -->
-  <text x="450" y="280" font-family="Arial, sans-serif" font-size="100" font-weight="700" fill="#0077B6" letter-spacing="6">NUSANTARA</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100" fill="none">
+  <defs>
+    <!-- Deep-blue gradient for text (top = vivid blue, bottom = navy) -->
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+    <!-- Fade-right white divider between text rows -->
+    <linearGradient id="divGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!--
+    Three pointy-top hexagons (hollow/stroke-only, transparent fill)
+    arranged in an arch — mirroring the red, yellow, blue
+    infinity-hex motif of the reference logo.
+    Hex geometry: r = 32 px, half-width = r * sqrt(3)/2 ~ 28 px
+    Red center   (40, 63) — lower-left
+    Yellow center (80, 37) — upper-center
+    Blue center  (120, 63) — lower-right
+    Red/Yellow share x=52-68 (overlap zone within their combined bounding boxes)
+    Yellow/Blue share x=92-108 (overlap zone within their combined bounding boxes)
+  -->
+
+  <!-- Red hexagon -->
+  <polygon
+    points="40,31 68,47 68,79 40,95 12,79 12,47"
+    stroke="#DC2626" stroke-width="8.5" stroke-linejoin="round"/>
+
+  <!-- Yellow hexagon -->
+  <polygon
+    points="80,5 108,21 108,53 80,69 52,53 52,21"
+    stroke="#FBBF24" stroke-width="8.5" stroke-linejoin="round"/>
+
+  <!-- Blue hexagon -->
+  <polygon
+    points="120,31 148,47 148,79 120,95 92,79 92,47"
+    stroke="#2563EB" stroke-width="8.5" stroke-linejoin="round"/>
+
+  <!-- Subtle vertical separator between icon and text -->
+  <line x1="162" y1="10" x2="162" y2="90"
+    stroke="#FFFFFF" stroke-width="0.6" stroke-opacity="0.35"/>
+
+  <!-- ── Text block ─────────────────────────────────────── -->
+
+  <!-- SOLAR — bold, blue gradient, white colorline stroke -->
+  <text
+    x="170" y="58"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="50" font-weight="800"
+    fill="url(#blueGrad)"
+    stroke="white" stroke-width="1.1"
+    paint-order="stroke fill"
+    letter-spacing="5">SOLAR</text>
+
+  <!-- Thin gradient divider line between SOLAR and NUSANTARA -->
+  <line x1="170" y1="67" x2="398" y2="67"
+    stroke="url(#divGrad)" stroke-width="0.9"/>
+
+  <!-- NUSANTARA — semi-bold, same blue gradient, white colorline -->
+  <text
+    x="170" y="90"
+    font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-size="27" font-weight="600"
+    fill="url(#blueGrad)"
+    stroke="white" stroke-width="0.6"
+    paint-order="stroke fill"
+    letter-spacing="6.5">NUSANTARA</text>
 </svg>
