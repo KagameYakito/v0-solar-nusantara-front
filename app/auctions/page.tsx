@@ -467,17 +467,25 @@ const submitBid = async () => {
 }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted/30">
       {/* Header */}
-      <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-lg sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="border-b-2 border-border bg-card/80 backdrop-blur-xl shadow-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-green-500">Product Auctions</h1>
-              <p className="text-sm text-slate-400">Bid on exclusive industrial equipment</p>
+            <div className="flex items-center gap-3">
+              <img 
+                src="/solar-nusantara-logo.svg" 
+                alt="Solar Nusantara" 
+                className="h-10 w-auto"
+              />
+              <div className="h-8 w-px bg-border" />
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Product Auctions</h1>
+                <p className="text-sm text-foreground/60">Bid on exclusive industrial equipment</p>
+              </div>
             </div>
             <Link href="/">
-              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
+              <Button variant="outline" className="border-2 border-primary/40 hover:bg-primary/10 hover:border-primary rounded-xl text-foreground font-semibold bg-transparent transition-all duration-200">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Home
               </Button>
@@ -487,12 +495,12 @@ const submitBid = async () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Title & Description */}
-        <div className="mb-8 text-center">
-          <h2 className="text-4xl font-bold text-white mb-3">Halaman Lelang</h2>
-          <p className="text-lg text-slate-400 max-w-3xl mx-auto">
-            Pilih produk yang kamu inginkan dan place bid untuk memenangkan lelang!
+        <div className="mb-12 text-center">
+          <h2 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">Auction Page</h2>
+          <p className="text-lg text-foreground/70 max-w-3xl mx-auto font-medium">
+            Choose the products you want and place bids to win the auction!
           </p>
         </div>
 
@@ -500,16 +508,16 @@ const submitBid = async () => {
         <div className="mb-12">
           <div className="flex gap-4 max-w-5xl mx-auto">
             <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-primary/70" />
               <input
                 type="text"
-                placeholder="Cari produk lelang (misal: battery, inverter)..."
+                placeholder="Search auction products (e.g., battery, inverter)..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-12 pr-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
+                className="w-full bg-card/60 border-2 border-border rounded-xl pl-12 pr-4 py-4 text-foreground placeholder:text-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all duration-200 font-medium"
               />
             </div>
-            <Button variant="outline" className="border-slate-700 hover:bg-slate-800 px-6">
+            <Button variant="outline" className="border-2 border-border hover:bg-accent/10 hover:border-accent rounded-xl px-6 font-semibold transition-all duration-200">
               <Filter className="h-5 w-5 mr-2" />
               Filter
             </Button>
@@ -519,17 +527,17 @@ const submitBid = async () => {
         {/* Loading State */}
         {loading && (
           <div className="flex justify-center items-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-green-500" />
-            <span className="ml-2 text-slate-400">Memuat produk lelang...</span>
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-3 text-foreground/70 font-medium">Loading auction products...</span>
           </div>
         )}
 
         {/* Empty State */}
         {!loading && filteredProducts.length === 0 && (
-          <div className="text-center py-20">
-            <ImageIcon className="h-16 w-16 mx-auto mb-4 text-slate-600" />
-            <h3 className="text-lg font-medium text-slate-400">Tidak ada produk lelang</h3>
-            <p className="text-slate-500 mt-2">Produk lelang akan muncul di sini</p>
+          <div className="text-center py-20 bg-card/60 rounded-2xl border-2 border-border">
+            <ImageIcon className="h-16 w-16 mx-auto mb-4 text-foreground/30" />
+            <h3 className="text-lg font-semibold text-foreground/70">No auction products</h3>
+            <p className="text-foreground/50 mt-2">Auction products will appear here</p>
           </div>
         )}
 
