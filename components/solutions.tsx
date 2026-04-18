@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, Factory, Home, Network, TrendingUp } from 'lucide-react'
+import { Building2, Factory, Home, Network } from 'lucide-react'
 import { useLanguage } from '@/lib/language-context'
 
 const solutionIcons = [Building2, Factory, Home, Network]
