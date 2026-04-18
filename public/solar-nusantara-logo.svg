@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" fill="none">
+  <!-- Red Hexagon -->
+  <path d="M50,200 L100,150 L150,150 L200,200 L150,250 L100,250 Z" fill="#E63946" stroke="#E63946" stroke-width="2"/>
+  
+  <!-- Yellow Hexagon -->
+  <path d="M150,150 L200,100 L250,100 L300,150 L250,200 L200,200 Z" fill="#F9C74F" stroke="#F9C74F" stroke-width="2"/>
+  
+  <!-- Blue Hexagon -->
+  <path d="M250,100 L300,50 L350,50 L400,100 L350,150 L300,150 Z" fill="#0077B6" stroke="#0077B6" stroke-width="2"/>
+  
+  <!-- SOLAR Text -->
+  <text x="450" y="160" font-family="Arial, sans-serif" font-size="120" font-weight="700" fill="#0077B6" letter-spacing="8">SOLAR</text>
+  
+  <!-- NUSANTARA Text -->
+  <text x="450" y="280" font-family="Arial, sans-serif" font-size="100" font-weight="700" fill="#0077B6" letter-spacing="6">NUSANTARA</text>
+</svg>

@@ -163,32 +163,34 @@ export function Hero() {
   }
 
   return (
-    <section id="home" className="relative min-h-screen flex items-center justify-center pt-32 px-4 pb-12">
-      <div className="max-w-5xl mx-auto text-center w-full">
+    <section id="home" className="relative min-h-screen flex items-center justify-center pt-32 px-4 pb-16">
+      <div className="max-w-6xl mx-auto text-center w-full">
         {/* Headline */}
-        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
-          <span className="block text-foreground">Powering Indonesia's</span>
-          <span className="block text-primary">Industrial Future</span>
+        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight mb-8 leading-tight">
+          <span className="block text-foreground mb-2">Powering Indonesia's</span>
+          <span className="block bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+            Industrial Future
+          </span>
         </h1>
 
         {/* Subtitle */}
-        <p className="text-lg sm:text-xl text-foreground/70 mb-12 max-w-3xl mx-auto leading-relaxed">
+        <p className="text-lg sm:text-xl text-foreground/70 mb-14 max-w-3xl mx-auto leading-relaxed font-medium">
           Enterprise-grade solar energy solutions designed for businesses. Reduce operational costs, maximize energy efficiency, and accelerate your sustainable growth.
         </p>
 
         {/* Search Bar */}
-        <div className="mb-12 max-w-2xl mx-auto">
+        <div className="mb-14 max-w-2xl mx-auto">
           <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-primary to-secondary rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition duration-300" />
-            <div className="relative bg-card/70 backdrop-blur-md border border-primary/20 rounded-2xl p-2">
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary via-accent to-secondary rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition duration-300" />
+            <div className="relative bg-card/80 backdrop-blur-md border-2 border-border rounded-2xl p-2 shadow-lg">
               <div className="flex items-center space-x-3 px-6 py-4">
-                <Search className="h-5 w-5 text-foreground/60" />
+                <Search className="h-5 w-5 text-primary/70" />
                 <input
                   type="text"
                   placeholder="Search solar panels, inverters, battery systems..."
                   className="flex-1 bg-transparent text-foreground placeholder-foreground/50 focus:outline-none text-base"
                 />
-                <Button size="sm" className="bg-primary hover:bg-primary/90 text-white rounded-lg px-6">
+                <Button size="sm" className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white rounded-lg px-6 font-semibold shadow-sm">
                   Search
                 </Button>
               </div>
@@ -196,22 +198,22 @@ export function Hero() {
           </div>
         </div>
 
-        {/* CTA Buttons - DIPERBESAR & DIBUAT NYAMAN */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+        {/* CTA Buttons */}
+        <div className="flex flex-col sm:flex-row gap-5 justify-center mb-20">
           
-          {/* TOMBOL 1: VIEW PRODUCTS (Gatekeeper Active + Ukuran Besar) */}
+          {/* TOMBOL 1: VIEW PRODUCTS */}
           <button
             onClick={handleViewProductsClick}
-            className="inline-flex items-center justify-center rounded-lg text-lg font-bold px-7 py-3 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 hover:scale-105 transition-all cursor-pointer min-w-[200px]"
+            className="inline-flex items-center justify-center rounded-xl text-lg font-bold px-8 py-4 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:scale-105 transition-all duration-200 cursor-pointer min-w-[220px]"
           >
             View Products
             <ArrowRight className="ml-3 h-6 w-6" />
           </button>
 
-          {/* TOMBOL 2: REQUEST FOR QUOTATION (Gatekeeper + Modal RFQ + Ukuran Besar) */}
+          {/* TOMBOL 2: REQUEST FOR QUOTATION */}
           <button
             onClick={handleRFQClick}
-            className="inline-flex items-center justify-center rounded-lg text-lg font-bold px-7 py-3 border-2 border-primary/50 text-primary hover:bg-primary/10 hover:scale-105 transition-all cursor-pointer bg-transparent min-w-[240px]"
+            className="inline-flex items-center justify-center rounded-xl text-lg font-bold px-8 py-4 border-2 border-primary/60 text-primary hover:bg-primary/10 hover:border-primary hover:scale-105 transition-all duration-200 cursor-pointer bg-transparent min-w-[260px]"
           >
             Request for Quotation
           </button>
@@ -226,18 +228,18 @@ export function Hero() {
         )}
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-primary mb-2">250+</div>
-            <p className="text-foreground/60 text-sm">Enterprise Partners</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-4xl mx-auto">
+          <div className="text-center p-6 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 hover:border-primary/20 transition-all duration-200">
+            <div className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-3">250+</div>
+            <p className="text-foreground/60 text-sm font-semibold">Enterprise Partners</p>
           </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-primary mb-2">2.5GW</div>
-            <p className="text-foreground/60 text-sm">Installed Capacity</p>
+          <div className="text-center p-6 rounded-xl bg-gradient-to-br from-accent/5 to-secondary/5 border border-accent/10 hover:border-accent/20 transition-all duration-200">
+            <div className="text-5xl font-bold bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent mb-3">2.5GW</div>
+            <p className="text-foreground/60 text-sm font-semibold">Installed Capacity</p>
           </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-primary mb-2">40%</div>
-            <p className="text-foreground/60 text-sm">Average Cost Savings</p>
+          <div className="text-center p-6 rounded-xl bg-gradient-to-br from-secondary/5 to-primary/5 border border-secondary/10 hover:border-secondary/20 transition-all duration-200">
+            <div className="text-5xl font-bold bg-gradient-to-r from-secondary to-primary bg-clip-text text-transparent mb-3">40%</div>
+            <p className="text-foreground/60 text-sm font-semibold">Average Cost Savings</p>
           </div>
         </div>
       </div>
