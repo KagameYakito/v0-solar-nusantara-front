@@ -842,7 +842,14 @@ export default function AdminMarketingDashboard() {
       
       const finalGalleryUrls = await uploadImages()
       
-      const product = products.find(p => p.id === selectedProductId)
+      if (product.is_auction && !product.auction_active) {
+        // Produk ini pernah dilelang sebelumnya, hapus bids lama
+        await supabase
+          .from('auction_bids')
+          .delete()
+          .eq('product_id', selectedProductId)
+      }
+      
       const now = new Date()
       let newEndTime = product?.auction_end_time ? new Date(product.auction_end_time) : null
       let shouldUpdateEndTime = false
