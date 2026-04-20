@@ -1000,7 +1000,6 @@ export default function AdminMarketingDashboard() {
         throw historyError
       }
       
-      // 7. Update product
       await supabase
         .from('products')
         .update({
