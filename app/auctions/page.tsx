@@ -175,29 +175,28 @@ export default function AuctionsPage() {
   const fetchAuctionProducts = async () => {
     try {
       setLoading(true)
+      
+      // ✅ QUERY SEDERHANA: Tampilkan jika:
+      // 1. Masih aktif (auction_active = true), ATAU
+      // 2. Sudah selesai tapi ada pemenang (current_bidder_id tidak null)
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('is_auction', true)
-        // ✅ FILTER: Hanya tampilkan jika:
-        // 1. Masih aktif (auction_active = true)
-        // 2. ATAU sudah selesai tapi punya pemenang (current_bidder_id tidak null)
-        // 3. ATAU sudah selesai dengan status force_stop/completed
-        .or(`
-          auction_active.eq.true,
-          and(auction_active.eq.false,current_bidder_id.not.is.null),
-          and(auction_active.eq.false,auction_end_reason.eq.force_stop),
-          and(auction_active.eq.false,auction_end_reason.eq.completed)
-        `)
+        .or('auction_active.eq.true,current_bidder_id.not.is.null')
         .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
   
-      if (error) throw error
+      if (error) {
+        console.error('Query error:', error)
+        throw error
+      }
       
       const activeProducts = data || []
+      console.log('Fetched products:', activeProducts.length) // Debug log
       setProducts(activeProducts)
       
-      // ✅ RESET BIDDERS UNTUK PRODUK YANG TIDAK AKTIF
+      // Reset bidders untuk produk tidak aktif
       const inactiveProductIds = activeProducts
         .filter(p => !p.auction_active)
         .map(p => p.id)
@@ -205,7 +204,7 @@ export default function AuctionsPage() {
       setBidders(prev => {
         const newBidders = { ...prev }
         inactiveProductIds.forEach(id => {
-          newBidders[id] = [] // Clear bidders untuk produk tidak aktif
+          newBidders[id] = []
         })
         return newBidders
       })
