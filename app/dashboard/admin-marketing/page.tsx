@@ -1476,6 +1476,72 @@ const duplicateAndAuction = async (productId: string) => {
         </Card>
       )}
 
+      {/* ✅ VIEW KHUSUS UNTUK LELANG SELESAI - PAKAI AUCTION_HISTORY */}
+      {filterView === 'finished' && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-pink-400" />
+                History Lelang Selesai
+              </div>
+              <span className="text-sm text-slate-400">
+                {auctionHistory.length} lelang
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {historyLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
+              </div>
+            ) : auctionHistory.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 flex flex-col items-center">
+                <CheckCircle2 className="h-12 w-12 mb-3 opacity-50" />
+                <p className="text-lg font-medium">Belum ada lelang yang selesai.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 uppercase font-medium">
+                    <tr>
+                      <th className="px-4 py-3">ID Selesai</th>
+                      <th className="px-4 py-3">Produk</th>
+                      <th className="px-4 py-3">Harga Final</th>
+                      <th className="px-4 py-3">Pemenang</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Tanggal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {auctionHistory.map((history) => (
+                      <tr key={history.id} className="hover:bg-slate-800/50">
+                        <td className="px-4 py-3 font-mono text-pink-400">{history.finished_auction_id}</td>
+                        <td className="px-4 py-3 font-medium text-white">{history.product_name}</td>
+                        <td className="px-4 py-3 text-orange-400 font-mono">{formatRupiah(history.final_price)}</td>
+                        <td className="px-4 py-3 text-green-400">{history.winner_name || 'Tidak ada'}</td>
+                        <td className="px-4 py-3">
+                          <Badge className={`${
+                            history.auction_end_reason === 'cancelled' 
+                              ? 'bg-red-500/20 text-red-400' 
+                              : 'bg-green-500/20 text-green-400'
+                          }`}>
+                            {history.auction_end_reason}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">
+                          {new Date(history.auction_end_time).toLocaleDateString('id-ID')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* PRODUCTS TABLE - Only shows when filterView !== 'wishlist' */}
       {filterView !== 'wishlist' && (
         <Card className="bg-slate-900 border-slate-800">
@@ -1707,72 +1773,6 @@ const duplicateAndAuction = async (productId: string) => {
                               <span className="text-slate-500 text-xs">-</span>
                             )}
                           </td>
-
-                          {/* ✅ TABEL KHUSUS UNTUK LELANG SELESAI - PAKAI AUCTION_HISTORY */}
-                          {filterView === 'finished' && (
-                            <Card className="bg-slate-900 border-slate-800">
-                              <CardHeader>
-                                <CardTitle className="flex items-center justify-between text-white">
-                                  <div className="flex items-center gap-2">
-                                    <CheckCircle2 className="h-5 w-5 text-pink-400" />
-                                    History Lelang Selesai
-                                  </div>
-                                  <span className="text-sm text-slate-400">
-                                    {auctionHistory.length} lelang
-                                  </span>
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                {historyLoading ? (
-                                  <div className="flex justify-center py-12">
-                                    <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
-                                  </div>
-                                ) : auctionHistory.length === 0 ? (
-                                  <div className="text-center py-12 text-slate-500 flex flex-col items-center">
-                                    <CheckCircle2 className="h-12 w-12 mb-3 opacity-50" />
-                                    <p className="text-lg font-medium">Belum ada lelang yang selesai.</p>
-                                  </div>
-                                ) : (
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm text-slate-300">
-                                      <thead className="bg-slate-800 uppercase font-medium">
-                                        <tr>
-                                          <th className="px-4 py-3">ID Selesai</th>
-                                          <th className="px-4 py-3">Produk</th>
-                                          <th className="px-4 py-3">Harga Final</th>
-                                          <th className="px-4 py-3">Pemenang</th>
-                                          <th className="px-4 py-3">Status</th>
-                                          <th className="px-4 py-3">Tanggal</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-800">
-                                        {auctionHistory.map((history) => (
-                                          <tr key={history.id} className="hover:bg-slate-800/50">
-                                            <td className="px-4 py-3 font-mono text-pink-400">{history.finished_auction_id}</td>
-                                            <td className="px-4 py-3 font-medium text-white">{history.product_name}</td>
-                                            <td className="px-4 py-3 text-orange-400 font-mono">{formatRupiah(history.final_price)}</td>
-                                            <td className="px-4 py-3 text-green-400">{history.winner_name || 'Tidak ada'}</td>
-                                            <td className="px-4 py-3">
-                                              <Badge className={`${
-                                                history.auction_end_reason === 'cancelled' 
-                                                  ? 'bg-red-500/20 text-red-400' 
-                                                  : 'bg-green-500/20 text-green-400'
-                                              }`}>
-                                                {history.auction_end_reason}
-                                              </Badge>
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-400">
-                                              {new Date(history.auction_end_time).toLocaleDateString('id-ID')}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </CardContent>
-                            </Card>
-                          )}
                           
                           {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
