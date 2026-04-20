@@ -849,7 +849,7 @@ export default function AdminMarketingDashboard() {
           .delete()
           .eq('product_id', selectedProductId)
       }
-      
+
       const now = new Date()
       let newEndTime = product?.auction_end_time ? new Date(product.auction_end_time) : null
       let shouldUpdateEndTime = false
@@ -1010,7 +1010,6 @@ export default function AdminMarketingDashboard() {
           auction_description: null,
           auction_gallery_urls: null,
           current_bid_price: null,
-          current_bidder_id: null,
           auction_started_at: null,
           finished_auction_id: finishedId,
           auction_winner_name: winnerName,
