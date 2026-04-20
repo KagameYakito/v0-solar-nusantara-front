@@ -698,24 +698,28 @@ export default function AdminMarketingDashboard() {
           .eq('product_id', product.id)
         
         // 1. ✅ SIMPAN KE AUCTION_HISTORY
-        const { error: historyError } = await supabase
-          .from('auction_history')
-          .insert({
-            product_id: product.id,
-            product_name: product.nama_produk,
-            start_price: product.auction_start_price || 0,
-            final_price: product.current_bid_price || product.auction_start_price || 0,
-            winner_id: product.current_bidder_id,
-            winner_name: winnerName,
-            finished_auction_id: finishedId,
-            auction_start_time: product.auction_started_at,
-            auction_end_time: new Date().toISOString(),
-            auction_end_reason: reason,
-            total_bids: totalBids || 0
-          })
-        
+        const { data: insertedHistory, error: historyError } = await supabase
+        .from('auction_history')
+        .insert({
+          product_id: product.id,
+          product_name: product.nama_produk,
+          start_price: product.auction_start_price || 0,
+          final_price: product.current_bid_price || product.auction_start_price || 0,
+          winner_id: product.current_bidder_id,
+          winner_name: winnerName,
+          finished_auction_id: finishedId,
+          auction_start_time: product.auction_started_at,
+          auction_end_time: new Date().toISOString(),
+          auction_end_reason: reason,
+          total_bids: totalBids || 0
+        })
+        .select() // ✅ TAMBahkan .select() untuk lihat hasil insert
+
         if (historyError) {
-          console.error('Failed to save to history:', historyError)
+        console.error('❌ Failed to save to history:', historyError)
+        console.error('Error details:', JSON.stringify(historyError, null, 2))
+        } else {
+        console.log('✅ Successfully saved to auction_history:', insertedHistory)
         }
         
         // 2. Update product
@@ -1170,25 +1174,28 @@ export default function AdminMarketingDashboard() {
         .eq('product_id', product.id)
       
       // 4. ✅ SIMPAN KE AUCTION_HISTORY
-      const { error: historyError } = await supabase
-        .from('auction_history')
-        .insert({
-          product_id: product.id,
-          product_name: product.nama_produk,
-          start_price: product.auction_start_price || 0,
-          final_price: product.current_bid_price || product.auction_start_price || 0,
-          winner_id: product.current_bidder_id,
-          winner_name: winnerName,
-          finished_auction_id: finishedId,
-          auction_start_time: product.auction_started_at,
-          auction_end_time: new Date().toISOString(),
-          auction_end_reason: 'cancelled',
-          total_bids: totalBids || 0
-        })
-      
+      const { data: insertedHistory, error: historyError } = await supabase
+      .from('auction_history')
+      .insert({
+        product_id: product.id,
+        product_name: product.nama_produk,
+        start_price: product.auction_start_price || 0,
+        final_price: product.current_bid_price || product.auction_start_price || 0,
+        winner_id: product.current_bidder_id,
+        winner_name: winnerName,
+        finished_auction_id: finishedId,
+        auction_start_time: product.auction_started_at,
+        auction_end_time: new Date().toISOString(),
+        auction_end_reason: 'cancelled',
+        total_bids: totalBids || 0
+      })
+      .select() // ✅ Tambahkan .select()
+
       if (historyError) {
-        console.error('Failed to save to history:', historyError)
-        // Lanjutkan meski gagal save history
+      console.error('❌ Failed to save to history:', historyError)
+      console.error('Error details:', JSON.stringify(historyError, null, 2))
+      } else {
+      console.log('✅ Successfully saved to auction_history:', insertedHistory)
       }
       
       // 5. ✅ UPDATE PRODUCT - RESET KE NON-AUCTION
@@ -1698,6 +1705,117 @@ const duplicateAndAuction = async (productId: string) => {
                     )
                   })}
                 </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ✅ TABEL KHUSUS UNTUK LELANG SELESAI - PAKAI AUCTION_HISTORY */}
+      {filterView === 'finished' && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-pink-400" />
+                History Lelang Selesai
+              </div>
+              <span className="text-sm text-slate-400">
+                {auctionHistory.length} lelang
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {historyLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
+              </div>
+            ) : auctionHistory.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 flex flex-col items-center">
+                <CheckCircle2 className="h-12 w-12 mb-3 opacity-50" />
+                <p className="text-lg font-medium">Belum ada lelang yang selesai.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-300">
+                  <thead className="bg-slate-800 uppercase font-medium">
+                    <tr>
+                      <th className="px-4 py-3 rounded-tl-lg">No</th>
+                      <th className="px-4 py-3">Nama Produk</th>
+                      <th className="px-4 py-3">Harga Final</th>
+                      <th className="px-4 py-3">ID Selesai</th>
+                      <th className="px-4 py-3">Pemenang</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Tanggal Selesai</th>
+                      <th className="px-4 py-3 rounded-tr-lg text-right">Total Bids</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {auctionHistory.map((history, index) => (
+                      <tr key={history.id} className="hover:bg-slate-800/50">
+                        <td className="px-4 py-3 text-slate-400">{index + 1}</td>
+                        <td className="px-4 py-3 font-medium text-white">
+                          {history.product_name || 'Produk'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-orange-400 font-mono font-bold">
+                            {formatRupiah(history.final_price || 0)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge className="bg-pink-600/20 text-pink-400 border border-pink-600/30 font-mono text-xs">
+                            {history.finished_auction_id || 'N/A'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {history.winner_name ? (
+                            <p className="text-green-400 font-semibold text-sm">
+                              {history.winner_name}
+                            </p>
+                          ) : (
+                            <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge className={`${
+                            history.auction_end_reason === 'cancelled' 
+                              ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                              : history.auction_end_reason === 'no_bids'
+                              ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                              : 'bg-green-500/20 text-green-400 border-green-500/30'
+                          } border`}>
+                            {history.auction_end_reason === 'cancelled' 
+                              ? 'Dibatalkan' 
+                              : history.auction_end_reason === 'no_bids' 
+                              ? 'Tidak Ada Bid' 
+                              : 'Selesai'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {history.auction_end_time ? (
+                            <div>
+                              <p className="text-slate-300 font-mono">
+                                {new Date(history.auction_end_time).toLocaleDateString('id-ID', {
+                                  day: '2-digit', month: 'short', year: 'numeric'
+                                })}
+                              </p>
+                              <p className="text-slate-500 text-[10px]">
+                                {new Date(history.auction_end_time).toLocaleTimeString('id-ID', {
+                                  hour: '2-digit', minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {history.total_bids || 0} bids
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             )}
