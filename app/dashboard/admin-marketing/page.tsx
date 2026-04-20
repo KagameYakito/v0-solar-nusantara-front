@@ -81,9 +81,6 @@ export default function AdminMarketingDashboard() {
   
   // ✅ UPDATED: Include 'wishlist' in filterView
   const [filterView, setFilterView] = useState<'all' | 'auction' | 'request' | 'wishlist' | 'finished'>('all')
-
-  const [auctionHistory, setAuctionHistory] = useState<any[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
   
   const [showEditPriceModal, setShowEditPriceModal] = useState(false)
   const [editingProductId, setEditingProductId] = useState<string | null>(null)
@@ -238,31 +235,11 @@ export default function AdminMarketingDashboard() {
     }
   }, [wishlistFilter])
 
-  const fetchAuctionHistory = useCallback(async () => {
-    try {
-      setHistoryLoading(true)
-      const { data, error } = await supabase
-        .from('auction_history')
-        .select('*')
-        .order('auction_end_time', { ascending: false })
-      
-      if (error) throw error
-      setAuctionHistory(data || [])
-    } catch (err: any) {
-      console.error("Failed to fetch auction history:", err)
-    } finally {
-      setHistoryLoading(false)
-    }
-  }, [])
-
   useEffect(() => {
     if (isAuthorized) {
-      fetchProducts()
-      if (filterView === 'finished') {
-        fetchAuctionHistory() // ✅ Fetch dari auction_history
-      }
+      fetchWishlistItems()
     }
-  }, [isAuthorized, filterView])
+  }, [isAuthorized, wishlistFilter])
 
   const openNoteModal = (item: any) => {
     setSelectedWishlistItem(item)
@@ -930,87 +907,56 @@ export default function AdminMarketingDashboard() {
 
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
-  const confirmCancelAuction = async () => {
-    if (!cancellingProductId) return
+const confirmCancelAuction = async () => {
+  if (!cancellingProductId) return
+  
+  try {
+    // 1. Generate finished auction ID
+    const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+    const finishedId = idData || `#${String(Date.now()).slice(-6)}`
     
-    try {
-      const product = products.find(p => p.id === cancellingProductId)
-      
-      // 1. Generate finished auction ID
-      const { data: idData } = await supabase.rpc('generate_finished_auction_id')
-      const finishedId = idData || `#${String(Date.now()).slice(-6)}`
-      
-      // 2. Get winner info
-      let winnerName: string | null = null
-      if (product?.current_bidder_id) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', product.current_bidder_id)
-          .single()
-        winnerName = profileData?.full_name || null
-      }
-      
-      // 3. ✅ TENTUKAN STATUS: cancelled vs force_stop
-      // - cancelled: tidak ada bid sama sekali (current_bid_price = 0 atau null)
-      // - force_stop: pernah ada bid (current_bid_price > 0)
-      const endReason = product?.current_bid_price && product.current_bid_price > 0 
-        ? 'force_stop'  // Pernah ada yang bid
-        : 'cancelled'    // Tidak ada bid sama sekali
-      
-      // 4. ✅ INSERT KE AUCTION_HISTORY (IMMUTABLE)
-      const { error: historyError } = await supabase
-        .from('auction_history')
-        .insert({
-          product_id: product?.id,
-          product_name: product?.nama_produk,
-          start_price: product?.auction_start_price || 0,
-          final_price: product?.current_bid_price || product?.auction_start_price || 0,
-          winner_id: product?.current_bidder_id,
-          winner_name: winnerName,
-          finished_auction_id: finishedId,
-          auction_start_time: product?.auction_started_at,
-          auction_end_time: new Date().toISOString(),
-          auction_end_reason: endReason, // ✅ cancelled atau force_stop
-          total_bids: 0
-        })
-      
-      if (historyError) {
-        console.error('Failed to save to history:', historyError)
-        throw historyError
-      }
-      
-      // 5. Update product - RESET ke status normal
-      await supabase
-        .from('products')
-        .update({
-          is_auction: false,
-          auction_active: false,
-          auction_start_price: null,
-          auction_increment: null,
-          auction_end_time: null,
-          auction_duration_days: null,
-          bid_deadline_duration: null,
-          bid_deadline_time: null,
-          auction_description: null,
-          auction_gallery_urls: null,
-          current_bid_price: null,
-          current_bidder_id: null,
-          auction_started_at: null,
-          finished_auction_id: finishedId,
-          auction_winner_name: winnerName,
-          auction_ended_at: new Date().toISOString(),
-          auction_end_reason: endReason
-        })
-        .eq('id', cancellingProductId)
-      
-      await fetchProducts()
-      
-      alert(`✅ Lelang dibatalkan & disimpan ke history!\nID: ${finishedId}\nStatus: ${endReason}`)
-    } catch (err: any) {
-      alert("❌ Gagal: " + err.message)
-    }
+    // 2. Get current bidder info
+    const product = products.find(p => p.id === cancellingProductId)
+    const winnerName = product?.current_bidder_id || null
+    
+    // 3. Update product dengan info finished auction
+    const { error } = await supabase
+      .from('products')
+      .update({
+        is_auction: true,
+        auction_active: false,
+        finished_auction_id: finishedId,
+        auction_winner_name: winnerName,
+        auction_ended_at: new Date().toISOString(),
+        auction_end_reason: 'cancelled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', cancellingProductId)
+    
+    if (error) throw error
+    
+    // Update local state
+    setProducts(products.map(p =>
+      p.id === cancellingProductId ? { 
+        ...p, 
+        is_auction: true, 
+        auction_active: false,
+        finished_auction_id: finishedId,
+        auction_winner_name: winnerName,
+        auction_ended_at: new Date().toISOString(),
+        auction_end_reason: 'cancelled'
+      } : p
+    ))
+    
+    setShowCancelConfirmModal(false)
+    setCancellingProductId(null)
+    setCancellingProductName('')
+    
+    alert(`✅ Lelang "${cancellingProductName}" telah dibatalkan.\nID Selesai: ${finishedId}\nPemenang: ${winnerName || 'Tidak ada'}`)
+  } catch (err: any) {
+    alert("❌ Gagal membatalkan lelang: " + err.message)
   }
+}
 
   // ✅ Fungsi lama toggleAuctionStatus (tetap untuk fitur lain jika diperlukan)
   const toggleAuctionStatus = async (productId: string, currentStatus: boolean) => {
@@ -1480,90 +1426,6 @@ const duplicateAndAuction = async (productId: string) => {
         </Card>
       )}
 
-      {/* ✅ VIEW KHUSUS UNTUK LELANG SELESAI - PAKAI AUCTION_HISTORY */}
-      {filterView === 'finished' && (
-        <Card className="bg-slate-900 border-slate-800">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-white">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-pink-400" />
-                History Lelang Selesai
-              </div>
-              <span className="text-sm text-slate-400">
-                {auctionHistory.length} lelang
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {historyLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
-              </div>
-            ) : auctionHistory.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 flex flex-col items-center">
-                <CheckCircle2 className="h-12 w-12 mb-3 opacity-50" />
-                <p className="text-lg font-medium">Belum ada lelang yang selesai.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-800 uppercase font-medium">
-                    <tr>
-                      <th className="px-4 py-3">ID Selesai</th>
-                      <th className="px-4 py-3">Produk</th>
-                      <th className="px-4 py-3">Harga Final</th>
-                      <th className="px-4 py-3">Pemenang</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Tanggal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {auctionHistory.map((history) => (
-                      <tr key={history.id} className="hover:bg-slate-800/50">
-                        <td className="px-4 py-3 font-mono text-pink-400">{history.finished_auction_id}</td>
-                        <td className="px-4 py-3 font-medium text-white">{history.product_name}</td>
-                        <td className="px-4 py-3 text-orange-400 font-mono">{formatRupiah(history.final_price)}</td>
-                        <td className="px-4 py-3 text-green-400">{history.winner_name || 'Tidak ada'}</td>
-                        <td className="px-4 py-3">
-                          <Badge className={`${
-                            history.auction_end_reason === 'cancelled' 
-                              ? 'bg-red-500/20 text-red-400 border-red-500/30' 
-                              : history.auction_end_reason === 'force_stop'
-                              ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                              : history.auction_end_reason === 'no_bids'
-                              ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-                              : 'bg-green-500/20 text-green-400 border-green-500/30'
-                          } border`}>
-                            {history.auction_end_reason === 'cancelled' 
-                              ? 'Cancelled' 
-                              : history.auction_end_reason === 'force_stop'
-                              ? 'Force Stop'
-                              : history.auction_end_reason === 'no_bids'
-                              ? 'No Bids'
-                              : 'Completed'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-slate-400">
-                          {(() => {
-                            const date = new Date(history.auction_end_time)
-                            const day = String(date.getDate()).padStart(2, '0')
-                            const month = String(date.getMonth() + 1).padStart(2, '0')
-                            const year = date.getFullYear()
-                            const hours = String(date.getHours()).padStart(2, '0')
-                            const minutes = String(date.getMinutes()).padStart(2, '0')
-                            return `${day}/${month}/${year} ${hours}:${minutes}`
-                          })()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* PRODUCTS TABLE - Only shows when filterView !== 'wishlist' */}
       {filterView !== 'wishlist' && (
         <Card className="bg-slate-900 border-slate-800">
@@ -1795,6 +1657,19 @@ const duplicateAndAuction = async (productId: string) => {
                               <span className="text-slate-500 text-xs">-</span>
                             )}
                           </td>
+
+                          {/* ✅ KOLOM PEMENANG - KHUSUS FINISHED VIEW */}
+                          {filterView === 'finished' && (
+                            <td className="px-4 py-3">
+                              {product.auction_winner_name ? (
+                                <p className="text-green-400 font-semibold text-sm">
+                                  {product.auction_winner_name}
+                                </p>
+                              ) : (
+                                <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
+                              )}
+                            </td>
+                          )}
                           
                           {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
