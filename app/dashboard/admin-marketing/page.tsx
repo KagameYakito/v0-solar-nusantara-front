@@ -43,6 +43,22 @@ interface Product {
   auction_end_reason: string | null
 }
 
+interface AuctionHistory {
+  id: string
+  product_id: string
+  product_name: string | null
+  start_price: number | null
+  final_price: number | null
+  winner_id: string | null
+  winner_name: string | null
+  finished_auction_id: string | null
+  auction_start_time: string | null
+  auction_end_time: string | null
+  auction_end_reason: string | null
+  total_bids: number | null
+  created_at: string
+}
+
 interface GroupedWishlistItem {
   wishlist_id: number
   request_id: number | null
@@ -112,6 +128,9 @@ export default function AdminMarketingDashboard() {
   const [winnerNames, setWinnerNames] = useState<Record<string, string>>({})
   // ✅ Track which finished-auction product IDs have completed winner fetch (for loading UX)
   const [winnersFetched, setWinnersFetched] = useState<Set<string>>(new Set())
+
+  const [auctionHistory, setAuctionHistory] = useState<AuctionHistory[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   
   // ✅ WISHLIST ANALYTICS STATE
   const [wishlistItems, setWishlistItems] = useState<GroupedWishlistItem[]>([])
@@ -242,11 +261,25 @@ export default function AdminMarketingDashboard() {
     }
   }, [wishlistFilter])
 
-  useEffect(() => {
-    if (isAuthorized) {
-      fetchWishlistItems()
+  // ✅ TAMBAHKAN FUNGSI INI
+  const fetchAuctionHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true)
+      
+      const { data, error } = await supabase
+        .from('auction_history')
+        .select('*')
+        .order('auction_end_time', { ascending: false })
+      
+      if (error) throw error
+      
+      setAuctionHistory(data || [])
+    } catch (err: any) {
+      console.error("Failed to fetch auction history:", err)
+    } finally {
+      setHistoryLoading(false)
     }
-  }, [isAuthorized, wishlistFilter])
+  }, [])
 
   const openNoteModal = (item: any) => {
     setSelectedWishlistItem(item)
@@ -456,8 +489,11 @@ export default function AdminMarketingDashboard() {
   useEffect(() => {
     if (isAuthorized) {
       fetchProducts()
+      if (filterView === 'finished') {
+        fetchAuctionHistory()
+      }
     }
-  }, [isAuthorized, fetchProducts])
+  }, [isAuthorized, fetchProducts, filterView, fetchAuctionHistory])
 
   // ✅ Fetch and save winner data for finished auctions missing auction_winner_name or finished_auction_id
   useEffect(() => {
@@ -642,7 +678,7 @@ export default function AdminMarketingDashboard() {
         const { data: idData } = await supabase.rpc('generate_finished_auction_id')
         const finishedId = idData || generateFallbackAuctionId()
         
-        let winnerName = null
+        let winnerName: string | null = null
         if (product.current_bidder_id) {
           const { data: profileData } = await supabase
             .from('profiles')
@@ -651,10 +687,38 @@ export default function AdminMarketingDashboard() {
             .single()
           
           if (profileData) {
-            winnerName = profileData.full_name || profileData.email || product.current_bidder_id
+            winnerName = profileData.full_name || profileData.email
           }
         }
         
+        // ✅ HITUNG TOTAL BIDS
+        const { count: totalBids } = await supabase
+          .from('auction_bids')
+          .select('*', { count: 'exact', head: true })
+          .eq('product_id', product.id)
+        
+        // 1. ✅ SIMPAN KE AUCTION_HISTORY
+        const { error: historyError } = await supabase
+          .from('auction_history')
+          .insert({
+            product_id: product.id,
+            product_name: product.nama_produk,
+            start_price: product.auction_start_price || 0,
+            final_price: product.current_bid_price || product.auction_start_price || 0,
+            winner_id: product.current_bidder_id,
+            winner_name: winnerName,
+            finished_auction_id: finishedId,
+            auction_start_time: product.auction_started_at,
+            auction_end_time: new Date().toISOString(),
+            auction_end_reason: reason,
+            total_bids: totalBids || 0
+          })
+        
+        if (historyError) {
+          console.error('Failed to save to history:', historyError)
+        }
+        
+        // 2. Update product
         await supabase
           .from('products')
           .update({
@@ -667,8 +731,9 @@ export default function AdminMarketingDashboard() {
           })
           .eq('id', product.id)
         
-        alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!${winnerName ? `\nPemenang: ${winnerName}` : ''}`)
+        alert(`⏰ Lelang "${product.nama_produk}" selesai!\nID: ${finishedId}\nPemenang: ${winnerName || 'Tidak ada'}`)
         fetchProducts()
+        fetchAuctionHistory() // ✅ Refresh history
       } catch (err) {
         console.error("Failed to auto-end auction:", err)
       }
@@ -1073,69 +1138,104 @@ export default function AdminMarketingDashboard() {
 
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
-const confirmCancelAuction = async () => {
-  if (!cancellingProductId) return
-  
-  try {
-    // 1. Generate finished auction ID
-    const { data: idData } = await supabase.rpc('generate_finished_auction_id')
-    const finishedId = idData || `#${String(Date.now()).slice(-6)}`
+  const confirmCancelAuction = async () => {
+    if (!cancellingProductId) return
     
-    // 2. Get current bidder info
-    const product = products.find(p => p.id === cancellingProductId)
-    let winnerName = null
-    
-    // 3. Fetch winner name from profiles if there's a current bidder
-    if (product?.current_bidder_id) {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', product.current_bidder_id)
-        .single()
+    try {
+      const product = products.find(p => p.id === cancellingProductId)
+      if (!product) return
       
-      if (profileData) {
-        winnerName = profileData.full_name || profileData.email || product.current_bidder_id
+      // 1. Generate finished auction ID
+      const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+      const finishedId = idData || `#${String(Date.now()).slice(-6)}`
+      
+      // 2. Get winner info
+      let winnerName: string | null = null
+      if (product.current_bidder_id) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', product.current_bidder_id)
+          .single()
+        
+        if (profileData) {
+          winnerName = profileData.full_name || profileData.email
+        }
       }
+      
+      // 3. ✅ HITUNG TOTAL BIDS
+      const { count: totalBids } = await supabase
+        .from('auction_bids')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', product.id)
+      
+      // 4. ✅ SIMPAN KE AUCTION_HISTORY
+      const { error: historyError } = await supabase
+        .from('auction_history')
+        .insert({
+          product_id: product.id,
+          product_name: product.nama_produk,
+          start_price: product.auction_start_price || 0,
+          final_price: product.current_bid_price || product.auction_start_price || 0,
+          winner_id: product.current_bidder_id,
+          winner_name: winnerName,
+          finished_auction_id: finishedId,
+          auction_start_time: product.auction_started_at,
+          auction_end_time: new Date().toISOString(),
+          auction_end_reason: 'cancelled',
+          total_bids: totalBids || 0
+        })
+      
+      if (historyError) {
+        console.error('Failed to save to history:', historyError)
+        // Lanjutkan meski gagal save history
+      }
+      
+      // 5. ✅ UPDATE PRODUCT - RESET KE NON-AUCTION
+      const { error } = await supabase
+        .from('products')
+        .update({
+          is_auction: false, // ✅ RESET
+          auction_active: false,
+          finished_auction_id: finishedId,
+          auction_winner_name: winnerName,
+          auction_ended_at: new Date().toISOString(),
+          auction_end_reason: 'cancelled',
+          // ✅ RESET FIELD LELANG
+          current_bid_price: null,
+          current_bidder_id: null,
+          auction_end_time: null,
+          bid_deadline_time: null
+        })
+        .eq('id', cancellingProductId)
+      
+      if (error) throw error
+      
+      // 6. Update local state
+      setProducts(products.map(p =>
+        p.id === cancellingProductId ? { 
+          ...p, 
+          is_auction: false, // ✅ RESET
+          auction_active: false,
+          finished_auction_id: finishedId,
+          auction_winner_name: winnerName,
+          auction_ended_at: new Date().toISOString(),
+          auction_end_reason: 'cancelled'
+        } : p
+      ))
+      
+      // 7. Refresh history
+      await fetchAuctionHistory()
+      
+      setShowCancelConfirmModal(false)
+      setCancellingProductId(null)
+      setCancellingProductName('')
+      
+      alert(`✅ Lelang "${cancellingProductName}" dibatalkan & disimpan ke history!\nID: ${finishedId}\nPemenang: ${winnerName || 'Tidak ada'}`)
+    } catch (err: any) {
+      alert("❌ Gagal membatalkan lelang: " + err.message)
     }
-    
-    // 4. Update product dengan info finished auction
-    const { error } = await supabase
-      .from('products')
-      .update({
-        is_auction: true,
-        auction_active: false,
-        finished_auction_id: finishedId,
-        auction_winner_name: winnerName,
-        auction_ended_at: new Date().toISOString(),
-        auction_end_reason: 'cancelled',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', cancellingProductId)
-    
-    if (error) throw error
-    
-    // Update local state
-    setProducts(products.map(p =>
-      p.id === cancellingProductId ? { 
-        ...p, 
-        is_auction: true, 
-        auction_active: false,
-        finished_auction_id: finishedId,
-        auction_winner_name: winnerName,
-        auction_ended_at: new Date().toISOString(),
-        auction_end_reason: 'cancelled'
-      } : p
-    ))
-    
-    setShowCancelConfirmModal(false)
-    setCancellingProductId(null)
-    setCancellingProductName('')
-    
-    alert(`✅ Lelang "${cancellingProductName}" telah dibatalkan.\nID Selesai: ${finishedId}\nPemenang: ${winnerName || 'Tidak ada'}`)
-  } catch (err: any) {
-    alert("❌ Gagal membatalkan lelang: " + err.message)
   }
-}
 
   // ✅ Fungsi lama toggleAuctionStatus (tetap untuk fitur lain jika diperlukan)
   const toggleAuctionStatus = async (productId: string, currentStatus: boolean) => {
