@@ -182,9 +182,25 @@ export default function AuctionsPage() {
         .or('auction_active.eq.true,and(auction_active.eq.false,current_bidder_id.not.is.null)')
         .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
-
+  
       if (error) throw error
-      setProducts(data || [])
+      
+      const activeProducts = data || []
+      setProducts(activeProducts)
+      
+      // ✅ RESET BIDDERS UNTUK PRODUK YANG TIDAK AKTIF
+      const inactiveProductIds = activeProducts
+        .filter(p => !p.auction_active)
+        .map(p => p.id)
+      
+      setBidders(prev => {
+        const newBidders = { ...prev }
+        inactiveProductIds.forEach(id => {
+          newBidders[id] = [] // Clear bidders untuk produk tidak aktif
+        })
+        return newBidders
+      })
+      
     } catch (err) {
       console.error('Failed to fetch auction products:', err)
     } finally {
@@ -196,8 +212,17 @@ export default function AuctionsPage() {
     try {
       const productIds = products.map(p => p.id)
       const biddersData: Record<string, Bidder[]> = {}
-
+  
       for (const productId of productIds) {
+        // ✅ Cari tahu apakah produk ini sedang aktif
+        const product = products.find(p => p.id === productId)
+        
+        // ✅ HANYA AMBIL BIDS JIKA PRODUK SEDANG AKTIF
+        if (!product?.auction_active) {
+          biddersData[productId] = [] // Kosongkan jika tidak aktif
+          continue
+        }
+  
         const { data: bids, error } = await supabase
           .from('auction_bids')
           .select(`
@@ -208,7 +233,7 @@ export default function AuctionsPage() {
           .eq('product_id', productId)
           .order('bid_price', { ascending: false })
           .limit(10)
-
+  
         if (error) {
           console.error(`Error fetching bids for product ${productId}:`, error)
           continue
@@ -220,7 +245,7 @@ export default function AuctionsPage() {
             .from('profiles')
             .select('id, full_name')
             .in('id', bidderIds)
-
+  
           biddersData[productId] = bids.map((bid: any) => {
             const profile = profiles?.find((p: any) => p.id === bid.bidder_id)
             return {
@@ -234,7 +259,7 @@ export default function AuctionsPage() {
           biddersData[productId] = []
         }
       }
-
+  
       setBidders(biddersData)
     } catch (err) {
       console.error('Failed to fetch bidders:', err)
