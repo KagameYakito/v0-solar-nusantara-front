@@ -999,7 +999,6 @@ export default function AdminMarketingDashboard() {
       await supabase
         .from('products')
         .update({
-          is_auction: false,
           auction_active: false,
           auction_start_price: null,
           auction_increment: null,
