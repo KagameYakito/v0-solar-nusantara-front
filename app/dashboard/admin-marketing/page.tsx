@@ -244,6 +244,23 @@ export default function AdminMarketingDashboard() {
     }
   }, [isAuthorized, wishlistFilter])
 
+  const fetchAuctionHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true)
+      const { data, error } = await supabase
+        .from('auction_history')
+        .select('*')
+        .order('auction_end_time', { ascending: false })
+      
+      if (error) throw error
+      setAuctionHistory(data || [])
+    } catch (err: any) {
+      console.error("Failed to fetch auction history:", err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
   if (isAuthorized) {
     fetchProducts()
