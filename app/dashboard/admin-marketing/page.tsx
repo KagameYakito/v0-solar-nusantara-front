@@ -957,14 +957,18 @@ export default function AdminMarketingDashboard() {
         winnerName = profileData?.full_name || null
       }
       
-      // 3. ✅ TENTUKAN STATUS: cancelled vs force_stop
-      // - cancelled: tidak ada bid sama sekali (current_bid_price = 0 atau null)
-      // - force_stop: pernah ada bid (current_bid_price > 0)
-      const endReason = product?.current_bid_price && product.current_bid_price > 0 
-        ? 'force_stop'  // Pernah ada yang bid
-        : 'cancelled'    // Tidak ada bid sama sekali
+      // 3. ✅ DELETE SEMUA BIDS LAMA (RESET LIVE BIDDERS)
+      await supabase
+        .from('auction_bids')
+        .delete()
+        .eq('product_id', cancellingProductId)
       
-      // 4. ✅ INSERT KE AUCTION_HISTORY (IMMUTABLE)
+      // 4. Tentukan status berdasarkan ada/tidaknya pemenang
+      const endReason = winnerName && winnerName !== 'Tidak ada'
+        ? 'force_stop'
+        : 'cancelled'
+      
+      // 5. ✅ INSERT KE AUCTION_HISTORY
       const { error: historyError } = await supabase
         .from('auction_history')
         .insert({
@@ -977,8 +981,8 @@ export default function AdminMarketingDashboard() {
           finished_auction_id: finishedId,
           auction_start_time: product?.auction_started_at,
           auction_end_time: new Date().toISOString(),
-          auction_end_reason: endReason, // ✅ cancelled atau force_stop
-          total_bids: 0
+          auction_end_reason: endReason,
+          total_bids: 0 // Karena sudah di-delete
         })
       
       if (historyError) {
@@ -986,7 +990,7 @@ export default function AdminMarketingDashboard() {
         throw historyError
       }
       
-      // 5. Update product - RESET ke status normal
+      // 6. Update product - RESET ke status normal
       await supabase
         .from('products')
         .update({
