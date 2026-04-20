@@ -30,6 +30,7 @@ interface AuctionProduct {
   auction_active: boolean
   auction_description: string | null
   current_bidder_id: string | null
+  auction_winner_name: string | null
 }
 
 interface Bidder {
@@ -188,11 +189,9 @@ export default function AuctionsPage() {
       
       // ✅ FILTER MANUAL DI FRONTEND
       const filteredProducts = (data || []).filter(product => {
-        // Tampilkan jika:
-        // 1. Masih aktif (auction_active = true), ATAU
-        // 2. Sudah selesai tapi ada pemenang (current_bidder_id tidak null)
         return product.auction_active === true || 
-               (product.auction_active === false && product.current_bidder_id !== null)
+               (product.auction_active === false && 
+                (product.current_bidder_id !== null || product.auction_winner_name !== null))
       })
       
       console.log('Filtered products:', filteredProducts.length) // Debug log
@@ -227,12 +226,19 @@ export default function AuctionsPage() {
         // ✅ Cari tahu apakah produk ini sedang aktif
         const product = products.find(p => p.id === productId)
         
-        // ✅ HANYA AMBIL BIDS JIKA PRODUK SEDANG AKTIF
-        if (!product?.auction_active) {
-          biddersData[productId] = [] // Kosongkan jika tidak aktif
+        // ✅ TAMBAH NULL CHECK
+        if (!product) {
           continue
         }
-  
+        
+        // ✅ HANYA AMBIL BIDS JIKA PRODUK SEDANG AKTIF
+        if (!product.auction_active) {
+          if (!product.current_bidder_id && !product.auction_winner_name) {
+            biddersData[productId] = []
+          }
+          continue
+        }
+
         const { data: bids, error } = await supabase
           .from('auction_bids')
           .select(`
@@ -669,20 +675,16 @@ const submitBid = async () => {
                     )}
                     
                     <div className="absolute top-4 left-4">
-                      {product.auction_active ? (
-                        // ✅ Kondisi A: Masih berjalan
-                        <Badge className="bg-purple-600 text-white px-3 py-1">
-                          Sedang Lelang
-                        </Badge>
-                      ) : product.current_bidder_id ? (
-                        // ✅ Kondisi C & D: Selesai tapi ada pemenang
-                        <Badge className="bg-pink-600 text-white px-3 py-1">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Lelang Selesai
-                        </Badge>
-                      ) : null
-                      // ✅ Kondisi B & E: Tidak tampil badge (tidak ada bidders)
-                      }
+                    {product.auction_active ? (
+                      <Badge className="bg-purple-600 text-white px-3 py-1">
+                        Sedang Lelang
+                      </Badge>
+                    ) : (product.current_bidder_id || product.auction_winner_name) ? (
+                      <Badge className="bg-pink-600 text-white px-3 py-1">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Lelang Selesai
+                      </Badge>
+                    ) : null}
                     </div>
                   </div>
 
