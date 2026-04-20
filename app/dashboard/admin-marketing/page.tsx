@@ -951,7 +951,14 @@ export default function AdminMarketingDashboard() {
         winnerName = profileData?.full_name || null
       }
       
-      // 3. ✅ INSERT KE AUCTION_HISTORY (IMMUTABLE)
+      // 3. ✅ TENTUKAN STATUS: cancelled vs force_stop
+      // - cancelled: tidak ada bid sama sekali (current_bid_price = 0 atau null)
+      // - force_stop: pernah ada bid (current_bid_price > 0)
+      const endReason = product?.current_bid_price && product.current_bid_price > 0 
+        ? 'force_stop'  // Pernah ada yang bid
+        : 'cancelled'    // Tidak ada bid sama sekali
+      
+      // 4. ✅ INSERT KE AUCTION_HISTORY (IMMUTABLE)
       const { error: historyError } = await supabase
         .from('auction_history')
         .insert({
@@ -964,8 +971,8 @@ export default function AdminMarketingDashboard() {
           finished_auction_id: finishedId,
           auction_start_time: product?.auction_started_at,
           auction_end_time: new Date().toISOString(),
-          auction_end_reason: 'cancelled',
-          total_bids: 0 // Atau hitung dari auction_bids
+          auction_end_reason: endReason, // ✅ cancelled atau force_stop
+          total_bids: 0
         })
       
       if (historyError) {
@@ -973,13 +980,12 @@ export default function AdminMarketingDashboard() {
         throw historyError
       }
       
-      // 4. Update product - RESET ke status normal
+      // 5. Update product - RESET ke status normal
       await supabase
         .from('products')
         .update({
-          is_auction: false, // ✅ RESET KE FALSE
+          is_auction: false,
           auction_active: false,
-          // Reset field lelang
           auction_start_price: null,
           auction_increment: null,
           auction_end_time: null,
@@ -991,18 +997,16 @@ export default function AdminMarketingDashboard() {
           current_bid_price: null,
           current_bidder_id: null,
           auction_started_at: null,
-          // Simpan info finished
           finished_auction_id: finishedId,
           auction_winner_name: winnerName,
           auction_ended_at: new Date().toISOString(),
-          auction_end_reason: 'cancelled'
+          auction_end_reason: endReason
         })
         .eq('id', cancellingProductId)
       
-      // Refresh data
       await fetchProducts()
       
-      alert(`✅ Lelang dibatalkan & disimpan ke history!\nID: ${finishedId}`)
+      alert(`✅ Lelang dibatalkan & disimpan ke history!\nID: ${finishedId}\nStatus: ${endReason}`)
     } catch (err: any) {
       alert("❌ Gagal: " + err.message)
     }
@@ -1523,14 +1527,32 @@ const duplicateAndAuction = async (productId: string) => {
                         <td className="px-4 py-3">
                           <Badge className={`${
                             history.auction_end_reason === 'cancelled' 
-                              ? 'bg-red-500/20 text-red-400' 
-                              : 'bg-green-500/20 text-green-400'
-                          }`}>
-                            {history.auction_end_reason}
+                              ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                              : history.auction_end_reason === 'force_stop'
+                              ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                              : history.auction_end_reason === 'no_bids'
+                              ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                              : 'bg-green-500/20 text-green-400 border-green-500/30'
+                          } border`}>
+                            {history.auction_end_reason === 'cancelled' 
+                              ? 'Cancelled' 
+                              : history.auction_end_reason === 'force_stop'
+                              ? 'Force Stop'
+                              : history.auction_end_reason === 'no_bids'
+                              ? 'No Bids'
+                              : 'Completed'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-slate-400">
-                          {new Date(history.auction_end_time).toLocaleDateString('id-ID')}
+                          {(() => {
+                            const date = new Date(history.auction_end_time)
+                            const day = String(date.getDate()).padStart(2, '0')
+                            const month = String(date.getMonth() + 1).padStart(2, '0')
+                            const year = date.getFullYear()
+                            const hours = String(date.getHours()).padStart(2, '0')
+                            const minutes = String(date.getMinutes()).padStart(2, '0')
+                            return `${day}/${month}/${year} ${hours}:${minutes}`
+                          })()}
                         </td>
                       </tr>
                     ))}
