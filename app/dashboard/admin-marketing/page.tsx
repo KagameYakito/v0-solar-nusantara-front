@@ -528,7 +528,6 @@ export default function AdminMarketingDashboard() {
       const now = new Date().getTime()
       
       products.forEach(async (product) => {
-        // Check jika bid deadline sudah habis dan ada bid
         if (product.auction_active && 
             product.bid_deadline_time && 
             product.current_bid_price && 
@@ -536,30 +535,30 @@ export default function AdminMarketingDashboard() {
           
           const bidDeadline = new Date(product.bid_deadline_time).getTime()
           
-          // Jika bid deadline sudah lewat
           if (bidDeadline < now) {
-            // Auto end auction
             try {
-              // ✅ TENTUKAN REASON: completed jika ada bid, no_bids jika tidak ada
               const endReason = product.current_bid_price && product.current_bid_price > 0 
                 ? 'completed' 
                 : 'no_bids'
+              
+              // ✅ DELETE BIDS SEBELUM UPDATE
+              await supabase
+                .from('auction_bids')
+                .delete()
+                .eq('product_id', product.id)
               
               await supabase
                 .from('products')
                 .update({
                   auction_active: false,
-                  is_auction: true,  // ✅ JANGAN UBAH KE FALSE
-                  auction_end_reason: endReason,  // ✅ SIMPAN REASON
-                  auction_ended_at: new Date().toISOString(),  // ✅ SIMPAN WAKTU
-                  // ✅ SIMPAN PEMENANG JIKA ADA
+                  is_auction: true,
+                  auction_end_reason: endReason,
+                  auction_ended_at: new Date().toISOString(),
                   auction_winner_name: product.current_bidder_id || null
                 })
                 .eq('id', product.id)
               
               alert(`⏰ Lelang "${product.nama_produk}" telah berakhir!`)
-              
-              // Refresh data
               fetchProducts()
             } catch (err) {
               console.error("Failed to auto-end auction:", err)
@@ -569,7 +568,6 @@ export default function AdminMarketingDashboard() {
       })
     }
     
-    // Check setiap 10 detik
     const interval = setInterval(checkBidDeadlines, 10000)
     return () => clearInterval(interval)
   }, [products])
@@ -943,7 +941,7 @@ export default function AdminMarketingDashboard() {
       const product = products.find(p => p.id === cancellingProductId)
       
       // 1. Generate finished auction ID
-      const { data: idData } = await supabase.rpc('generate_finished_auction_id')
+      const {  idData } = await supabase.rpc('generate_finished_auction_id')
       const finishedId = idData || `#${String(Date.now()).slice(-6)}`
       
       // 2. Get winner info
