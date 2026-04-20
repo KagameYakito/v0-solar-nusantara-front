@@ -236,22 +236,14 @@ export default function AuctionsPage() {
       const biddersData: Record<string, Bidder[]> = {}
   
       for (const productId of productIds) {
-        // ✅ Cari tahu apakah produk ini sedang aktif
         const product = products.find(p => p.id === productId)
         
-        // ✅ TAMBAH NULL CHECK
         if (!product) {
           continue
         }
         
-        // ✅ HANYA AMBIL BIDS JIKA PRODUK SEDANG AKTIF
-        if (!product.auction_active) {
-          if (!product.current_bidder_id && !product.auction_winner_name) {
-            biddersData[productId] = []
-          }
-          continue
-        }
-
+        // ✅ FETCH BIDS UNTUK SEMUA PRODUK (aktif maupun selesai)
+        // Jangan skip produk yang sudah selesai
         const { data: bids, error } = await supabase
           .from('auction_bids')
           .select(`
