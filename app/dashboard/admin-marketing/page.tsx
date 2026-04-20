@@ -1008,7 +1008,6 @@ export default function AdminMarketingDashboard() {
           bid_deadline_time: null,
           auction_description: null,
           auction_gallery_urls: null,
-          current_bid_price: null,
           auction_started_at: null,
           finished_auction_id: finishedId,
           auction_winner_name: winnerName,
