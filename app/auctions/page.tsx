@@ -176,28 +176,30 @@ export default function AuctionsPage() {
     try {
       setLoading(true)
       
-      // ✅ QUERY SEDERHANA: Tampilkan jika:
-      // 1. Masih aktif (auction_active = true), ATAU
-      // 2. Sudah selesai tapi ada pemenang (current_bidder_id tidak null)
+      // ✅ FETCH SEMUA PRODUK AUCTION DULU (tanpa filter kompleks)
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('is_auction', true)
-        .or('auction_active.eq.true,current_bidder_id.not.is.null')
         .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
   
-      if (error) {
-        console.error('Query error:', error)
-        throw error
-      }
+      if (error) throw error
       
-      const activeProducts = data || []
-      console.log('Fetched products:', activeProducts.length) // Debug log
-      setProducts(activeProducts)
+      // ✅ FILTER MANUAL DI FRONTEND
+      const filteredProducts = (data || []).filter(product => {
+        // Tampilkan jika:
+        // 1. Masih aktif (auction_active = true), ATAU
+        // 2. Sudah selesai tapi ada pemenang (current_bidder_id tidak null)
+        return product.auction_active === true || 
+               (product.auction_active === false && product.current_bidder_id !== null)
+      })
+      
+      console.log('Filtered products:', filteredProducts.length) // Debug log
+      setProducts(filteredProducts)
       
       // Reset bidders untuk produk tidak aktif
-      const inactiveProductIds = activeProducts
+      const inactiveProductIds = filteredProducts
         .filter(p => !p.auction_active)
         .map(p => p.id)
       
