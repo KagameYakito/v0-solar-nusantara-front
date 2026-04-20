@@ -238,31 +238,20 @@ export default function AdminMarketingDashboard() {
     }
   }, [wishlistFilter])
 
-  const fetchAuctionHistory = useCallback(async () => {
-    try {
-      setHistoryLoading(true)
-      const { data, error } = await supabase
-        .from('auction_history')
-        .select('*')
-        .order('auction_end_time', { ascending: false })
-      
-      if (error) throw error
-      setAuctionHistory(data || [])
-    } catch (err: any) {
-      console.error("Failed to fetch auction history:", err)
-    } finally {
-      setHistoryLoading(false)
-    }
-  }, [])
-
   useEffect(() => {
     if (isAuthorized) {
-      fetchProducts()
-      if (filterView === 'finished') {
-        fetchAuctionHistory() // ✅ Fetch dari auction_history
-      }
+      fetchWishlistItems()
     }
-  }, [isAuthorized, filterView])
+  }, [isAuthorized, wishlistFilter])
+
+  useEffect(() => {
+  if (isAuthorized) {
+    fetchProducts()
+    if (filterView === 'finished') {
+      fetchAuctionHistory() // ✅ Fetch dari auction_history
+    }
+  }
+}, [isAuthorized, filterView])
 
   const openNoteModal = (item: any) => {
     setSelectedWishlistItem(item)
@@ -1708,47 +1697,18 @@ const duplicateAndAuction = async (productId: string) => {
                             )}
                           </td>
 
+                          {/* ✅ KOLOM PEMENANG - KHUSUS FINISHED VIEW */}
                           {filterView === 'finished' && (
-    <Card className="bg-slate-900 border-slate-800">
-      <CardHeader>
-        <CardTitle className="text-white">History Lelang Selesai</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {historyLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
-        ) : auctionHistory.length === 0 ? (
-          <p className="text-center text-slate-500 py-12">Belum ada lelang yang selesai</p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th>ID Selesai</th>
-                <th>Produk</th>
-                <th>Harga Final</th>
-                <th>Pemenang</th>
-                <th>Status</th>
-                <th>Tanggal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auctionHistory.map((history) => (
-                <tr key={history.id}>
-                  <td>{history.finished_auction_id}</td>
-                  <td>{history.product_name}</td>
-                  <td>{formatRupiah(history.final_price)}</td>
-                  <td>{history.winner_name || 'Tidak ada'}</td>
-                  <td>{history.auction_end_reason}</td>
-                  <td>{new Date(history.auction_end_time).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </CardContent>
-    </Card>
-  )}
+                            <td className="px-4 py-3">
+                              {product.auction_winner_name ? (
+                                <p className="text-green-400 font-semibold text-sm">
+                                  {product.auction_winner_name}
+                                </p>
+                              ) : (
+                                <p className="text-slate-500 italic text-sm">Tidak ada pemenang</p>
+                              )}
+                            </td>
+                          )}
                           
                           {/* ✅ STATUS - Tanpa "Tidak Ada Request" untuk auction */}
                           <td className="px-4 py-3">
