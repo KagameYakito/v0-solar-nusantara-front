@@ -176,28 +176,41 @@ export default function AuctionsPage() {
   const fetchAuctionProducts = async () => {
     try {
       setLoading(true)
+      console.log('🔍 Fetching auction products...')
       
-      // ✅ FETCH SEMUA PRODUK AUCTION DULU (tanpa filter kompleks)
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('is_auction', true)
+        .eq('is_auction', true)  // ← Ini harus true!
         .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
   
       if (error) throw error
       
-      // ✅ FILTER MANUAL DI FRONTEND
+      console.log('📦 All products from DB:', data?.length || 0)
+      console.log('📦 Products data:', data)
+      
       const filteredProducts = (data || []).filter(product => {
-        return product.auction_active === true || 
-               (product.auction_active === false && 
-                (product.current_bidder_id !== null || product.auction_winner_name !== null))
+        const hasWinner = product.current_bidder_id !== null || product.auction_winner_name !== null
+        const shouldInclude = product.auction_active === true || 
+                             (product.auction_active === false && hasWinner)
+        
+        console.log(`🔎 Product "${product.nama_produk}":`, {
+          auction_active: product.auction_active,
+          current_bidder_id: product.current_bidder_id,
+          auction_winner_name: product.auction_winner_name,
+          hasWinner,
+          shouldInclude
+        })
+        
+        return shouldInclude
       })
       
-      console.log('Filtered products:', filteredProducts.length) // Debug log
+      console.log('✅ Filtered products:', filteredProducts.length)
+      console.log('✅ Filtered products data:', filteredProducts)
+      
       setProducts(filteredProducts)
       
-      // Reset bidders untuk produk tidak aktif
       const inactiveProductIds = filteredProducts
         .filter(p => !p.auction_active)
         .map(p => p.id)
@@ -211,7 +224,7 @@ export default function AuctionsPage() {
       })
       
     } catch (err) {
-      console.error('Failed to fetch auction products:', err)
+      console.error('❌ Failed to fetch auction products:', err)
     } finally {
       setLoading(false)
     }
