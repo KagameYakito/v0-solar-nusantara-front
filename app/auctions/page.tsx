@@ -179,7 +179,16 @@ export default function AuctionsPage() {
         .from('products')
         .select('*')
         .eq('is_auction', true)
-        .or('auction_active.eq.true,and(auction_active.eq.false,current_bidder_id.not.is.null)')
+        // ✅ FILTER: Hanya tampilkan jika:
+        // 1. Masih aktif (auction_active = true)
+        // 2. ATAU sudah selesai tapi punya pemenang (current_bidder_id tidak null)
+        // 3. ATAU sudah selesai dengan status force_stop/completed
+        .or(`
+          auction_active.eq.true,
+          and(auction_active.eq.false,current_bidder_id.not.is.null),
+          and(auction_active.eq.false,auction_end_reason.eq.force_stop),
+          and(auction_active.eq.false,auction_end_reason.eq.completed)
+        `)
         .order('auction_active', { ascending: false })
         .order('auction_end_time', { ascending: true })
   
@@ -660,15 +669,19 @@ const submitBid = async () => {
                     
                     <div className="absolute top-4 left-4">
                       {product.auction_active ? (
+                        // ✅ Kondisi A: Masih berjalan
                         <Badge className="bg-purple-600 text-white px-3 py-1">
                           Sedang Lelang
                         </Badge>
-                      ) : (
+                      ) : product.current_bidder_id ? (
+                        // ✅ Kondisi C & D: Selesai tapi ada pemenang
                         <Badge className="bg-pink-600 text-white px-3 py-1">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Lelang Selesai
                         </Badge>
-                      )}
+                      ) : null
+                      // ✅ Kondisi B & E: Tidak tampil badge (tidak ada bidders)
+                      }
                     </div>
                   </div>
 
