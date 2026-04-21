@@ -433,6 +433,9 @@ export default function AuctionsPage() {
       : (product.auction_start_price || 0)
   }
 
+  const isFirstBidder = (product: AuctionProduct) =>
+    product.current_bid_price == null || product.current_bid_price <= 0
+
   const nextImage = (productId: string, totalImages: number) => {
     setCurrentImageIndex(prev => ({
       ...prev,
@@ -467,9 +470,11 @@ export default function AuctionsPage() {
     }
   
     setSelectedProduct(product)
-    const currentPrice = getCurrentPrice(product)
+    const isFirstBid = isFirstBidder(product)
     const minIncrement = product.auction_increment || 50000
-    const suggestedBid = currentPrice + minIncrement
+    const suggestedBid = isFirstBid
+      ? (product.auction_start_price || 0)
+      : (getCurrentPrice(product) + minIncrement)
     
     setBidAmount(suggestedBid.toString())
     setBidError('')
@@ -501,23 +506,33 @@ const submitBid = async () => {
   if (!selectedProduct || !currentUser) return
 
   const bidValue = parseInt(bidAmount)
+  const isFirstBid = isFirstBidder(selectedProduct)
   const currentPrice = getCurrentPrice(selectedProduct)
   const minIncrement = selectedProduct.auction_increment || 50000
-  const minBid = currentPrice + minIncrement
+  const minBid = isFirstBid
+    ? (selectedProduct.auction_start_price || 0)
+    : currentPrice + minIncrement
 
   if (isNaN(bidValue)) {
     setBidError('Masukkan harga yang valid!')
     return
   }
 
-  if (bidValue <= currentPrice) {
-    setBidError('Harga bid harus lebih tinggi dari harga saat ini!')
-    return
-  }
+  if (isFirstBid) {
+    if (bidValue < minBid) {
+      setBidError(`Bid minimal adalah ${formatRupiah(minBid)}`)
+      return
+    }
+  } else {
+    if (bidValue <= currentPrice) {
+      setBidError('Harga bid harus lebih tinggi dari harga saat ini!')
+      return
+    }
 
-  if (bidValue < minBid) {
-    setBidError(`Minimal bid adalah ${formatRupiah(minBid)} (kenaikan ${formatRupiah(minIncrement)})`)
-    return
+    if (bidValue < minBid) {
+      setBidError(`Minimal bid adalah ${formatRupiah(minBid)} (kenaikan ${formatRupiah(minIncrement)})`)
+      return
+    }
   }
 
   try {
@@ -976,7 +991,11 @@ const submitBid = async () => {
                         />
                       </div>
                       <p className="text-xs text-slate-500 mt-1">
-                        Minimal: {formatRupiah(getCurrentPrice(selectedProduct) + (selectedProduct.auction_increment || 50000))}
+                        Minimal: {formatRupiah(
+                          isFirstBidder(selectedProduct)
+                            ? (selectedProduct.auction_start_price || 0)
+                            : getCurrentPrice(selectedProduct) + (selectedProduct.auction_increment || 50000)
+                        )}
                       </p>
                     </div>
 
