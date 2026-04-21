@@ -439,6 +439,11 @@ const getStatusBadgeColor = (status: string) => {
   }
 }
 
+// Returns a stable key that uniquely identifies one auction session for a product.
+// Finished sessions are identified by finished_auction_id; the active session uses 'active'.
+const getAuctionSessionKey = (productId: string, finishedAuctionId: string | null) =>
+  finishedAuctionId ? `${productId}-${finishedAuctionId}` : `${productId}-active`
+
 // ✅ FUNGSI FETCH PARTISIPASI LELANG
 const fetchAuctionParticipation = useCallback(async () => {
   try {
@@ -550,7 +555,22 @@ const fetchAuctionParticipation = useCallback(async () => {
       }
     })
 
-    setAuctionParticipation(participation)
+    // Deduplicate by auction session (product_id + finished_auction_id).
+    // If user bid multiple times on the same auction session, keep only the
+    // entry with the highest bid price so each session appears exactly once.
+    const sessionMap = new Map<string, typeof participation[0]>()
+    participation.forEach(item => {
+      const sessionKey = getAuctionSessionKey(item.product_id, item.finished_auction_id)
+      const existing = sessionMap.get(sessionKey)
+      if (!existing || item.bid_price > existing.bid_price) {
+        sessionMap.set(sessionKey, item)
+      }
+    })
+
+    const deduplicatedParticipation = Array.from(sessionMap.values())
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    setAuctionParticipation(deduplicatedParticipation)
   } catch (err) {
     console.error("Failed to fetch auction participation:", err)
   }
@@ -756,18 +776,8 @@ const fetchBidHistory = useCallback(async () => {
       return
     }
 
-    // ✅ AMBIL HANYA BID TERAKHIR PER PRODUK
-    const latestBidsMap = new Map()
-    bidsData.forEach(bid => {
-      if (!latestBidsMap.has(bid.product_id)) {
-        latestBidsMap.set(bid.product_id, bid)
-      }
-    })
-
-    const latestBids = Array.from(latestBidsMap.values())
-
-    // Fetch nama produk dan info lelang
-    const productIds = [...new Set(latestBids.map(b => b.product_id))]
+    // Fetch nama produk dan info lelang (use all bids, not just latest-per-product)
+    const productIds = [...new Set(bidsData.map(b => b.product_id))]
     const { data: productsData } = await supabase
       .from('products')
       .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id, auction_started_at, sku')
@@ -779,8 +789,8 @@ const fetchBidHistory = useCallback(async () => {
       .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason, finished_auction_id')
       .in('product_id', productIds)
 
-    // Gabungkan data
-    const historyWithProducts = latestBids.map(bid => {
+    // Gabungkan data - map semua bid dulu, deduplication by session dilakukan sesudahnya
+    const allMappedBids = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
 
       // Cari entri history yang sesuai dengan sesi lelang saat bid ini dibuat.
@@ -818,9 +828,25 @@ const fetchBidHistory = useCallback(async () => {
           : (product?.current_bidder_id ?? null),
         auction_end_reason: matchingHistory?.auction_end_reason ?? (product?.auction_active === false ? 'completed' : null),
         finished_auction_id: matchingHistory?.finished_auction_id ?? null,
-        product_sku: product?.sku ?? null
+        product_sku: product?.sku ?? null,
+        _sessionKey: getAuctionSessionKey(bid.product_id, matchingHistory?.finished_auction_id ?? null)
       }
     })
+
+    // Deduplicate by auction session (product_id + finished_auction_id).
+    // For each session, keep the user's highest bid so every auction appears exactly once.
+    const sessionMap = new Map<string, typeof allMappedBids[0]>()
+    allMappedBids.forEach(item => {
+      const existing = sessionMap.get(item._sessionKey)
+      if (!existing || item.bid_price > existing.bid_price) {
+        sessionMap.set(item._sessionKey, item)
+      }
+    })
+
+    const historyWithProducts = Array.from(sessionMap.values())
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      // Remove internal helper key before storing in state
+      .map(({ _sessionKey, ...rest }) => rest)
 
     setBidHistory(historyWithProducts)
   } catch (err: any) {
