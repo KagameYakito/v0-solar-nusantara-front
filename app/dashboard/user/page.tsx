@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation' 
 import Link from 'next/link'
@@ -80,7 +80,10 @@ interface BidHistory {
   created_at: string
   product_id: string
   current_price: number  // ✅ TAMBAH: Harga saat ini
-  auction_end_time: string 
+  auction_end_time: string
+  auction_active: boolean
+  auction_winner_name: string | null
+  current_bidder_id: string | null
 }
 
 const supabase = createClient(
@@ -116,6 +119,10 @@ export default function UserDashboard() {
   const [bidsLoading, setBidsLoading] = useState(false)
   const [bidTimeRemaining, setBidTimeRemaining] = useState<Record<string, string>>({})
   const [auctionParticipation, setAuctionParticipation] = useState<any[]>([])
+
+  // Ref so fetchAuctionParticipation always reads the latest profile without needing
+  // to be recreated (avoids tearing down realtime subscriptions on profile changes).
+  const profileRef = useRef<Profile | null>(null)
 
   // Form State
   const [formData, setFormData] = useState({
@@ -174,6 +181,11 @@ export default function UserDashboard() {
   useEffect(() => {
     fetchProfile()
   }, [fetchProfile])
+
+  // Keep profileRef in sync so callbacks with [] deps always read the latest profile
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
 
   const handlePlaceBidFromHistory = (product: BidHistory) => {
     // Redirect ke halaman auctions dengan parameter highlight
@@ -477,22 +489,28 @@ const fetchAuctionParticipation = useCallback(async () => {
     const participation = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
       
-      // Cari history entry yang mencakup waktu bid ini (hanya jika start_time tersedia untuk presisi)
-      const matchingHistory = historyData?.find(h =>
-        h.product_id === bid.product_id &&
-        h.auction_start_time !== null &&
-        new Date(bid.created_at) >= new Date(h.auction_start_time) &&
-        new Date(bid.created_at) <= new Date(h.auction_end_time)
-      )
+      // Cari history entry yang mencakup waktu bid ini.
+      // Jika produk dilelang ulang beberapa kali, ambil sesi paling baru yang mencakup bid ini.
+      const matchingHistory = historyData
+        ?.filter(h =>
+          h.product_id === bid.product_id &&
+          h.auction_start_time !== null &&
+          new Date(bid.created_at) >= new Date(h.auction_start_time) &&
+          new Date(bid.created_at) <= new Date(h.auction_end_time)
+        )
+        .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
+
+      // Gunakan profileRef.current agar selalu membaca profil terbaru
+      const currentProfile = profileRef.current
 
       // Cek apakah user menang dari history (akurat untuk produk yang dilelang ulang)
       const isWinnerFromHistory = !!matchingHistory && (
         matchingHistory.winner_id === session.user.id ||
         (matchingHistory.winner_name && (
           matchingHistory.winner_name === session.user?.email ||
-          matchingHistory.winner_name === (profile?.full_name || '') ||
+          matchingHistory.winner_name === (currentProfile?.full_name || '') ||
           matchingHistory.winner_name.toLowerCase() === session.user?.email?.toLowerCase() ||
-          matchingHistory.winner_name.toLowerCase() === (profile?.full_name || '').toLowerCase()
+          matchingHistory.winner_name.toLowerCase() === (currentProfile?.full_name || '').toLowerCase()
         ))
       )
 
@@ -500,9 +518,9 @@ const fetchAuctionParticipation = useCallback(async () => {
       const isWinnerFromProduct = !product?.auction_active && !matchingHistory && (
         (product?.auction_winner_name && (
           product.auction_winner_name === session.user?.email || 
-          product.auction_winner_name === (profile?.full_name || '') ||
+          product.auction_winner_name === (currentProfile?.full_name || '') ||
           product.auction_winner_name.toLowerCase() === session.user?.email?.toLowerCase() ||
-          product.auction_winner_name.toLowerCase() === (profile?.full_name || '').toLowerCase()
+          product.auction_winner_name.toLowerCase() === (currentProfile?.full_name || '').toLowerCase()
         )) ||
         product?.current_bidder_id === session.user.id ||
         (!product?.current_bidder_id && !product?.auction_winner_name &&
@@ -749,20 +767,52 @@ const fetchBidHistory = useCallback(async () => {
     const productIds = [...new Set(latestBids.map(b => b.product_id))]
     const { data: productsData } = await supabase
       .from('products')
-      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id')
+      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id, auction_started_at')
       .in('id', productIds)
+
+    // ✅ Fetch auction_history agar status tetap akurat setelah produk dilelang ulang
+    const { data: auctionHistoryData } = await supabase
+      .from('auction_history')
+      .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason')
+      .in('product_id', productIds)
 
     // Gabungkan data
     const historyWithProducts = latestBids.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
+
+      // Cari entri history yang sesuai dengan sesi lelang saat bid ini dibuat.
+      // Jika produk pernah dilelang berkali-kali, ambil sesi yang paling baru (sort desc).
+      const matchingHistory = auctionHistoryData
+        ?.filter(h =>
+          h.product_id === bid.product_id &&
+          h.auction_start_time !== null &&
+          new Date(bid.created_at) >= new Date(h.auction_start_time) &&
+          new Date(bid.created_at) <= new Date(h.auction_end_time)
+        )
+        .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
+
+      // Jika ada history yang cocok, lelang itu sudah selesai (meski produk sedang dilelang ulang).
+      // Default ke false bila produk tidak ditemukan untuk menghindari tampil "aktif" secara keliru.
+      const isAuctionActive = matchingHistory != null
+        ? false
+        : (product?.auction_active ?? false)
+
       return {
         ...bid,
         product_name: product?.nama_produk || 'Produk Tidak Diketahui',
-        current_price: product?.current_bid_price || bid.bid_price,
-        auction_end_time: product?.auction_end_time || '',
-        auction_active: product?.auction_active ?? true,
-        auction_winner_name: product?.auction_winner_name || null,
-        current_bidder_id: product?.current_bidder_id || null
+        // Gunakan nullish coalescing agar final_price = 0 (lelang tanpa bid) tetap ditampilkan
+        current_price: matchingHistory != null
+          ? (matchingHistory.final_price ?? product?.current_bid_price ?? bid.bid_price)
+          : (product?.current_bid_price ?? bid.bid_price),
+        auction_end_time: matchingHistory?.auction_end_time ?? product?.auction_end_time ?? '',
+        auction_active: isAuctionActive,
+        // Bila matchingHistory ada, gunakan nilai dari history saja (termasuk null = tidak ada pemenang)
+        auction_winner_name: matchingHistory != null
+          ? matchingHistory.winner_name
+          : (product?.auction_winner_name ?? null),
+        current_bidder_id: matchingHistory != null
+          ? matchingHistory.winner_id
+          : (product?.current_bidder_id ?? null)
       }
     })
 
@@ -846,6 +896,7 @@ useEffect(() => {
   let isMounted = true
   let bidsChannel: ReturnType<typeof supabase.channel> | null = null
   let productsChannel: ReturnType<typeof supabase.channel> | null = null
+  let historyChannel: ReturnType<typeof supabase.channel> | null = null
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   const debouncedRefresh = () => {
@@ -896,6 +947,24 @@ useEffect(() => {
         }
       )
       .subscribe()
+
+    // Listen untuk lelang yang selesai/dibatalkan oleh admin
+    // (auction_history INSERT terjadi sebelum products UPDATE, sehingga data sudah
+    //  tersedia di DB saat debouncedRefresh membaca ulang)
+    historyChannel = supabase
+      .channel('dashboard-auction-history-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'auction_history'
+        },
+        () => {
+          debouncedRefresh()
+        }
+      )
+      .subscribe()
   }
 
   setupAuctionRealtime()
@@ -905,6 +974,7 @@ useEffect(() => {
     if (debounceTimer) clearTimeout(debounceTimer)
     if (bidsChannel) supabase.removeChannel(bidsChannel)
     if (productsChannel) supabase.removeChannel(productsChannel)
+    if (historyChannel) supabase.removeChannel(historyChannel)
   }
 }, [fetchBidHistory, fetchAuctionParticipation])
 
