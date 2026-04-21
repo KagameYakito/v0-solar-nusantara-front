@@ -32,6 +32,7 @@ interface AuctionProduct {
   current_bidder_id: string | null
   auction_winner_name: string | null
   auction_end_reason: string | null
+  auction_started_at: string | null
   // Fields used when this record is mapped from auction_history
   isHistorical?: boolean
   historyId?: string
@@ -239,7 +240,7 @@ export default function AuctionsPage() {
         
         // ✅ FETCH BIDS UNTUK SEMUA PRODUK (aktif maupun selesai)
         // Jangan skip produk yang sudah selesai
-        const { data: bids, error } = await supabase
+        let bidsQuery = supabase
           .from('auction_bids')
           .select(`
             bid_price,
@@ -249,6 +250,14 @@ export default function AuctionsPage() {
           .eq('product_id', productId)
           .order('bid_price', { ascending: false })
           .limit(10)
+
+        // Untuk lelang aktif: hanya ambil bid sejak lelang ini dimulai
+        // agar bid dari lelang sebelumnya tidak muncul
+        if (product.auction_active && product.auction_started_at) {
+          bidsQuery = bidsQuery.gte('created_at', product.auction_started_at)
+        }
+
+        const { data: bids, error } = await bidsQuery
   
         if (error) {
           console.error(`Error fetching bids for product ${productId}:`, error)
@@ -325,7 +334,8 @@ export default function AuctionsPage() {
           auction_description: h.auction_description || productInfo?.auction_description || null,
           current_bidder_id: h.winner_id || null,
           auction_winner_name: h.winner_name || null,
-          auction_end_reason: h.auction_end_reason || null
+          auction_end_reason: h.auction_end_reason || null,
+          auction_started_at: null
         }
       })
 
