@@ -123,7 +123,7 @@ export default function AdminMarketingDashboard() {
   const [wishlistItems, setWishlistItems] = useState<GroupedWishlistItem[]>([])
   const [wishlistTotal, setWishlistTotal] = useState(0)
   const [wishlistLoading, setWishlistLoading] = useState(false)
-  const [wishlistFilter, setWishlistFilter] = useState<'all' | 'deal' | 'pending' | 'requested' | 'wishlist' | 'decline'>('all')
+  const [wishlistFilter, setWishlistFilter] = useState<'all' | 'deal' | 'pending' | 'requested' | 'wishlist' | 'declined'>('all')
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [selectedWishlistItem, setSelectedWishlistItem] = useState<any>(null)
   const [adminNote, setAdminNote] = useState('')
@@ -141,7 +141,7 @@ export default function AdminMarketingDashboard() {
     'pending': 2,
     'requested': 3,
     'wishlist': 4,
-    'decline': 5
+    'declined': 5
   }
 
   const fetchWishlistItems = useCallback(async () => {
@@ -1271,7 +1271,7 @@ export default function AdminMarketingDashboard() {
                   <option value="pending">Pending</option>
                   <option value="requested">Requested</option>
                   <option value="wishlist">Wishlist</option>
-                  <option value="decline">Decline</option>
+                  <option value="declined">Declined</option>
                 </select>
               </div>
             </CardTitle>

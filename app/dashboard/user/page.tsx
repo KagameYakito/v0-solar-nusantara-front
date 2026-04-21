@@ -408,13 +408,18 @@ const getStatusBadgeColor = (status: string) => {
     case 'wishlist':
       return 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20'
     case 'pending':
+    case 'requested':
       return 'bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20'
     case 'approved':
+    case 'accepted':
       return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
     case 'rejected':
+    case 'declined':
       return 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20'
     case 'fulfilled':
       return 'bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20'
+    case 'deal':
+      return 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
     default:
       return 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
   }
@@ -619,12 +624,18 @@ const updateQuantity = async (productId: string, delta: number) => {
         return 'Wishlist'
       case 'pending':
         return 'Menunggu Review'
+      case 'requested':
+        return 'Diajukan'
       case 'approved':
+      case 'accepted':
         return 'Disetujui'
       case 'rejected':
+      case 'declined':
         return 'Ditolak'
       case 'fulfilled':
         return 'Terpenuhi'
+      case 'deal':
+        return 'Deal'
       default:
         return status
     }
@@ -1775,10 +1786,25 @@ const confirmSubmitRequest = async () => {
                                   <Plus className="h-3 w-3" />
                                 </Button>
                               </div>
-                              {/* ✅ TAMPILKAN PESAN JIKA STATUS BUKAN WISHLIST */}
-                              {(item as any).status !== 'wishlist' && (
+                              {/* ✅ TAMPILKAN PESAN SESUAI STATUS */}
+                              {((item as any).status === 'requested' || (item as any).status === 'pending') && (
                                 <p className="text-xs text-amber-400 text-center mt-1">
                                   ⚠️ Menunggu review admin
+                                </p>
+                              )}
+                              {((item as any).status === 'accepted' || (item as any).status === 'approved') && (
+                                <p className="text-xs text-emerald-400 text-center mt-1">
+                                  ✅ Disetujui admin
+                                </p>
+                              )}
+                              {((item as any).status === 'declined' || (item as any).status === 'rejected') && (
+                                <p className="text-xs text-red-400 text-center mt-1">
+                                  ❌ Ditolak admin
+                                </p>
+                              )}
+                              {(item as any).status === 'deal' && (
+                                <p className="text-xs text-green-400 text-center mt-1">
+                                  🤝 Deal selesai
                                 </p>
                               )}
                             </td>
@@ -1806,7 +1832,9 @@ const confirmSubmitRequest = async () => {
                                 size="sm"
                                 variant="destructive"
                                 onClick={() => removeItem(item.product_id)}
-                                className="h-8 w-8 p-0"
+                                disabled={(item as any).status !== 'wishlist'}
+                                className={`h-8 w-8 p-0 ${(item as any).status !== 'wishlist' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                title={(item as any).status !== 'wishlist' ? 'Item tidak dapat dihapus setelah diajukan' : 'Hapus dari wishlist'}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
