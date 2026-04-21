@@ -736,53 +736,69 @@ const submitBid = async () => {
                       </div>
                     </div>
 
-                    {/* Bidders - Fixed Height */}
-                    <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 h-[150px] overflow-hidden">
-                      <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
-                      {productBidders.length > 0 ? (
-                        <div 
-                          className={`space-y-1.5 ${
-                            productBidders.length > 2 ? 'max-h-[120px] overflow-y-auto' : ''
-                          }`}
-                          style={{
-                            scrollbarWidth: 'thin',
-                            scrollbarColor: 'rgba(100, 116, 139, 0.5) transparent'
-                          }}
-                        >
-                          {productBidders.map((bidder, index) => (
-                            <div 
-                              key={`${product.id}-bidder-${index}`} 
-                              className={`flex items-center justify-between text-xs p-1.5 rounded ${
-                                bidder.isCurrentUser 
-                                  ? 'bg-yellow-500/20 border border-yellow-500/50' 
-                                  : ''
-                              }`}
-                            >
-                              <span className={`truncate max-w-[120px] ${
-                                bidder.isCurrentUser ? 'text-yellow-400 font-semibold' : 'text-slate-300'
-                              }`}>
-                                {bidder.username} {bidder.isCurrentUser && '(Anda)'}
-                              </span>
-                              <div className="text-right">
-                                <span className={`font-mono block ${
-                                  bidder.isCurrentUser ? 'text-yellow-400 font-bold' : 'text-green-400'
+                    {/* Bidders / Winner - Fixed Height */}
+                    {!product.auction_active && productBidders.length > 0 ? (
+                      /* Winner Banner for finished auctions */
+                      <div className="bg-yellow-900/30 rounded-lg p-3 border border-yellow-500/50 mb-3 h-[150px] flex flex-col justify-center">
+                        <p className="text-xs text-yellow-400 mb-2 font-semibold text-center">🏆 Pemenang Lelang</p>
+                        <div className="text-center space-y-1">
+                          <p className="text-base font-bold text-yellow-300 truncate px-2">
+                            {product.auction_winner_name || productBidders[0]?.username || 'Anonim'}
+                          </p>
+                          <p className="text-xl font-bold text-green-400 font-mono">
+                            {formatRupiah(product.current_bid_price || productBidders[0]?.bid_amount || 0)}
+                          </p>
+                          <p className="text-[10px] text-slate-500">Harga Akhir Lelang</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 h-[150px] overflow-hidden">
+                        <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
+                        {productBidders.length > 0 ? (
+                          <div 
+                            className={`space-y-1.5 ${
+                              productBidders.length > 2 ? 'max-h-[120px] overflow-y-auto' : ''
+                            }`}
+                            style={{
+                              scrollbarWidth: 'thin',
+                              scrollbarColor: 'rgba(100, 116, 139, 0.5) transparent'
+                            }}
+                          >
+                            {productBidders.map((bidder, index) => (
+                              <div 
+                                key={`${product.id}-bidder-${index}`} 
+                                className={`flex items-center justify-between text-xs p-1.5 rounded ${
+                                  bidder.isCurrentUser 
+                                    ? 'bg-yellow-500/20 border border-yellow-500/50' 
+                                    : ''
+                                }`}
+                              >
+                                <span className={`truncate max-w-[120px] ${
+                                  bidder.isCurrentUser ? 'text-yellow-400 font-semibold' : 'text-slate-300'
                                 }`}>
-                                  {formatRupiah(bidder.bid_amount)}
+                                  {bidder.username} {bidder.isCurrentUser && '(Anda)'}
                                 </span>
-                                <span className="text-slate-500 text-[10px]">
-                                  {formatTime(bidder.bid_time)}
-                                </span>
+                                <div className="text-right">
+                                  <span className={`font-mono block ${
+                                    bidder.isCurrentUser ? 'text-yellow-400 font-bold' : 'text-green-400'
+                                  }`}>
+                                    {formatRupiah(bidder.bid_amount)}
+                                  </span>
+                                  <span className="text-slate-500 text-[10px]">
+                                    {formatTime(bidder.bid_time)}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-slate-500 text-xs">
-                          <p>Belum ada bidder</p>
-                          <p className="text-slate-600 mt-1">Jadilah yang pertama!</p>
-                        </div>
-                      )}
-                    </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-slate-500 text-xs">
+                            <p>Belum ada bidder</p>
+                            <p className="text-slate-600 mt-1">Jadilah yang pertama!</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Tombol - Always at same position */}
                     <Button 
