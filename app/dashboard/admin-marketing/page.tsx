@@ -491,6 +491,71 @@ export default function AdminMarketingDashboard() {
     }
   }, [isAuthorized, fetchProducts])
 
+  // ✅ REALTIME SUBSCRIPTION - Sinkronkan admin dashboard dengan database lelang
+  // Ketika user melakukan bid atau admin lain mengakhiri lelang, tampilan diperbarui otomatis
+  useEffect(() => {
+    if (!isAuthorized) return
+
+    let isMounted = true
+    let productsChannel: ReturnType<typeof supabase.channel> | null = null
+    let historyChannel: ReturnType<typeof supabase.channel> | null = null
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const debouncedRefreshProducts = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        if (!isMounted) return
+        fetchProducts()
+      }, 500)
+    }
+
+    // Saat user melakukan bid, products.current_bid_price / current_bidder_id / bid_deadline_time diperbarui
+    productsChannel = supabase
+      .channel('admin-products-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'products'
+        },
+        (payload: any) => {
+          // Refresh jika ada perubahan pada produk lelang
+          if (payload?.new?.is_auction) {
+            debouncedRefreshProducts()
+          }
+        }
+      )
+      .subscribe()
+
+    // Saat lelang diselesaikan (dari admin lain atau dari halaman auctions),
+    // perbarui juga tabel history agar filterView === 'finished' langsung ter-update
+    historyChannel = supabase
+      .channel('admin-auction-history-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'auction_history'
+        },
+        () => {
+          if (!isMounted) return
+          // Refresh produk dan history sekaligus
+          fetchProducts()
+          fetchAuctionHistory()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      isMounted = false
+      if (debounceTimer) clearTimeout(debounceTimer)
+      if (productsChannel) supabase.removeChannel(productsChannel)
+      if (historyChannel) supabase.removeChannel(historyChannel)
+    }
+  }, [isAuthorized, fetchProducts, fetchAuctionHistory])
+
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
     setEditingPrice((currentPrice || 0).toString())
