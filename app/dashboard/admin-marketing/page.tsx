@@ -65,6 +65,16 @@ const supabase = createClient(
 
 const ITEMS_PER_PAGE = 100
 
+/** Generate a short collision-resistant finished-auction ID, e.g. #A3F59C2B */
+const generateFinishedAuctionId = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let suffix = ''
+  for (let i = 0; i < 8; i++) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return `#${suffix}`
+}
+
 export default function AdminMarketingDashboard() {
   const router = useRouter()
   
@@ -559,7 +569,7 @@ export default function AdminMarketingDashboard() {
                 .eq('product_id', product.id)
 
               // 3. Insert to auction_history
-              const finishedId = `#${String(Date.now()).slice(-6)}`
+              const finishedId = generateFinishedAuctionId()
               await supabase.from('auction_history').insert({
                 product_id: product.id,
                 product_name: product.nama_produk,
@@ -951,7 +961,7 @@ export default function AdminMarketingDashboard() {
       const product = products.find(p => p.id === cancellingProductId)
       
       // 1. Generate finished auction ID
-      const finishedId = `#${String(Date.now()).slice(-6)}`
+      const finishedId = generateFinishedAuctionId()
       
       // 2. Get winner info
       let winnerName: string | null = null
