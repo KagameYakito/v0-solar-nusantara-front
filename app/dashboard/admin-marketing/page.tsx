@@ -1830,15 +1830,19 @@ const duplicateAndAuction = async (productId: string) => {
                               <Badge className={`${
                                 product.auction_end_reason === 'cancelled' 
                                   ? 'bg-red-500/20 text-red-400 border-red-500/30' 
-                                  : product.auction_end_reason === 'no_bids'
+                                  : product.auction_end_reason === 'force_stop'
                                   ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                                  : product.auction_end_reason === 'no_bids'
+                                  ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
                                   : 'bg-green-500/20 text-green-400 border-green-500/30'
                               } border`}>
                                 {product.auction_end_reason === 'cancelled' 
-                                  ? 'Selesai dengan Dibatalkan' 
+                                  ? 'Cancelled' 
+                                  : product.auction_end_reason === 'force_stop'
+                                  ? 'Force Stop'
                                   : product.auction_end_reason === 'no_bids' 
-                                  ? 'Selesai - Tidak Ada Bid' 
-                                  : 'Selesai'}
+                                  ? 'No Bids' 
+                                  : 'Completed'}
                               </Badge>
                             ) : product.is_auction && product.auction_active ? (
                               <Badge className="bg-purple-600 text-white animate-pulse">
