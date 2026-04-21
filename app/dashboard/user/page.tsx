@@ -444,6 +444,61 @@ const getStatusBadgeColor = (status: string) => {
 const getAuctionSessionKey = (productId: string, finishedAuctionId: string | null) =>
   finishedAuctionId ? `${productId}-${finishedAuctionId}` : `${productId}-active`
 
+// Finds the auction_history entry that corresponds to a specific bid.
+// Uses two strategies so that the result is consistent with the Admin Marketing Dashboard:
+//
+// Strategy 1 — direct ID match:
+//   If the product currently holds a finished_auction_id (set by the admin when they ended
+//   the latest auction session), we look it up directly in history.  This is the most
+//   reliable path for a product that has been auctioned exactly once and is now done.
+//
+// Strategy 2 — time-range match:
+//   Used when the product has been re-auctioned (finished_auction_id is reset to null for
+//   the new session) so we need to identify which past session this bid belongs to.
+//   When auction_start_time is available we use a precise window.  When it is null the
+//   fallback only triggers if the product has exactly ONE history entry, preventing an
+//   incorrect match when multiple sessions exist.
+const findMatchingHistory = (
+  bid: { product_id: string; created_at: string },
+  product: { finished_auction_id?: string | null } | undefined | null,
+  historyData: Array<{
+    product_id: string
+    finished_auction_id: string | null
+    auction_start_time: string | null
+    auction_end_time: string
+    winner_id: string | null
+    winner_name: string | null
+    final_price: number | null
+    auction_end_reason: string | null
+  }> | null | undefined
+) => {
+  if (!historyData) return null
+
+  const productHistory = historyData.filter(h => h.product_id === bid.product_id)
+
+  // Strategy 1
+  if (product?.finished_auction_id) {
+    const direct = productHistory.find(
+      h => h.finished_auction_id === product.finished_auction_id
+    )
+    if (direct) return direct
+  }
+
+  // Strategy 2
+  return productHistory
+    .filter(h => {
+      if (h.auction_start_time !== null) {
+        return new Date(bid.created_at) >= new Date(h.auction_start_time) &&
+               new Date(bid.created_at) <= new Date(h.auction_end_time)
+      }
+      // Null start-time fallback: only safe when there is a single history entry for
+      // this product so we cannot accidentally match the wrong re-auction session.
+      return productHistory.length === 1 &&
+             new Date(bid.created_at) <= new Date(h.auction_end_time)
+    })
+    .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
+}
+
 // ✅ FUNGSI FETCH PARTISIPASI LELANG
 const fetchAuctionParticipation = useCallback(async () => {
   try {
@@ -469,7 +524,8 @@ const fetchAuctionParticipation = useCallback(async () => {
     // Ambil unique product_ids
     const productIds = [...new Set(bidsData.map(b => b.product_id))]
     
-    // Fetch product info
+    // Fetch product info — termasuk finished_auction_id & auction_end_reason agar sinkron
+    // dengan data yang ditampilkan di Admin Marketing Dashboard
     const { data: productsData } = await supabase
       .from('products')
       .select(`
@@ -480,7 +536,10 @@ const fetchAuctionParticipation = useCallback(async () => {
         current_bid_price,
         auction_winner_name,
         current_bidder_id,
-        sku
+        sku,
+        finished_auction_id,
+        auction_end_reason,
+        auction_started_at
       `)
       .in('id', productIds)
 
@@ -494,17 +553,8 @@ const fetchAuctionParticipation = useCallback(async () => {
     // Gabungkan data
     const participation = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
-      
-      // Cari history entry yang mencakup waktu bid ini.
-      // Jika produk dilelang ulang beberapa kali, ambil sesi paling baru yang mencakup bid ini.
-      const matchingHistory = historyData
-        ?.filter(h =>
-          h.product_id === bid.product_id &&
-          h.auction_start_time !== null &&
-          new Date(bid.created_at) >= new Date(h.auction_start_time) &&
-          new Date(bid.created_at) <= new Date(h.auction_end_time)
-        )
-        .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
+
+      const matchingHistory = findMatchingHistory(bid, product, historyData)
 
       // Gunakan profileRef.current agar selalu membaca profil terbaru
       const currentProfile = profileRef.current
@@ -521,7 +571,8 @@ const fetchAuctionParticipation = useCallback(async () => {
       )
 
       // Fallback: cek dari products table jika produk belum dilelang ulang
-      const isWinnerFromProduct = !product?.auction_active && !matchingHistory && (
+      const isAuctionDone = !product?.auction_active || !!product?.finished_auction_id
+      const isWinnerFromProduct = isAuctionDone && !matchingHistory && (
         (product?.auction_winner_name && (
           product.auction_winner_name === session.user?.email || 
           product.auction_winner_name === (currentProfile?.full_name || '') ||
@@ -538,19 +589,31 @@ const fetchAuctionParticipation = useCallback(async () => {
       // Tentukan final price: dari history jika match, dari produk jika tidak
       const finalPrice = matchingHistory?.final_price || product?.current_bid_price || bid.bid_price
 
+      // Lelang aktif hanya jika: product masih aktif DAN tidak ada finished_auction_id
+      // DAN tidak ada history yang cocok — sinkron dengan logika Admin Marketing Dashboard
+      const isSessionActive = !matchingHistory && !product?.finished_auction_id && !!product?.auction_active
+
       // Tentukan apakah lelang ini sudah selesai
-      const isFinished = !!matchingHistory || (!product?.auction_active && product?.auction_active !== undefined)
+      const isFinished = !isSessionActive
+
+      // Gunakan finished_auction_id dari history (paling akurat), lalu dari produk sebagai fallback
+      const finishedAuctionId = matchingHistory?.finished_auction_id ?? product?.finished_auction_id ?? null
+
+      // Gunakan auction_end_reason dari history, lalu dari produk, lalu fallback default
+      const endReason = matchingHistory?.auction_end_reason ??
+        product?.auction_end_reason ??
+        (isAuctionDone ? 'completed' : null)
       
       return {
         ...bid,
         product_name: product?.nama_produk || 'Unknown',
-        auction_active: product?.auction_active && !matchingHistory ? product.auction_active : false,
+        auction_active: isSessionActive,
         auction_end_time: matchingHistory?.auction_end_time || product?.auction_end_time,
         final_price: finalPrice,
         is_winner: isWinner,
         is_finished: isFinished,
-        auction_end_reason: matchingHistory?.auction_end_reason || (product?.auction_active === false ? 'completed' : null),
-        finished_auction_id: matchingHistory?.finished_auction_id || null,
+        auction_end_reason: endReason,
+        finished_auction_id: finishedAuctionId,
         product_sku: product?.sku || null
       }
     })
@@ -776,14 +839,15 @@ const fetchBidHistory = useCallback(async () => {
       return
     }
 
-    // Fetch nama produk dan info lelang (use all bids, not just latest-per-product)
+    // Fetch nama produk dan info lelang — termasuk finished_auction_id & auction_end_reason
+    // agar sinkron dengan data yang ditampilkan di Admin Marketing Dashboard
     const productIds = [...new Set(bidsData.map(b => b.product_id))]
     const { data: productsData } = await supabase
       .from('products')
-      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id, auction_started_at, sku')
+      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id, auction_started_at, sku, finished_auction_id, auction_end_reason')
       .in('id', productIds)
 
-    // ✅ Fetch auction_history agar status tetap akurat setelah produk dilelang ulang
+    // Fetch auction_history agar status tetap akurat setelah produk dilelang ulang
     const { data: auctionHistoryData } = await supabase
       .from('auction_history')
       .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason, finished_auction_id')
@@ -793,22 +857,20 @@ const fetchBidHistory = useCallback(async () => {
     const allMappedBids = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
 
-      // Cari entri history yang sesuai dengan sesi lelang saat bid ini dibuat.
-      // Jika produk pernah dilelang berkali-kali, ambil sesi yang paling baru (sort desc).
-      const matchingHistory = auctionHistoryData
-        ?.filter(h =>
-          h.product_id === bid.product_id &&
-          h.auction_start_time !== null &&
-          new Date(bid.created_at) >= new Date(h.auction_start_time) &&
-          new Date(bid.created_at) <= new Date(h.auction_end_time)
-        )
-        .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
+      const matchingHistory = findMatchingHistory(bid, product, auctionHistoryData)
 
-      // Jika ada history yang cocok, lelang itu sudah selesai (meski produk sedang dilelang ulang).
-      // Default ke false bila produk tidak ditemukan untuk menghindari tampil "aktif" secara keliru.
-      const isAuctionActive = matchingHistory != null
-        ? false
-        : (product?.auction_active ?? false)
+      // Lelang aktif hanya jika: product masih aktif DAN tidak ada finished_auction_id
+      // DAN tidak ada history yang cocok — sinkron dengan logika Admin Marketing Dashboard
+      const isAuctionActive = !matchingHistory && !product?.finished_auction_id && !!product?.auction_active
+
+      // Gunakan finished_auction_id dari history, lalu dari produk sebagai fallback
+      const finishedAuctionId = matchingHistory?.finished_auction_id ?? product?.finished_auction_id ?? null
+
+      // Gunakan auction_end_reason dari history, lalu dari produk, lalu fallback default
+      const isAuctionDone = !product?.auction_active || !!product?.finished_auction_id
+      const endReason = matchingHistory?.auction_end_reason ??
+        product?.auction_end_reason ??
+        (isAuctionDone ? 'completed' : null)
 
       return {
         ...bid,
@@ -826,10 +888,10 @@ const fetchBidHistory = useCallback(async () => {
         current_bidder_id: matchingHistory != null
           ? matchingHistory.winner_id
           : (product?.current_bidder_id ?? null),
-        auction_end_reason: matchingHistory?.auction_end_reason ?? (product?.auction_active === false ? 'completed' : null),
-        finished_auction_id: matchingHistory?.finished_auction_id ?? null,
+        auction_end_reason: endReason,
+        finished_auction_id: finishedAuctionId,
         product_sku: product?.sku ?? null,
-        _sessionKey: getAuctionSessionKey(bid.product_id, matchingHistory?.finished_auction_id ?? null)
+        _sessionKey: getAuctionSessionKey(bid.product_id, finishedAuctionId)
       }
     })
 
