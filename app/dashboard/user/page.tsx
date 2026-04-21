@@ -74,7 +74,7 @@ interface ProductRequest {
 
 interface BidHistory {
   id: string
-  bid_code: string
+  finished_auction_id: string | null
   product_name: string
   bid_price: number
   created_at: string
@@ -449,8 +449,7 @@ const fetchAuctionParticipation = useCallback(async () => {
       .select(`
         product_id,
         bid_price,
-        created_at,
-        bid_code
+        created_at
       `)
       .eq('bidder_id', session.user.id)
       .order('created_at', { ascending: false })
@@ -481,7 +480,7 @@ const fetchAuctionParticipation = useCallback(async () => {
     // (khususnya ketika produk sudah di-lelang ulang sehingga data produk berubah)
     const { data: historyData } = await supabase
       .from('auction_history')
-      .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason')
+      .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason, finished_auction_id')
       .in('product_id', productIds)
 
     // Gabungkan data
@@ -542,7 +541,8 @@ const fetchAuctionParticipation = useCallback(async () => {
         final_price: finalPrice,
         is_winner: isWinner,
         is_finished: isFinished,
-        auction_end_reason: matchingHistory?.auction_end_reason || (product?.auction_active === false ? 'completed' : null)
+        auction_end_reason: matchingHistory?.auction_end_reason || (product?.auction_active === false ? 'completed' : null),
+        finished_auction_id: matchingHistory?.finished_auction_id || null
       }
     })
 
@@ -739,7 +739,6 @@ const fetchBidHistory = useCallback(async () => {
       .from('auction_bids')
       .select(`
         id,
-        bid_code,
         bid_price,
         created_at,
         product_id
@@ -773,7 +772,7 @@ const fetchBidHistory = useCallback(async () => {
     // ✅ Fetch auction_history agar status tetap akurat setelah produk dilelang ulang
     const { data: auctionHistoryData } = await supabase
       .from('auction_history')
-      .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason')
+      .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason, finished_auction_id')
       .in('product_id', productIds)
 
     // Gabungkan data
@@ -813,7 +812,8 @@ const fetchBidHistory = useCallback(async () => {
         current_bidder_id: matchingHistory != null
           ? matchingHistory.winner_id
           : (product?.current_bidder_id ?? null),
-        auction_end_reason: matchingHistory?.auction_end_reason ?? (product?.auction_active === false ? 'completed' : null)
+        auction_end_reason: matchingHistory?.auction_end_reason ?? (product?.auction_active === false ? 'completed' : null),
+        finished_auction_id: matchingHistory?.finished_auction_id ?? null
       }
     })
 
@@ -1532,9 +1532,9 @@ const confirmSubmitRequest = async () => {
                         {/* No */}
                         <div className="text-slate-400">{index + 1}</div>
                         
-                        {/* Kode Bid */}
-                        <Badge className="bg-blue-600/20 text-blue-400 font-mono">
-                          {item.bid_code || 'N/A'}
+                        {/* ID Transaksi */}
+                        <Badge className="bg-pink-600/20 text-pink-400 font-mono">
+                          {item.finished_auction_id || (item.auction_active ? 'Berlangsung' : 'N/A')}
                         </Badge>
                         
                         {/* Nama Produk */}
@@ -1627,10 +1627,10 @@ const confirmSubmitRequest = async () => {
                           {index + 1}
                         </div>
 
-                        {/* Kode Bid */}
+                        {/* ID Transaksi */}
                         <div>
-                          <Badge className="bg-blue-600/20 text-blue-400 border border-blue-600/30 font-mono">
-                            {bid.bid_code || 'N/A'}
+                          <Badge className="bg-pink-600/20 text-pink-400 border border-pink-600/30 font-mono">
+                            {bid.finished_auction_id || (bid.auction_active ? 'Berlangsung' : 'N/A')}
                           </Badge>
                         </div>
 
