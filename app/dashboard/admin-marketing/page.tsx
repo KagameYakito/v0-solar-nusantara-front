@@ -568,7 +568,7 @@ export default function AdminMarketingDashboard() {
                 .select('*', { count: 'exact', head: true })
                 .eq('product_id', product.id)
 
-              // 3. Insert to auction_history
+              // 3. Insert to auction_history (including image fields for persistent display)
               const finishedId = generateFinishedAuctionId()
               await supabase.from('auction_history').insert({
                 product_id: product.id,
@@ -581,7 +581,10 @@ export default function AdminMarketingDashboard() {
                 auction_start_time: product.auction_started_at,
                 auction_end_time: new Date().toISOString(),
                 auction_end_reason: endReason,
-                total_bids: bidCount || 0
+                total_bids: bidCount || 0,
+                gambar_url: product.gambar_url,
+                auction_gallery_urls: product.auction_gallery_urls,
+                auction_description: product.auction_description
               })
 
               // 4. Update product — preserve display fields for auction page
@@ -965,7 +968,7 @@ export default function AdminMarketingDashboard() {
         ? 'force_stop'
         : 'cancelled'
       
-      // 5. ✅ INSERT KE AUCTION_HISTORY
+      // 5. ✅ INSERT KE AUCTION_HISTORY (including image fields for persistent display)
       const { error: historyError } = await supabase
         .from('auction_history')
         .insert({
@@ -979,7 +982,10 @@ export default function AdminMarketingDashboard() {
           auction_start_time: product?.auction_started_at,
           auction_end_time: new Date().toISOString(),
           auction_end_reason: endReason,
-          total_bids: bidCount || 0
+          total_bids: bidCount || 0,
+          gambar_url: product?.gambar_url,
+          auction_gallery_urls: product?.auction_gallery_urls,
+          auction_description: product?.auction_description
         })
       
       if (historyError) {

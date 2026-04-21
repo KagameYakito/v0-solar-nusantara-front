@@ -305,6 +305,7 @@ export default function AuctionsPage() {
         .in('id', productIds)
 
       // Map auction_history records to AuctionProduct shape
+      // Use stored image fields from auction_history first; fallback to current product data
       const mapped: AuctionProduct[] = historyData.map((h: any) => {
         const productInfo = productsData?.find((p: any) => p.id === h.product_id)
         return {
@@ -318,10 +319,10 @@ export default function AuctionsPage() {
           current_bid_price: h.final_price || null,
           auction_increment: null,
           auction_end_time: null,
-          auction_gallery_urls: productInfo?.auction_gallery_urls || null,
-          gambar_url: productInfo?.gambar_url || null,
+          auction_gallery_urls: h.auction_gallery_urls || productInfo?.auction_gallery_urls || null,
+          gambar_url: h.gambar_url || productInfo?.gambar_url || null,
           auction_active: false,
-          auction_description: productInfo?.auction_description || null,
+          auction_description: h.auction_description || productInfo?.auction_description || null,
           current_bidder_id: h.winner_id || null,
           auction_winner_name: h.winner_name || null,
           auction_end_reason: h.auction_end_reason || null
