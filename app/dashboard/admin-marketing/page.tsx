@@ -800,26 +800,6 @@ export default function AdminMarketingDashboard() {
       p.auction_active === true &&
       p.id !== selectedProductId // Exclude current product if editing
     )
-
-    // Detect if this product itself was previously finished (not just same-name)
-    const selfPreviouslyFinished = product.is_auction === true && product.auction_active === false
-
-    if (selfPreviouslyFinished && !isEditingAuction) {
-      // Product was previously auctioned and finished — auto-duplicate to preserve the old card on auction page
-      const confirmDuplicate = confirm(
-        `Produk "${product.nama_produk}" sudah pernah dilelang sebelumnya.\n\n` +
-        `Untuk menjaga jejak lelang lama tetap tampil di halaman lelang, sistem akan otomatis menduplikasi produk ini untuk lelang baru.\n\n` +
-        `Produk lama akan tetap menampilkan pemenang dan riwayat bid sebelumnya.\n\n` +
-        `Lanjutkan?`
-      )
-      
-      if (!confirmDuplicate) return
-
-      // Auto-duplicate and open auction modal for the new product
-      setShowAuctionModal(false)
-      await duplicateAndAuction(selectedProductId)
-      return
-    }
     
     if (duplicateActive) {
       alert(`❌ Produk "${product.nama_produk}" sedang dalam lelang aktif!\n\nHanya 1 produk dengan nama yang sama yang bisa dilelang dalam 1 waktu.\n\nProduk yang sedang aktif: ${duplicateActive.nama_produk}`)
@@ -1149,45 +1129,6 @@ export default function AdminMarketingDashboard() {
   }
 
   if (!isAuthorized) return null
-
-  // ✅ FUNGSI DUPLICATE & LELANG PRODUK
-const duplicateAndAuction = async (productId: string) => {
-  try {
-    const product = products.find(p => p.id === productId)
-    if (!product) return
-    
-    // Generate nama baru dengan timestamp unik
-    const newName = `${product.nama_produk} (Batch ${new Date().getFullYear()}-${String(Date.now()).slice(-4)})`
-    
-    // Insert produk baru ke database
-    const { data, error } = await supabase
-      .from('products')
-      .insert({
-        nama_produk: newName,
-        harga: product.harga,
-        sku: `${product.sku || 'SKU'}-${Date.now()}`,
-        gambar_url: product.gambar_url,
-        is_auction: false,
-        is_request: false,
-        created_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-    
-    if (error) throw error
-    
-    alert(`✅ Produk berhasil di-duplicate: ${newName}`)
-    await fetchProducts()
-    
-    // Auto buka modal lelang untuk produk baru setelah 500ms
-    setTimeout(() => {
-      openAuctionModal(data.id, false)
-    }, 500)
-    
-  } catch (err: any) {
-    alert("❌ Gagal duplicate produk: " + err.message)
-  }
-}
 
   return (
     <div className="p-8 space-y-6 bg-slate-950 min-h-screen text-slate-100">
@@ -1969,7 +1910,7 @@ const duplicateAndAuction = async (productId: string) => {
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
                             {filterView === 'finished' ? (
-                              // ✅ UNTUK LELANG SELESAI: Bisa duplicate & lelang lagi
+                              // ✅ UNTUK LELANG SELESAI: Jadwalkan lelang lagi pada produk yang sama
                               <div className="flex justify-end gap-2">
                                 <Button
                                   size="sm"
@@ -1982,11 +1923,11 @@ const duplicateAndAuction = async (productId: string) => {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  onClick={() => duplicateAndAuction(product.id)}
+                                  onClick={() => openAuctionModal(product.id, false)}
                                   className="bg-green-600 hover:bg-green-700 text-xs"
                                 >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Duplicate & Lelang
+                                  <Gavel className="h-3 w-3 mr-1" />
+                                  Lelang Lagi
                                 </Button>
                               </div>
                             ) : filterView === 'auction' && product.auction_active ? (

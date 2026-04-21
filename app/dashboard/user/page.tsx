@@ -460,11 +460,38 @@ const fetchAuctionParticipation = useCallback(async () => {
       `)
       .in('id', productIds)
 
+    // Fetch auction_history untuk mendeteksi pemenang dengan tepat
+    // (khususnya ketika produk sudah di-lelang ulang sehingga data produk berubah)
+    const { data: historyData } = await supabase
+      .from('auction_history')
+      .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason')
+      .in('product_id', productIds)
+      .in('auction_end_reason', ['force_stop', 'completed'])
+
     // Gabungkan data
     const participation = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
-      // ✅ Check if user is winner - compare winner name with user's full name or email, or check if current bidder ID matches
-      const isWinner = !product?.auction_active && (
+      
+      // Cari history entry yang mencakup waktu bid ini
+      const matchingHistory = historyData?.find(h =>
+        h.product_id === bid.product_id &&
+        (!h.auction_start_time || new Date(bid.created_at) >= new Date(h.auction_start_time)) &&
+        new Date(bid.created_at) <= new Date(h.auction_end_time)
+      )
+
+      // Cek apakah user menang dari history (akurat untuk produk yang dilelang ulang)
+      const isWinnerFromHistory = !!matchingHistory && (
+        matchingHistory.winner_id === session.user.id ||
+        (matchingHistory.winner_name && (
+          matchingHistory.winner_name === session.user?.email ||
+          matchingHistory.winner_name === (profile?.full_name || '') ||
+          matchingHistory.winner_name.toLowerCase() === session.user?.email?.toLowerCase() ||
+          matchingHistory.winner_name.toLowerCase() === (profile?.full_name || '').toLowerCase()
+        ))
+      )
+
+      // Fallback: cek dari products table jika produk belum dilelang ulang
+      const isWinnerFromProduct = !product?.auction_active && !matchingHistory && (
         (product?.auction_winner_name && (
           product.auction_winner_name === session.user?.email || 
           product.auction_winner_name === (profile?.full_name || '') ||
@@ -472,18 +499,26 @@ const fetchAuctionParticipation = useCallback(async () => {
           product.auction_winner_name.toLowerCase() === (profile?.full_name || '').toLowerCase()
         )) ||
         product?.current_bidder_id === session.user.id ||
-        // ✅ Fallback: bid price matches current_bid_price and no other winner/bidder set (data not yet backfilled)
         (!product?.current_bidder_id && !product?.auction_winner_name &&
           bid.bid_price > 0 && bid.bid_price === product?.current_bid_price)
       )
+
+      const isWinner = isWinnerFromHistory || !!isWinnerFromProduct
+
+      // Tentukan final price: dari history jika match, dari produk jika tidak
+      const finalPrice = matchingHistory?.final_price || product?.current_bid_price || bid.bid_price
+
+      // Tentukan apakah lelang ini sudah selesai
+      const isFinished = !!matchingHistory || (!product?.auction_active && product?.auction_active !== undefined)
       
       return {
         ...bid,
         product_name: product?.nama_produk || 'Unknown',
-        auction_active: product?.auction_active || false,
-        auction_end_time: product?.auction_end_time,
-        final_price: product?.current_bid_price || bid.bid_price,
-        is_winner: isWinner
+        auction_active: product?.auction_active && !matchingHistory ? product.auction_active : false,
+        auction_end_time: matchingHistory?.auction_end_time || product?.auction_end_time,
+        final_price: finalPrice,
+        is_winner: isWinner,
+        is_finished: isFinished
       }
     })
 
@@ -702,7 +737,7 @@ const fetchBidHistory = useCallback(async () => {
     const productIds = [...new Set(latestBids.map(b => b.product_id))]
     const { data: productsData } = await supabase
       .from('products')
-      .select('id, nama_produk, current_bid_price, auction_end_time')
+      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id')
       .in('id', productIds)
 
     // Gabungkan data
@@ -712,7 +747,10 @@ const fetchBidHistory = useCallback(async () => {
         ...bid,
         product_name: product?.nama_produk || 'Produk Tidak Diketahui',
         current_price: product?.current_bid_price || bid.bid_price,
-        auction_end_time: product?.auction_end_time || ''
+        auction_end_time: product?.auction_end_time || '',
+        auction_active: product?.auction_active ?? true,
+        auction_winner_name: product?.auction_winner_name || null,
+        current_bidder_id: product?.current_bidder_id || null
       }
     })
 
@@ -1515,10 +1553,17 @@ const confirmSubmitRequest = async () => {
 
                         {/* Sisa Waktu */}
                         <div>
-                          <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
-                            <Clock className="h-3 w-3" />
-                            <span>{bidTimeRemaining[bid.id] || 'Loading...'}</span>
-                          </div>
+                          {bid.auction_active === false ? (
+                            <div className="flex items-center gap-1 text-pink-400 text-xs font-mono">
+                              <CheckCircle className="h-3 w-3" />
+                              <span>Lelang Selesai</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
+                              <Clock className="h-3 w-3" />
+                              <span>{bidTimeRemaining[bid.id] || 'Loading...'}</span>
+                            </div>
+                          )}
                           <div className="text-xs text-slate-500 mt-1">
                             {formatDateIndonesian(bid.created_at)}
                           </div>
@@ -1526,14 +1571,25 @@ const confirmSubmitRequest = async () => {
 
                         {/* Aksi - Place Bid Button */}
                         <div>
-                          <Button
-                            size="sm"
-                            onClick={() => handlePlaceBidFromHistory(bid)}
-                            className="w-full bg-green-600 hover:bg-green-700 text-xs"
-                          >
-                            <Gavel className="h-3 w-3 mr-1" />
-                            Place Bid
-                          </Button>
+                          {bid.auction_active === false ? (
+                            <Button
+                              size="sm"
+                              disabled
+                              className="w-full bg-slate-700 text-slate-400 cursor-not-allowed text-xs"
+                            >
+                              <Lock className="h-3 w-3 mr-1" />
+                              Selesai
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => handlePlaceBidFromHistory(bid)}
+                              className="w-full bg-green-600 hover:bg-green-700 text-xs"
+                            >
+                              <Gavel className="h-3 w-3 mr-1" />
+                              Place Bid
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>

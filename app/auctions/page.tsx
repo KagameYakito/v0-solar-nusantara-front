@@ -32,6 +32,11 @@ interface AuctionProduct {
   current_bidder_id: string | null
   auction_winner_name: string | null
   auction_end_reason: string | null
+  // Fields used when this record is mapped from auction_history
+  isHistorical?: boolean
+  historyId?: string
+  historyStartTime?: string | null
+  historyEndTime?: string | null
 }
 
 interface Bidder {
@@ -45,6 +50,8 @@ export default function AuctionsPage() {
   const router = useRouter()
   const [highlightedProduct, setHighlightedProduct] = useState<string | null>(null)
   const [products, setProducts] = useState<AuctionProduct[]>([])
+  // Historical finished auctions from auction_history table
+  const [historicalProducts, setHistoricalProducts] = useState<AuctionProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [timeRemaining, setTimeRemaining] = useState<Record<string, string>>({})
@@ -84,12 +91,13 @@ export default function AuctionsPage() {
     fetchUser()
   }, [])
 
-  // Fetch auction products
+  // Fetch auction products (active) and finished auctions (from history)
   useEffect(() => {
     fetchAuctionProducts()
+    fetchFinishedAuctions()
   }, [])
 
-  // Fetch bidders for each product
+  // Fetch bidders for each active product
   useEffect(() => {
     if (products.length > 0) {
       fetchBidders()
@@ -114,6 +122,24 @@ export default function AuctionsPage() {
       }
     }
   }, [products])
+
+  // Subscribe to auction_history inserts to refresh finished auction cards
+  useEffect(() => {
+    const historyChannel = supabase
+      .channel('auction-history-changes')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'auction_history' },
+        () => {
+          fetchFinishedAuctions()
+          fetchAuctionProducts()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(historyChannel)
+    }
+  }, [])
 
   // Countdown timer
   useEffect(() => {
@@ -177,56 +203,20 @@ export default function AuctionsPage() {
   const fetchAuctionProducts = async () => {
     try {
       setLoading(true)
-      console.log('🔍 Fetching auction products...')
+      console.log('🔍 Fetching active auction products...')
       
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('is_auction', true)  // ← Ini harus true!
-        .order('auction_active', { ascending: false })
+        .eq('is_auction', true)
+        .eq('auction_active', true)
         .order('auction_end_time', { ascending: true })
   
       if (error) throw error
       
-      console.log('📦 All products from DB:', data?.length || 0)
-      console.log('📦 Products data:', data)
+      console.log('📦 Active products:', data?.length || 0)
       
-      const filteredProducts = (data || []).filter(product => {
-        // a. Lelang masih aktif → tampilkan (dengan atau tanpa bidder)
-        if (product.auction_active === true) return true
-
-        // c. Force stop dengan bidder → tampilkan dengan badge "Lelang Selesai"
-        // d. Completed (batas bid/batas lelang) dengan bidder → tampilkan dengan badge "Lelang Selesai"
-        if (product.auction_active === false &&
-            (product.auction_end_reason === 'force_stop' || product.auction_end_reason === 'completed')) {
-          return true
-        }
-
-        // b. Waktu habis tanpa bidder (no_bids) → TIDAK ditampilkan
-        // e. Dibatalkan tanpa bidder (cancelled) → TIDAK ditampilkan
-        console.log(`🔎 Product "${product.nama_produk}" excluded:`, {
-          auction_active: product.auction_active,
-          auction_end_reason: product.auction_end_reason
-        })
-        return false
-      })
-      
-      console.log('✅ Filtered products:', filteredProducts.length)
-      console.log('✅ Filtered products data:', filteredProducts)
-      
-      setProducts(filteredProducts)
-      
-      const inactiveProductIds = filteredProducts
-        .filter(p => !p.auction_active)
-        .map(p => p.id)
-      
-      setBidders(prev => {
-        const newBidders = { ...prev }
-        inactiveProductIds.forEach(id => {
-          newBidders[id] = []
-        })
-        return newBidders
-      })
+      setProducts(data || [])
       
     } catch (err) {
       console.error('❌ Failed to fetch auction products:', err)
@@ -292,6 +282,99 @@ export default function AuctionsPage() {
     }
   }
 
+  // Fetch finished auctions from auction_history table (persists across re-auctions)
+  const fetchFinishedAuctions = async () => {
+    try {
+      const { data: historyData, error: historyError } = await supabase
+        .from('auction_history')
+        .select('*')
+        .in('auction_end_reason', ['force_stop', 'completed'])
+        .order('auction_end_time', { ascending: false })
+
+      if (historyError) throw historyError
+      if (!historyData || historyData.length === 0) {
+        setHistoricalProducts([])
+        return
+      }
+
+      // Enrich with product image data
+      const productIds = [...new Set(historyData.map((h: any) => h.product_id))]
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('id, gambar_url, auction_gallery_urls, auction_description')
+        .in('id', productIds)
+
+      // Map auction_history records to AuctionProduct shape
+      const mapped: AuctionProduct[] = historyData.map((h: any) => {
+        const productInfo = productsData?.find((p: any) => p.id === h.product_id)
+        return {
+          id: h.product_id,
+          historyId: h.id,
+          isHistorical: true,
+          historyStartTime: h.auction_start_time || null,
+          historyEndTime: h.auction_end_time || null,
+          nama_produk: h.product_name || null,
+          auction_start_price: h.start_price || null,
+          current_bid_price: h.final_price || null,
+          auction_increment: null,
+          auction_end_time: null,
+          auction_gallery_urls: productInfo?.auction_gallery_urls || null,
+          gambar_url: productInfo?.gambar_url || null,
+          auction_active: false,
+          auction_description: productInfo?.auction_description || null,
+          current_bidder_id: h.winner_id || null,
+          auction_winner_name: h.winner_name || null,
+          auction_end_reason: h.auction_end_reason || null
+        }
+      })
+
+      setHistoricalProducts(mapped)
+
+      // Fetch time-range-filtered bidders for each historical auction
+      const biddersData: Record<string, Bidder[]> = {}
+      for (const h of historyData) {
+        let query = supabase
+          .from('auction_bids')
+          .select('bid_price, created_at, bidder_id')
+          .eq('product_id', h.product_id)
+          .lte('created_at', h.auction_end_time)
+          .order('bid_price', { ascending: false })
+          .limit(10)
+
+        if (h.auction_start_time) {
+          query = query.gte('created_at', h.auction_start_time)
+        }
+
+        const { data: bids } = await query
+
+        if (bids && bids.length > 0) {
+          const bidderIds = [...new Set(bids.map((b: any) => b.bidder_id))]
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', bidderIds)
+
+          biddersData[h.id] = bids.map((bid: any) => {
+            const profile = profiles?.find((p: any) => p.id === bid.bidder_id)
+            return {
+              username: profile?.full_name || 'Anonymous',
+              bid_amount: bid.bid_price,
+              bid_time: bid.created_at,
+              isCurrentUser: bid.bidder_id === currentUser?.id
+            }
+          })
+        } else {
+          biddersData[h.id] = []
+        }
+      }
+
+      // Merge historical bidders into the bidders state using historyId as key
+      setBidders(prev => ({ ...prev, ...biddersData }))
+    } catch (err) {
+      console.error('❌ Failed to fetch finished auctions:', err)
+    }
+  }
+
   const formatRupiah = (amount: number | null) => {
     if (!amount) return 'Rp 0'
     return new Intl.NumberFormat('id-ID', {
@@ -313,7 +396,9 @@ export default function AuctionsPage() {
     return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
   }
 
-  const filteredProducts = products.filter(product =>
+  // Combine active and historical, then filter by search term
+  const allAuctionProducts = [...products, ...historicalProducts]
+  const filteredProducts = allAuctionProducts.filter(product =>
     product.nama_produk?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -598,21 +683,25 @@ const submitBid = async () => {
         {!loading && filteredProducts.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {filteredProducts.map((product) => {
+              // Use historyId as key for historical cards to avoid collision with product.id
+              const cardKey = product.isHistorical ? `history-${product.historyId}` : product.id
+              // Historical bidders are keyed by historyId, active by product.id
+              const bidderKey = product.isHistorical ? (product.historyId || product.id) : product.id
               const images = getProductImages(product)
-              const currentIndex = currentImageIndex[product.id] ?? 0
+              const currentIndex = currentImageIndex[cardKey] ?? 0
               const currentImage = images[currentIndex] ?? null
               const currentPrice = getCurrentPrice(product)
-              const productBidders = bidders[product.id] || []
+              const productBidders = bidders[bidderKey] || []
 
               return (
                 <Card 
-                  key={product.id} 
-                  id={`product-card-${product.id}`}  // ✅ TAMBAHKAN INI
+                  key={cardKey} 
+                  id={`product-card-${cardKey}`}
                   className={`bg-slate-900 border-slate-800 hover:border-green-500/50 transition-all duration-300 group ${
                     highlightedProduct === product.id 
                       ? 'ring-4 ring-blue-500 ring-offset-4 ring-offset-slate-950 animate-pulse border-blue-500' 
                       : ''
-                  }`} // ✅ GANTI className DI SINI
+                  }`}
                 >
                   {/* Product Image dengan Carousel */}
                   <div className="relative aspect-[4/3] overflow-hidden bg-slate-800 rounded-t-lg group/card">
@@ -627,13 +716,13 @@ const submitBid = async () => {
                           }}
                         />
                         
-                        {images.length > 1 && (
+                         {images.length > 1 && (
                           <>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                prevImage(product.id, images.length)
+                                prevImage(cardKey, images.length)
                               }}
                               className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10"
                               aria-label="Previous image"
@@ -645,7 +734,7 @@ const submitBid = async () => {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                nextImage(product.id, images.length)
+                                nextImage(cardKey, images.length)
                               }}
                               className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10"
                               aria-label="Next image"
@@ -656,11 +745,11 @@ const submitBid = async () => {
                             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
                               {images.map((_, idx) => (
                                 <button
-                                  key={`${product.id}-dot-${idx}`}
+                                  key={`${cardKey}-dot-${idx}`}
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    setCurrentImageIndex(prev => ({ ...prev, [product.id]: idx }))
+                                    setCurrentImageIndex(prev => ({ ...prev, [cardKey]: idx }))
                                   }}
                                   className={`w-2 h-2 rounded-full transition-all ${
                                     idx === currentIndex 
