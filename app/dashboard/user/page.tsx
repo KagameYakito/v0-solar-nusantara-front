@@ -483,7 +483,6 @@ const fetchAuctionParticipation = useCallback(async () => {
       .from('auction_history')
       .select('product_id, winner_id, winner_name, final_price, auction_start_time, auction_end_time, auction_end_reason')
       .in('product_id', productIds)
-      .in('auction_end_reason', ['force_stop', 'completed'])
 
     // Gabungkan data
     const participation = bidsData.map(bid => {
@@ -542,7 +541,8 @@ const fetchAuctionParticipation = useCallback(async () => {
         auction_end_time: matchingHistory?.auction_end_time || product?.auction_end_time,
         final_price: finalPrice,
         is_winner: isWinner,
-        is_finished: isFinished
+        is_finished: isFinished,
+        auction_end_reason: matchingHistory?.auction_end_reason || (product?.auction_active === false ? 'completed' : null)
       }
     })
 
@@ -812,7 +812,8 @@ const fetchBidHistory = useCallback(async () => {
           : (product?.auction_winner_name ?? null),
         current_bidder_id: matchingHistory != null
           ? matchingHistory.winner_id
-          : (product?.current_bidder_id ?? null)
+          : (product?.current_bidder_id ?? null),
+        auction_end_reason: matchingHistory?.auction_end_reason ?? (product?.auction_active === false ? 'completed' : null)
       }
     })
 
@@ -846,6 +847,20 @@ const formatDateIndonesian = (dateString: string) => {
   const minutes = date.getMinutes().toString().padStart(2, '0')
   
   return `${day} ${month} ${year}, ${hours}:${minutes}`
+}
+
+// ✅ STATUS LELANG SELESAI - sinkron dengan Admin Marketing Dashboard
+const getAuctionEndReasonBadge = (reason: string | null | undefined) => {
+  switch (reason) {
+    case 'cancelled':
+      return { label: 'Dibatalkan', className: 'bg-red-500/20 text-red-400 border border-red-500/30' }
+    case 'force_stop':
+      return { label: 'Dihentikan', className: 'bg-orange-500/20 text-orange-400 border border-orange-500/30' }
+    case 'no_bids':
+      return { label: 'Tidak Ada Bid', className: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' }
+    default:
+      return { label: 'Selesai', className: 'bg-slate-600/20 text-slate-400 border border-slate-600/30' }
+  }
 }
 
 // ✅ REALTIME SUBSCRIPTION - Auto refresh saat ada perubahan
@@ -1538,12 +1553,13 @@ const confirmSubmitRequest = async () => {
                               Menang
                             </Badge>
                           ) : item.auction_active ? (
-                            <Badge className="bg-purple-600/20 text-purple-400">
+                            <Badge className="bg-purple-600/20 text-purple-400 border border-purple-600/30">
+                              <Gavel className="h-3 w-3 mr-1" />
                               Berlangsung
                             </Badge>
                           ) : (
-                            <Badge className="bg-slate-600/20 text-slate-400">
-                              Selesai
+                            <Badge className={getAuctionEndReasonBadge(item.auction_end_reason).className}>
+                              {getAuctionEndReasonBadge(item.auction_end_reason).label}
                             </Badge>
                           )}
                         </div>
@@ -1636,10 +1652,9 @@ const confirmSubmitRequest = async () => {
                         {/* Sisa Waktu */}
                         <div>
                           {bid.auction_active === false ? (
-                            <div className="flex items-center gap-1 text-pink-400 text-xs font-mono">
-                              <CheckCircle className="h-3 w-3" />
-                              <span>Lelang Selesai</span>
-                            </div>
+                            <Badge className={`${getAuctionEndReasonBadge(bid.auction_end_reason).className} text-xs`}>
+                              {getAuctionEndReasonBadge(bid.auction_end_reason).label}
+                            </Badge>
                           ) : (
                             <div className="flex items-center gap-1 text-orange-400 text-xs font-mono">
                               <Clock className="h-3 w-3" />
