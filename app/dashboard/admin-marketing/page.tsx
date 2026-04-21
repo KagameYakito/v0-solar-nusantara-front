@@ -527,7 +527,7 @@ export default function AdminMarketingDashboard() {
     const checkBidDeadlines = async () => {
       const now = new Date().getTime()
       
-      products.forEach(async (product) => {
+      for (const product of products) {
         if (product.auction_active && 
             product.bid_deadline_time && 
             product.current_bid_price && 
@@ -537,24 +537,57 @@ export default function AdminMarketingDashboard() {
           
           if (bidDeadline < now) {
             try {
+              // 1. Lookup winner name before ending
+              let winnerName: string | null = null
+              if (product.current_bidder_id) {
+                const { data: profileData } = await supabase
+                  .from('profiles')
+                  .select('full_name')
+                  .eq('id', product.current_bidder_id)
+                  .single()
+                winnerName = profileData?.full_name || null
+              }
+
               const endReason = product.current_bid_price && product.current_bid_price > 0 
                 ? 'completed' 
                 : 'no_bids'
-              
-              // ✅ DELETE BIDS SEBELUM UPDATE
-              await supabase
+
+              // 2. Get bid count before any changes
+              const { count: bidCount } = await supabase
                 .from('auction_bids')
-                .delete()
+                .select('*', { count: 'exact', head: true })
                 .eq('product_id', product.id)
-              
+
+              // 3. Insert to auction_history
+              const finishedId = `#${String(Date.now()).slice(-6)}`
+              await supabase.from('auction_history').insert({
+                product_id: product.id,
+                product_name: product.nama_produk,
+                start_price: product.auction_start_price || 0,
+                final_price: product.current_bid_price || product.auction_start_price || 0,
+                winner_id: product.current_bidder_id,
+                winner_name: winnerName,
+                finished_auction_id: finishedId,
+                auction_start_time: product.auction_started_at,
+                auction_end_time: new Date().toISOString(),
+                auction_end_reason: endReason,
+                total_bids: bidCount || 0
+              })
+
+              // 4. Update product — preserve display fields for auction page
               await supabase
                 .from('products')
                 .update({
                   auction_active: false,
                   is_auction: true,
+                  auction_end_time: null,
+                  auction_duration_days: null,
+                  bid_deadline_duration: null,
+                  bid_deadline_time: null,
+                  finished_auction_id: finishedId,
                   auction_end_reason: endReason,
                   auction_ended_at: new Date().toISOString(),
-                  auction_winner_name: product.current_bidder_id || null
+                  auction_winner_name: winnerName
                 })
                 .eq('id', product.id)
               
@@ -565,7 +598,7 @@ export default function AdminMarketingDashboard() {
             }
           }
         }
-      })
+      }
     }
     
     const interval = setInterval(checkBidDeadlines, 10000)
@@ -758,57 +791,29 @@ export default function AdminMarketingDashboard() {
       p.id !== selectedProductId // Exclude current product if editing
     )
 
-    const existingFinished = products.find(p => 
-      p.nama_produk?.toLowerCase() === product.nama_produk?.toLowerCase() &&
-      p.is_auction === true &&
-      p.auction_active === false
-    )
-    
-    if (existingFinished) {
-      // Produk ini pernah dilelang dan sudah selesai
-      // Admin harus duplicate produk dulu atau gunakan produk berbeda
-      const confirmReuse = confirm(
+    // Detect if this product itself was previously finished (not just same-name)
+    const selfPreviouslyFinished = product.is_auction === true && product.auction_active === false
+
+    if (selfPreviouslyFinished && !isEditingAuction) {
+      // Product was previously auctioned and finished — auto-duplicate to preserve the old card on auction page
+      const confirmDuplicate = confirm(
         `Produk "${product.nama_produk}" sudah pernah dilelang sebelumnya.\n\n` +
-        `Apakah Anda yakin ingin melelang produk yang sama lagi?\n\n` +
-        `Saran: Duplicate produk terlebih dahulu untuk menghindari overwrite data.`
+        `Untuk menjaga jejak lelang lama tetap tampil di halaman lelang, sistem akan otomatis menduplikasi produk ini untuk lelang baru.\n\n` +
+        `Produk lama akan tetap menampilkan pemenang dan riwayat bid sebelumnya.\n\n` +
+        `Lanjutkan?`
       )
       
-      if (!confirmReuse) return
+      if (!confirmDuplicate) return
+
+      // Auto-duplicate and open auction modal for the new product
+      setShowAuctionModal(false)
+      await duplicateAndAuction(selectedProductId)
+      return
     }
     
     if (duplicateActive) {
       alert(`❌ Produk "${product.nama_produk}" sedang dalam lelang aktif!\n\nHanya 1 produk dengan nama yang sama yang bisa dilelang dalam 1 waktu.\n\nProduk yang sedang aktif: ${duplicateActive.nama_produk}`)
       return
-    }
-
-    const duplicateProduct = async (productId: string) => {
-      try {
-        const product = products.find(p => p.id === productId)
-        if (!product) return
-        
-        const newName = `${product.nama_produk} (Batch ${new Date().getFullYear()})`
-        
-        const { data, error } = await supabase
-          .from('products')
-          .insert({
-            nama_produk: newName,
-            harga: product.harga,
-            sku: `${product.sku}-NEW`,
-            gambar_url: product.gambar_url,
-            is_auction: false,
-            is_request: false,
-            created_at: new Date().toISOString()
-          })
-          .select()
-          .single()
-        
-        if (error) throw error
-        
-        alert(`✅ Produk berhasil di-duplicate: ${newName}`)
-        fetchProducts()
-      } catch (err) {
-        alert("❌ Gagal duplicate produk: " + err)
-      }
     }
     
     const startPrice = parseInt(auctionConfig.startPrice)
@@ -841,14 +846,6 @@ export default function AdminMarketingDashboard() {
       setAuctionLoading(true)
       
       const finalGalleryUrls = await uploadImages()
-      
-      if (product.is_auction && !product.auction_active) {
-        // Produk ini pernah dilelang sebelumnya, hapus bids lama
-        await supabase
-          .from('auction_bids')
-          .delete()
-          .eq('product_id', selectedProductId)
-      }
 
       const now = new Date()
       let newEndTime = product?.auction_end_time ? new Date(product.auction_end_time) : null
@@ -881,7 +878,14 @@ export default function AdminMarketingDashboard() {
         auction_description: auctionConfig.description,
         auction_gallery_urls: finalGalleryUrls,
         is_auction: true,
-        auction_active: true
+        auction_active: true,
+        // Clear stale finished-auction fields when starting a fresh auction
+        current_bid_price: null,
+        current_bidder_id: null,
+        auction_winner_name: null,
+        auction_ended_at: null,
+        auction_end_reason: null,
+        finished_auction_id: null
       }
       
       if (shouldUpdateEndTime && newEndTime) {
@@ -940,7 +944,6 @@ export default function AdminMarketingDashboard() {
   }
 
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
-  // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
   const confirmCancelAuction = async () => {
     if (!cancellingProductId) return
     
@@ -948,8 +951,7 @@ export default function AdminMarketingDashboard() {
       const product = products.find(p => p.id === cancellingProductId)
       
       // 1. Generate finished auction ID
-      const {  idData } = await supabase.rpc('generate_finished_auction_id')
-      const finishedId = idData || `#${String(Date.now()).slice(-6)}`
+      const finishedId = `#${String(Date.now()).slice(-6)}`
       
       // 2. Get winner info
       let winnerName: string | null = null
@@ -961,11 +963,11 @@ export default function AdminMarketingDashboard() {
           .single()
         winnerName = profileData?.full_name || null
       }
-      
-      // 3. ✅ DELETE SEMUA BIDS LAMA (RESET LIVE BIDDERS)
-      await supabase
+
+      // 3. Get bid count before any changes
+      const { count: bidCount } = await supabase
         .from('auction_bids')
-        .delete()
+        .select('*', { count: 'exact', head: true })
         .eq('product_id', cancellingProductId)
       
       // 4. Tentukan status berdasarkan ada/tidaknya pemenang
@@ -987,7 +989,7 @@ export default function AdminMarketingDashboard() {
           auction_start_time: product?.auction_started_at,
           auction_end_time: new Date().toISOString(),
           auction_end_reason: endReason,
-          total_bids: 0 // Karena sudah di-delete
+          total_bids: bidCount || 0
         })
       
       if (historyError) {
@@ -995,21 +997,15 @@ export default function AdminMarketingDashboard() {
         throw historyError
       }
       
-      // 6. Update product - RESET ke status normal
+      // 6. Update product — preserve key fields so auction page can display card correctly
       await supabase
         .from('products')
         .update({
           auction_active: false,
-          auction_start_price: null,
-          auction_increment: null,
           auction_end_time: null,
           auction_duration_days: null,
           bid_deadline_duration: null,
           bid_deadline_time: null,
-          auction_description: null,
-          auction_gallery_urls: null,
-          current_bid_price: null,
-          auction_started_at: null,
           finished_auction_id: finishedId,
           auction_winner_name: winnerName,
           auction_ended_at: new Date().toISOString(),
@@ -1018,6 +1014,9 @@ export default function AdminMarketingDashboard() {
         .eq('id', cancellingProductId)
       
       await fetchProducts()
+      setShowCancelConfirmModal(false)
+      setCancellingProductId(null)
+      setCancellingProductName('')
       
       alert(`✅ Lelang dibatalkan & disimpan ke history!\nID: ${finishedId}\nStatus: ${endReason}`)
     } catch (err: any) {
@@ -1858,9 +1857,9 @@ const duplicateAndAuction = async (productId: string) => {
                               {/* ✅ TAMPILKAN PEMENANG JIKA LELANG SELESAI */}
                               {product.is_auction && !product.auction_active && (
                                 <div className="w-full mt-1 text-xs">
-                                  {product.current_bidder_id ? (
+                                  {product.auction_winner_name ? (
                                     <span className="text-pink-400">
-                                      Pemenang: {product.current_bidder_id}
+                                      Pemenang: {product.auction_winner_name}
                                     </span>
                                   ) : (
                                     <span className="text-slate-500">

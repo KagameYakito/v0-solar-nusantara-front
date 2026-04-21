@@ -737,7 +737,7 @@ const submitBid = async () => {
                     </div>
 
                     {/* Bidders / Winner - Fixed Height */}
-                    {!product.auction_active && productBidders.length > 0 ? (
+                    {!product.auction_active && (product.auction_winner_name || productBidders.length > 0) ? (
                       /* Winner Banner for finished auctions */
                       <div className="bg-yellow-900/30 rounded-lg p-3 border border-yellow-500/50 mb-3 h-[150px] flex flex-col justify-center">
                         <p className="text-xs text-yellow-400 mb-2 font-semibold text-center">🏆 Pemenang Lelang</p>
@@ -753,7 +753,9 @@ const submitBid = async () => {
                       </div>
                     ) : (
                       <div className="bg-slate-800/30 rounded-lg p-2 border border-slate-700/50 mb-3 h-[150px] overflow-hidden">
-                        <p className="text-xs text-slate-400 mb-2 font-semibold">Live Bidders</p>
+                        <p className="text-xs text-slate-400 mb-2 font-semibold">
+                          {product.auction_active ? 'Live Bidders' : 'Bidder History'}
+                        </p>
                         {productBidders.length > 0 ? (
                           <div 
                             className={`space-y-1.5 ${
