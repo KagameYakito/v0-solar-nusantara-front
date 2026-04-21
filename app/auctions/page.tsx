@@ -31,6 +31,7 @@ interface AuctionProduct {
   auction_description: string | null
   current_bidder_id: string | null
   auction_winner_name: string | null
+  auction_end_reason: string | null
 }
 
 interface Bidder {
@@ -191,19 +192,23 @@ export default function AuctionsPage() {
       console.log('📦 Products data:', data)
       
       const filteredProducts = (data || []).filter(product => {
-        const hasWinner = product.current_bidder_id !== null || product.auction_winner_name !== null
-        const shouldInclude = product.auction_active === true || 
-                             (product.auction_active === false && hasWinner)
-        
-        console.log(`🔎 Product "${product.nama_produk}":`, {
+        // a. Lelang masih aktif → tampilkan (dengan atau tanpa bidder)
+        if (product.auction_active === true) return true
+
+        // c. Force stop dengan bidder → tampilkan dengan badge "Lelang Selesai"
+        // d. Completed (batas bid/batas lelang) dengan bidder → tampilkan dengan badge "Lelang Selesai"
+        if (product.auction_active === false &&
+            (product.auction_end_reason === 'force_stop' || product.auction_end_reason === 'completed')) {
+          return true
+        }
+
+        // b. Waktu habis tanpa bidder (no_bids) → TIDAK ditampilkan
+        // e. Dibatalkan tanpa bidder (cancelled) → TIDAK ditampilkan
+        console.log(`🔎 Product "${product.nama_produk}" excluded:`, {
           auction_active: product.auction_active,
-          current_bidder_id: product.current_bidder_id,
-          auction_winner_name: product.auction_winner_name,
-          hasWinner,
-          shouldInclude
+          auction_end_reason: product.auction_end_reason
         })
-        
-        return shouldInclude
+        return false
       })
       
       console.log('✅ Filtered products:', filteredProducts.length)
@@ -684,7 +689,7 @@ const submitBid = async () => {
                       <Badge className="bg-purple-600 text-white px-3 py-1">
                         Sedang Lelang
                       </Badge>
-                    ) : (product.current_bidder_id || product.auction_winner_name) ? (
+                    ) : (product.auction_end_reason === 'force_stop' || product.auction_end_reason === 'completed') ? (
                       <Badge className="bg-pink-600 text-white px-3 py-1">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Lelang Selesai
