@@ -489,13 +489,16 @@ const fetchAuctionParticipation = useCallback(async () => {
     const participation = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
       
-      // Cari history entry yang mencakup waktu bid ini (hanya jika start_time tersedia untuk presisi)
-      const matchingHistory = historyData?.find(h =>
-        h.product_id === bid.product_id &&
-        h.auction_start_time !== null &&
-        new Date(bid.created_at) >= new Date(h.auction_start_time) &&
-        new Date(bid.created_at) <= new Date(h.auction_end_time)
-      )
+      // Cari history entry yang mencakup waktu bid ini.
+      // Jika produk dilelang ulang beberapa kali, ambil sesi paling baru yang mencakup bid ini.
+      const matchingHistory = historyData
+        ?.filter(h =>
+          h.product_id === bid.product_id &&
+          h.auction_start_time !== null &&
+          new Date(bid.created_at) >= new Date(h.auction_start_time) &&
+          new Date(bid.created_at) <= new Date(h.auction_end_time)
+        )
+        .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
 
       // Gunakan profileRef.current agar selalu membaca profil terbaru
       const currentProfile = profileRef.current
@@ -777,27 +780,39 @@ const fetchBidHistory = useCallback(async () => {
     const historyWithProducts = latestBids.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
 
-      // Cari entri history yang sesuai dengan sesi lelang saat bid ini dibuat
-      const matchingHistory = auctionHistoryData?.find(h =>
-        h.product_id === bid.product_id &&
-        h.auction_start_time !== null &&
-        new Date(bid.created_at) >= new Date(h.auction_start_time) &&
-        new Date(bid.created_at) <= new Date(h.auction_end_time)
-      )
+      // Cari entri history yang sesuai dengan sesi lelang saat bid ini dibuat.
+      // Jika produk pernah dilelang berkali-kali, ambil sesi yang paling baru (sort desc).
+      const matchingHistory = auctionHistoryData
+        ?.filter(h =>
+          h.product_id === bid.product_id &&
+          h.auction_start_time !== null &&
+          new Date(bid.created_at) >= new Date(h.auction_start_time) &&
+          new Date(bid.created_at) <= new Date(h.auction_end_time)
+        )
+        .sort((a, b) => new Date(b.auction_end_time).getTime() - new Date(a.auction_end_time).getTime())[0] ?? null
 
-      // Jika ada history yang cocok, lelang itu sudah selesai (meski produk sedang dilelang ulang)
-      const isAuctionActive = matchingHistory
+      // Jika ada history yang cocok, lelang itu sudah selesai (meski produk sedang dilelang ulang).
+      // Default ke false bila produk tidak ditemukan untuk menghindari tampil "aktif" secara keliru.
+      const isAuctionActive = matchingHistory != null
         ? false
-        : (product?.auction_active ?? true)
+        : (product?.auction_active ?? false)
 
       return {
         ...bid,
         product_name: product?.nama_produk || 'Produk Tidak Diketahui',
-        current_price: matchingHistory?.final_price || product?.current_bid_price || bid.bid_price,
-        auction_end_time: matchingHistory?.auction_end_time || product?.auction_end_time || '',
+        // Gunakan nullish coalescing agar final_price = 0 (lelang tanpa bid) tetap ditampilkan
+        current_price: matchingHistory != null
+          ? (matchingHistory.final_price ?? product?.current_bid_price ?? bid.bid_price)
+          : (product?.current_bid_price ?? bid.bid_price),
+        auction_end_time: matchingHistory?.auction_end_time ?? product?.auction_end_time ?? '',
         auction_active: isAuctionActive,
-        auction_winner_name: matchingHistory?.winner_name || product?.auction_winner_name || null,
-        current_bidder_id: matchingHistory?.winner_id || product?.current_bidder_id || null
+        // Bila matchingHistory ada, gunakan nilai dari history saja (termasuk null = tidak ada pemenang)
+        auction_winner_name: matchingHistory != null
+          ? matchingHistory.winner_name
+          : (product?.auction_winner_name ?? null),
+        current_bidder_id: matchingHistory != null
+          ? matchingHistory.winner_id
+          : (product?.current_bidder_id ?? null)
       }
     })
 

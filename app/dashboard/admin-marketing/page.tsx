@@ -64,6 +64,7 @@ const supabase = createClient(
 )
 
 const ITEMS_PER_PAGE = 100
+const REALTIME_DEBOUNCE_MS = 500
 
 /** Generate a short collision-resistant finished-auction ID, e.g. #A3F59C2B */
 const generateFinishedAuctionId = (): string => {
@@ -506,7 +507,7 @@ export default function AdminMarketingDashboard() {
       debounceTimer = setTimeout(() => {
         if (!isMounted) return
         fetchProducts()
-      }, 500)
+      }, REALTIME_DEBOUNCE_MS)
     }
 
     // Saat user melakukan bid, products.current_bid_price / current_bidder_id / bid_deadline_time diperbarui
