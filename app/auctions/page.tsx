@@ -716,7 +716,7 @@ const submitBid = async () => {
                           }}
                         />
                         
-                         {images.length > 1 && (
+                          {images.length > 1 && (
                           <>
                             <button
                               type="button"

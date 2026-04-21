@@ -472,10 +472,11 @@ const fetchAuctionParticipation = useCallback(async () => {
     const participation = bidsData.map(bid => {
       const product = productsData?.find(p => p.id === bid.product_id)
       
-      // Cari history entry yang mencakup waktu bid ini
+      // Cari history entry yang mencakup waktu bid ini (hanya jika start_time tersedia untuk presisi)
       const matchingHistory = historyData?.find(h =>
         h.product_id === bid.product_id &&
-        (!h.auction_start_time || new Date(bid.created_at) >= new Date(h.auction_start_time)) &&
+        h.auction_start_time !== null &&
+        new Date(bid.created_at) >= new Date(h.auction_start_time) &&
         new Date(bid.created_at) <= new Date(h.auction_end_time)
       )
 
