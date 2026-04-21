@@ -943,12 +943,13 @@ export default function AdminMarketingDashboard() {
   // ✅ Fungsi untuk membatalkan lelang (setelah konfirmasi)
   const confirmCancelAuction = async () => {
     if (!cancellingProductId) return
+    
     try {
       const product = products.find(p => p.id === cancellingProductId)
       
       // 1. Generate finished auction ID
-      const { data: rpcData } = await supabase.rpc('generate_finished_auction_id')
-      const finishedId = rpcData || `#${String(Date.now()).slice(-6)}`
+      const {  idData } = await supabase.rpc('generate_finished_auction_id')
+      const finishedId = idData || `#${String(Date.now()).slice(-6)}`
       
       // 2. Get winner info
       let winnerName: string | null = null
@@ -961,24 +962,18 @@ export default function AdminMarketingDashboard() {
         winnerName = profileData?.full_name || null
       }
       
-      // 3. ✅ HITUNG JUMLAH BIDS SEBELUM DELETE
-      const { count: bidsCount } = await supabase
-        .from('auction_bids')
-        .select('*', { count: 'exact', head: true })
-        .eq('product_id', cancellingProductId)
-      
-      // 4. DELETE SEMUA BIDS
+      // 3. ✅ DELETE SEMUA BIDS LAMA (RESET LIVE BIDDERS)
       await supabase
         .from('auction_bids')
         .delete()
         .eq('product_id', cancellingProductId)
       
-      // 5. Tentukan status
+      // 4. Tentukan status berdasarkan ada/tidaknya pemenang
       const endReason = winnerName && winnerName !== 'Tidak ada'
         ? 'force_stop'
         : 'cancelled'
       
-      // 6. INSERT KE AUCTION_HISTORY
+      // 5. ✅ INSERT KE AUCTION_HISTORY
       const { error: historyError } = await supabase
         .from('auction_history')
         .insert({
@@ -992,7 +987,7 @@ export default function AdminMarketingDashboard() {
           auction_start_time: product?.auction_started_at,
           auction_end_time: new Date().toISOString(),
           auction_end_reason: endReason,
-          total_bids: bidsCount || 0 // ✅ Sekarang sudah benar
+          total_bids: 0 // Karena sudah di-delete
         })
       
       if (historyError) {
@@ -1000,10 +995,10 @@ export default function AdminMarketingDashboard() {
         throw historyError
       }
       
+      // 6. Update product - RESET ke status normal
       await supabase
         .from('products')
         .update({
-          is_auction: false,
           auction_active: false,
           auction_start_price: null,
           auction_increment: null,
@@ -1014,7 +1009,6 @@ export default function AdminMarketingDashboard() {
           auction_description: null,
           auction_gallery_urls: null,
           current_bid_price: null,
-          current_bidder_id: null,
           auction_started_at: null,
           finished_auction_id: finishedId,
           auction_winner_name: winnerName,
@@ -1024,6 +1018,7 @@ export default function AdminMarketingDashboard() {
         .eq('id', cancellingProductId)
       
       await fetchProducts()
+      
       alert(`✅ Lelang dibatalkan & disimpan ke history!\nID: ${finishedId}\nStatus: ${endReason}`)
     } catch (err: any) {
       alert("❌ Gagal: " + err.message)
