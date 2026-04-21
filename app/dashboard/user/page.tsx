@@ -121,6 +121,7 @@ export default function UserDashboard() {
   const [bidsLoading, setBidsLoading] = useState(false)
   const [bidTimeRemaining, setBidTimeRemaining] = useState<Record<string, string>>({})
   const [auctionParticipation, setAuctionParticipation] = useState<any[]>([])
+  const [auctionLoading, setAuctionLoading] = useState(false)
 
   // Ref so fetchAuctionParticipation always reads the latest profile without needing
   // to be recreated (avoids tearing down realtime subscriptions on profile changes).
@@ -502,6 +503,7 @@ const findMatchingHistory = (
 // ✅ FUNGSI FETCH PARTISIPASI LELANG
 const fetchAuctionParticipation = useCallback(async () => {
   try {
+    setAuctionLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
@@ -518,6 +520,7 @@ const fetchAuctionParticipation = useCallback(async () => {
 
     if (!bidsData || bidsData.length === 0) {
       setAuctionParticipation([])
+      setAuctionLoading(false)
       return
     }
 
@@ -636,6 +639,8 @@ const fetchAuctionParticipation = useCallback(async () => {
     setAuctionParticipation(deduplicatedParticipation)
   } catch (err) {
     console.error("Failed to fetch auction participation:", err)
+  } finally {
+    setAuctionLoading(false)
   }
 }, [])
 
@@ -952,7 +957,7 @@ const getAuctionEndReasonBadge = (reason: string | null | undefined) => {
     case 'no_bids':
       return { label: 'Tidak Ada Bid', className: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' }
     default:
-      return { label: 'Selesai', className: 'bg-slate-600/20 text-slate-400 border border-slate-600/30' }
+      return { label: 'Selesai', className: 'bg-green-500/20 text-green-400 border border-green-500/30' }
   }
 }
 
@@ -1600,7 +1605,12 @@ const confirmSubmitRequest = async () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {auctionParticipation.length === 0 ? (
+              {auctionLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                  <span className="ml-2 text-slate-400">Memuat riwayat lelang...</span>
+                </div>
+              ) : auctionParticipation.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p className="text-lg font-medium">Belum ada partisipasi lelang.</p>
