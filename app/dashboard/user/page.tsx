@@ -84,6 +84,8 @@ interface BidHistory {
   auction_active: boolean
   auction_winner_name: string | null
   current_bidder_id: string | null
+  auction_end_reason: string | null
+  product_sku: string | null
 }
 
 const supabase = createClient(
@@ -472,7 +474,8 @@ const fetchAuctionParticipation = useCallback(async () => {
         auction_end_time,
         current_bid_price,
         auction_winner_name,
-        current_bidder_id
+        current_bidder_id,
+        sku
       `)
       .in('id', productIds)
 
@@ -542,7 +545,8 @@ const fetchAuctionParticipation = useCallback(async () => {
         is_winner: isWinner,
         is_finished: isFinished,
         auction_end_reason: matchingHistory?.auction_end_reason || (product?.auction_active === false ? 'completed' : null),
-        finished_auction_id: matchingHistory?.finished_auction_id || null
+        finished_auction_id: matchingHistory?.finished_auction_id || null,
+        product_sku: product?.sku || null
       }
     })
 
@@ -766,7 +770,7 @@ const fetchBidHistory = useCallback(async () => {
     const productIds = [...new Set(latestBids.map(b => b.product_id))]
     const { data: productsData } = await supabase
       .from('products')
-      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id, auction_started_at')
+      .select('id, nama_produk, current_bid_price, auction_end_time, auction_active, auction_winner_name, current_bidder_id, auction_started_at, sku')
       .in('id', productIds)
 
     // ✅ Fetch auction_history agar status tetap akurat setelah produk dilelang ulang
@@ -813,7 +817,8 @@ const fetchBidHistory = useCallback(async () => {
           ? matchingHistory.winner_id
           : (product?.current_bidder_id ?? null),
         auction_end_reason: matchingHistory?.auction_end_reason ?? (product?.auction_active === false ? 'completed' : null),
-        finished_auction_id: matchingHistory?.finished_auction_id ?? null
+        finished_auction_id: matchingHistory?.finished_auction_id ?? null,
+        product_sku: product?.sku ?? null
       }
     })
 
@@ -1534,7 +1539,7 @@ const confirmSubmitRequest = async () => {
                         
                         {/* ID Transaksi */}
                         <Badge className="bg-pink-600/20 text-pink-400 font-mono">
-                          {item.finished_auction_id || (item.auction_active ? 'Berlangsung' : 'N/A')}
+                          {item.finished_auction_id || item.product_sku || (item.auction_active ? 'Berlangsung' : 'N/A')}
                         </Badge>
                         
                         {/* Nama Produk */}
@@ -1630,7 +1635,7 @@ const confirmSubmitRequest = async () => {
                         {/* ID Transaksi */}
                         <div>
                           <Badge className="bg-pink-600/20 text-pink-400 border border-pink-600/30 font-mono">
-                            {bid.finished_auction_id || (bid.auction_active ? 'Berlangsung' : 'N/A')}
+                            {bid.finished_auction_id || bid.product_sku || (bid.auction_active ? 'Berlangsung' : 'N/A')}
                           </Badge>
                         </div>
 

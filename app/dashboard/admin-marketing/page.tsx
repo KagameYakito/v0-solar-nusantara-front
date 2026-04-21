@@ -1638,6 +1638,7 @@ export default function AdminMarketingDashboard() {
                       // ✅ TABEL KHUSUS UNTUK VIEW "SEDANG LELANG"
                       <tr>
                         <th className="px-4 py-3 rounded-tl-lg">No</th>
+                        <th className="px-4 py-3">ID Lelang</th>
                         <th className="px-4 py-3">Gambar</th>
                         <th className="px-4 py-3">Nama Produk</th>
                         <th className="px-4 py-3">Harga Lelang</th>
@@ -1689,6 +1690,15 @@ export default function AdminMarketingDashboard() {
                       return (
                         <tr key={product.id} className="hover:bg-slate-800/50">
                           <td className="px-4 py-3 text-slate-400">{globalIndex}</td>
+                          
+                          {/* ✅ KOLOM ID LELANG - Hanya untuk view "Sedang Lelang" */}
+                          {filterView === 'auction' && (
+                            <td className="px-4 py-3">
+                              <Badge className="bg-purple-600/20 text-purple-400 border border-purple-600/30 font-mono text-xs">
+                                {product.sku || '-'}
+                              </Badge>
+                            </td>
+                          )}
                           
                           {/* ✅ KOLOM GAMBAR - Hanya untuk view "Sedang Lelang" */}
                           {filterView === 'auction' && (
