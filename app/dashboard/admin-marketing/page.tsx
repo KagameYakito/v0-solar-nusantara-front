@@ -58,6 +58,26 @@ interface GroupedWishlistItem {
   product_count: number // Array of individual items
 }
 
+// ✅ INTERFACE KHUSUS ADMIN MARKETING (TERPISAH)
+interface AdminMarketingProfile {
+  id: string
+  admin_id: string
+  admin_name: string
+  admin_phone: string
+  profile_completed: boolean
+}
+
+// ✅ INTERFACE UNTUK ASSIGNMENT TRACKING
+interface ClientAssignment {
+  id: string
+  admin_id: string
+  user_id: string
+  assigned_at: string
+  last_contact_at: string | null
+  notes: string | null
+  status: 'active' | 'inactive'
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -136,6 +156,16 @@ export default function AdminMarketingDashboard() {
   const [cancellingProductId, setCancellingProductId] = useState<string | null>(null)
   const [cancellingProductName, setCancellingProductName] = useState<string>('')
   const [descriptionLength, setDescriptionLength] = useState(0)
+
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [adminProfile, setAdminProfile] = useState<AdminMarketingProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileData, setProfileData] = useState({
+    admin_name: '',
+    admin_phone: ''
+  })
+  const [blockingFeature, setBlockingFeature] = useState<string | null>(null)
+  const [userAssignments, setUserAssignments] = useState<Map<string, ClientAssignment>>(new Map())
 
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
@@ -280,6 +310,63 @@ export default function AdminMarketingDashboard() {
     }
   }
 }, [isAuthorized, filterView])
+
+// ✅ LOAD PROFIL DARI TABEL TERPISAH
+const loadAdminMarketingProfile = useCallback(async (adminId: string) => {
+  try {
+    setProfileLoading(true)
+    
+    // ✅ QUERY DARI TABEL admin_marketing_profiles (BUKAN profiles!)
+    const { data, error } = await supabase
+      .from('admin_marketing_profiles')
+      .select('*')
+      .eq('admin_id', adminId)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') throw error // PGRST116 = not found
+    
+    setAdminProfile(data)
+    
+    // ✅ JIKA BELUM ADA PROFIL ATAU BELUM LENGKAP
+    if (!data || !data.profile_completed) {
+      setShowProfileModal(true)
+      if (data) {
+        setProfileData({
+          admin_name: data.admin_name || '',
+          admin_phone: data.admin_phone || ''
+        })
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load admin marketing profile:", err)
+    // Jika belum ada profil sama sekali, tampilkan modal
+    setShowProfileModal(true)
+  } finally {
+    setProfileLoading(false)
+  }
+}, [])
+
+// ✅ LOAD USER ASSIGNMENTS (untuk tracking client)
+const loadUserAssignments = useCallback(async (adminId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('admin_client_assignments')
+      .select('*')
+      .eq('admin_id', adminId)
+      .eq('status', 'active')
+    
+    if (error) throw error
+    
+    const assignmentsMap = new Map<string, ClientAssignment>()
+    data?.forEach(assignment => {
+      assignmentsMap.set(assignment.user_id, assignment)
+    })
+    
+    setUserAssignments(assignmentsMap)
+  } catch (err) {
+    console.error("Failed to load user assignments:", err)
+  }
+}, [])
 
   const openNoteModal = (item: any) => {
     setSelectedWishlistItem(item)
@@ -446,6 +533,7 @@ export default function AdminMarketingDashboard() {
         
         const session = sessionResponse.data.session
         
+        // ✅ CHECK ROLE DARI TABLE profiles (user biasa)
         const profileResponse = await supabase
           .from('profiles')
           .select('role')
@@ -466,8 +554,15 @@ export default function AdminMarketingDashboard() {
           return
         }
         
+        // ✅ AUTHORIZED - LOAD ADMIN PROFILE DARI TABEL TERPISAH
         if (isMounted) {
           setIsAuthorized(true)
+          
+          // ✅ LOAD PROFIL ADMIN MARKETING
+          await loadAdminMarketingProfile(session.user.id)
+          
+          // ✅ LOAD USER ASSIGNMENTS
+          await loadUserAssignments(session.user.id)
         }
       } catch (err: any) {
         console.error("Critical Auth Error:", err.message)
@@ -484,7 +579,122 @@ export default function AdminMarketingDashboard() {
       isMounted = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [])
+  }, [loadAdminMarketingProfile, loadUserAssignments])
+
+  // ✅ SAVE PROFIL KE TABEL TERPISAH
+const handleSaveProfile = async () => {
+  if (!profileData.admin_name.trim() || !profileData.admin_phone.trim()) {
+    alert("❌ Nama dan nomor telepon wajib diisi!")
+    return
+  }
+
+  // ✅ VALIDASI NOMOR TELEPON
+  const phoneRegex = /^(?:\+62|62|0)8[1-9][0-9]{6,11}$/
+  const normalizedPhone = profileData.admin_phone.replace(/\s+/g, '')
+  
+  if (!phoneRegex.test(normalizedPhone)) {
+    alert("❌ Format nomor telepon tidak valid!\nContoh: 081234567890")
+    return
+  }
+
+  try {
+    setProfileLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session?.user.id) throw new Error("No session")
+    
+    // ✅ CHECK APAKAH SUDAH ADA RECORD
+    const { data: existing } = await supabase
+      .from('admin_marketing_profiles')
+      .select('id')
+      .eq('admin_id', session.user.id)
+      .single()
+    
+    let error
+    
+    if (existing) {
+      // ✅ UPDATE
+      const { error: updateError } = await supabase
+        .from('admin_marketing_profiles')
+        .update({
+          admin_name: profileData.admin_name.trim(),
+          admin_phone: normalizedPhone,
+          profile_completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('admin_id', session.user.id)
+      error = updateError
+    } else {
+      // ✅ INSERT BARU
+      const { error: insertError } = await supabase
+        .from('admin_marketing_profiles')
+        .insert({
+          admin_id: session.user.id,
+          admin_name: profileData.admin_name.trim(),
+          admin_phone: normalizedPhone,
+          profile_completed: true
+        })
+      error = insertError
+    }
+    
+    if (error) throw error
+    
+    // ✅ RELOAD PROFILE
+    await loadAdminMarketingProfile(session.user.id)
+    setShowProfileModal(false)
+    alert("✅ Profil berhasil disimpan!")
+    
+    // ✅ UNBLOCK FITUR
+    if (blockingFeature) {
+      const feature = blockingFeature
+      setBlockingFeature(null)
+      if (feature === 'wishlist') setFilterView('wishlist')
+      else if (feature === 'request') setFilterView('request')
+    }
+  } catch (err: any) {
+    alert("❌ Gagal menyimpan profil: " + err.message)
+  } finally {
+    setProfileLoading(false)
+  }
+}
+
+// ✅ CEK PROFIL SEBELUM AKSES FITUR
+const checkProfileBeforeAccess = (feature: 'wishlist' | 'request'): boolean => {
+  if (!adminProfile?.profile_completed || !adminProfile?.admin_name || !adminProfile?.admin_phone) {
+    setBlockingFeature(feature)
+    setShowProfileModal(true)
+    return false
+  }
+  return true
+}
+
+// ✅ ASSIGN CLIENT KE ADMIN (untuk tracking)
+const assignClientToAdmin = async (userId: string, userName: string) => {
+  if (!adminProfile) return
+  
+  try {
+    // Cek apakah sudah assigned
+    if (userAssignments.has(userId)) {
+      console.log(`User ${userName} sudah di-handle oleh admin lain`)
+      return
+    }
+    
+    // Create assignment
+    const { error } = await supabase.rpc('create_admin_assignment', {
+      p_admin_id: adminProfile.admin_id,
+      p_user_id: userId
+    })
+    
+    if (error) throw error
+    
+    // Reload assignments
+    await loadUserAssignments(adminProfile.admin_id)
+    
+    alert(`✅ Client ${userName} berhasil di-assign ke Anda!`)
+  } catch (err: any) {
+    console.error("Failed to assign client:", err)
+  }
+}
 
   useEffect(() => {
     if (isAuthorized) {
@@ -1221,9 +1431,26 @@ export default function AdminMarketingDashboard() {
             <p className="text-slate-400 mt-1">Kelola harga, lelang, dan permintaan.</p>
           </div>
         </div>
-        <Badge variant="outline" className="text-green-400 border-green-400 px-4 py-2 bg-green-900/20 hidden md:flex">
-          ADMIN_MARKETING
-        </Badge>
+        
+        {/* GANTI BADGE DI HEADER */}
+        <div className="flex items-center gap-3 hidden md:flex">
+          {adminProfile?.profile_completed ? (
+            <>
+              <div className="text-right">
+                <p className="text-sm font-medium text-white">{adminProfile.admin_name}</p>
+                <p className="text-xs text-green-400 font-mono">{adminProfile.admin_phone}</p>
+              </div>
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                {adminProfile.admin_name.charAt(0).toUpperCase()}
+              </div>
+            </>
+          ) : (
+            <Badge variant="outline" className="text-orange-400 border-orange-400 px-4 py-2 bg-orange-900/20">
+              <AlertCircle className="h-4 w-4 mr-1" />
+              Isi Profil
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* SEARCH BAR & FILTERS */}
@@ -1283,8 +1510,10 @@ export default function AdminMarketingDashboard() {
             <Button
               variant={filterView === 'wishlist' ? 'default' : 'outline'}
               onClick={() => {
-                setFilterView('wishlist')
-                setCurrentPage(1)
+                if (checkProfileBeforeAccess('wishlist')) {
+                  setFilterView('wishlist')
+                  setCurrentPage(1)
+                }
               }}
               className={filterView === 'wishlist' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}
             >
@@ -1294,8 +1523,10 @@ export default function AdminMarketingDashboard() {
             <Button
               variant={filterView === 'request' ? 'default' : 'outline'}
               onClick={() => {
-                setFilterView('request')
-                setCurrentPage(1)
+                if (checkProfileBeforeAccess('request')) {
+                  setFilterView('request')
+                  setCurrentPage(1)
+                }
               }}
               className={filterView === 'request' ? 'bg-orange-600 hover:bg-orange-700' : 'border-slate-700'}
             >
@@ -2619,6 +2850,108 @@ export default function AdminMarketingDashboard() {
               >
                 <X className="h-4 w-4 mr-2" />
                 Ya, Batalkan Lelang
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ✅ MODAL PROFIL ADMIN MARKETING - 100% TERPISAH */}
+      {showProfileModal && (
+        <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
+          <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-orange-500">
+                <AlertCircle className="h-5 w-5" />
+                {!adminProfile?.profile_completed ? 'Lengkapi Profil Admin' : 'Update Profil Admin'}
+              </DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Profil ini terpisah dari user biasa dan hanya untuk keperluan komunikasi dengan client.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="py-4 space-y-4">
+              {!adminProfile?.profile_completed && (
+                <div className="bg-orange-950/50 border border-orange-600 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-orange-300 text-sm font-semibold mb-1">
+                        Profil Wajib Diisi!
+                      </p>
+                      <ul className="text-orange-200/80 text-xs space-y-1 list-disc list-inside">
+                        <li>Agar client tahu sedang bicara dengan admin siapa</li>
+                        <li>Untuk tracking komunikasi yang lebih baik</li>
+                        <li>Menghindari tabrakan handle client</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">
+                  Nama Admin <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={profileData.admin_name}
+                  onChange={(e) => setProfileData({...profileData, admin_name: e.target.value})}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-orange-500"
+                  placeholder="Contoh: Andi Wijaya"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">
+                  Nomor WhatsApp <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={profileData.admin_phone}
+                  onChange={(e) => setProfileData({...profileData, admin_phone: e.target.value})}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-orange-500"
+                  placeholder="081234567890"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Format: 08xx-xxxx-xxxx
+                </p>
+              </div>
+
+              {profileData.admin_name && (
+                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                  <p className="text-xs text-slate-500 mb-2">Preview Profil:</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                      {profileData.admin_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-white font-medium text-sm">{profileData.admin_name}</p>
+                      <p className="text-green-400 text-xs font-mono">{profileData.admin_phone || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                onClick={handleSaveProfile}
+                className="w-full bg-orange-600 hover:bg-orange-700"
+                disabled={profileLoading}
+              >
+                {profileLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    {!adminProfile?.profile_completed ? 'Simpan & Lanjutkan' : 'Update Profil'}
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
