@@ -207,27 +207,45 @@ export default function UserDashboard() {
 
   const openChatForProduct = async (item: any) => {
     const rfqId = (item as any).request_id
+    const wishlistId = (item as any).wishlist_id || item.id
+    
     if (!rfqId) {
       alert("❌ Produk ini belum memiliki request ID")
       return
     }
     
     try {
-      // Call function create_chat_session_for_rfq
-      const { data, error } = await supabase.rpc(
-        'create_chat_session_for_rfq',
-        { p_user_id: profile?.id, p_rfq_id: rfqId }
-      )
-      
-      if (error) throw error
-      
-      if (data) {
-        // Switch ke tab chat
-        setActiveTab('chat')
-        setActiveSession(data)
-        // Load messages untuk session ini
-        await loadMessages(data)
+      // Cari atau buat chat session berdasarkan wishlist_id atau request_id
+      const { data: existingSession, error: fetchError } = await supabase
+        .from('chat_sessions')
+        .select('id')
+        .eq('user_id', profile?.id)
+        .eq('wishlist_id', wishlistId)
+        .single()
+  
+      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError
+  
+      let sessionId = existingSession?.id
+  
+      if (!sessionId) {
+        // Buat session baru
+        const { data, error } = await supabase.rpc(
+          'create_chat_session_for_rfq',
+          { 
+            p_user_id: profile?.id, 
+            p_wishlist_id: wishlistId,  // Gunakan wishlist_id (UUID)
+            p_rfq_id: rfqId  // Tetap kirim request_id untuk referensi
+          }
+        )
+        
+        if (error) throw error
+        sessionId = data
       }
+  
+      // Switch ke tab chat
+      setActiveTab('chat')
+      setActiveSession(sessionId)
+      await loadMessages(sessionId)
     } catch (err: any) {
       console.error("Failed to open chat:", err)
       alert("❌ Gagal membuka chat: " + err.message)
