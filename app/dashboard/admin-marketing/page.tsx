@@ -1736,7 +1736,7 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                               </Badge>
                             )}
                             
-                            {/* ✅ Note Button - AKTIF UNTUK REQUESTED, ACCEPTED, DECLINED, DEAL */}
+                            {/* ✅ Chat Button - AKTIF UNTUK REQUESTED, ACCEPTED, DECLINED, DEAL */}
                             <Button
                               size="sm"
                               onClick={() => openNoteModal(item.items[0])}
@@ -1753,8 +1753,8 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                               }`}
                               title={
                                 (item.status === 'requested' || item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
-                                  ? "Tambahkan catatan"
-                                  : "Note hanya tersedia setelah Request/Accept/Decline"
+                                  ? "Chat ke Client"
+                                  : "Chat hanya tersedia setelah Request/Accept/Decline"
                               }
                             >
                               <MessageSquare className="h-4 w-4" />
@@ -2681,17 +2681,27 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
         </div>
       )}
 
-      {/* ✅ MODAL ADMIN NOTE - ADDED AT END */}
+      {/* ✅ MODAL CHAT KE CLIENT - ADDED AT END */}
       {showNoteModal && (
         <Dialog open={showNoteModal} onOpenChange={setShowNoteModal}>
           <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-blue-400">
-                <MessageSquare className="h-5 w-5" />
-                Admin Note
-              </DialogTitle>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-blue-400" />
+                  <span className="text-blue-400">Chat ke Client</span>
+                </div>
+                <select className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-3 py-1 focus:outline-none focus:border-blue-500">
+                  <option>Take over</option>
+                  <option>Admin 1</option>
+                  <option>Admin 2</option>
+                  <option>Admin 3</option>
+                </select>
+              </div>
               <DialogDescription className="text-slate-400">
-                Berikan catatan internal untuk wishlist ini.
+                {selectedWishlistItem && (
+                  <span>Nama Client: {selectedWishlistItem.profiles?.full_name} ({selectedWishlistItem.profiles?.company_name || '-'})</span>
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-4">

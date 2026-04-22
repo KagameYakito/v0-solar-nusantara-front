@@ -1273,7 +1273,7 @@ const confirmSubmitRequest = async () => {
 
       {/* TABS */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-900 border border-slate-800">
+        <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-800">
           <TabsTrigger value="profile" className="data-[state=active]:bg-green-600">
             <Building2 className="h-4 w-4 mr-2" />
             {t.dashboard.tabs.profile}
@@ -1313,6 +1313,18 @@ const confirmSubmitRequest = async () => {
           >
             <ShoppingCart className="h-4 w-4 mr-2" />
             {t.dashboard.tabs.requests}
+          </TabsTrigger>
+          <TabsTrigger 
+            value="chat-admin" 
+            className="data-[state=active]:bg-green-600"
+            onClick={(e) => {
+              if (!checkProfileCompletion()) {
+                e.preventDefault()
+              }
+            }}
+          >
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Chat Admin
           </TabsTrigger>
         </TabsList>
 
@@ -2014,18 +2026,29 @@ const confirmSubmitRequest = async () => {
                               </Button>
                             </td>
 
-                            {/* 8. Aksi (Delete Button) */}
+                            {/* 8. Aksi (Delete Button or Chat) */}
                             <td className="px-4 py-3 text-center">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => removeItem(item.product_id)}
-                                disabled={(item as any).status !== 'wishlist'}
-                                className={`h-8 w-8 p-0 ${(item as any).status !== 'wishlist' ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                title={(item as any).status !== 'wishlist' ? 'Item tidak dapat dihapus setelah diajukan' : 'Hapus dari wishlist'}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                              {(item as any).status === 'wishlist' ? (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => removeItem(item.product_id)}
+                                  className="h-8 w-8 p-0"
+                                  title="Hapus dari wishlist"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setActiveTab('chat-admin')}
+                                  className="h-8 w-8 p-0 border-slate-600 hover:bg-slate-700"
+                                  title="Chat dengan Admin"
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -2128,6 +2151,79 @@ const confirmSubmitRequest = async () => {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="chat-admin" className="space-y-4 mt-6">
+          <Card className="bg-slate-900 border-slate-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <MessageSquare className="h-5 w-5 text-blue-400" />
+                Chat Admin
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                Komunikasi dengan tim admin untuk RFQ dan pertanyaan lainnya.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex h-96">
+                {/* Sidebar RFQ Dates */}
+                <div className="w-1/4 bg-slate-800 rounded-l-lg p-4 border-r border-slate-700">
+                  <h3 className="text-white font-medium mb-4">RFQ Sessions</h3>
+                  <div className="space-y-2">
+                    <div className="bg-slate-700 p-3 rounded cursor-pointer hover:bg-slate-600">
+                      <p className="text-sm text-white">RFQ-001</p>
+                      <p className="text-xs text-slate-400">Jan 15, 2024</p>
+                    </div>
+                    <div className="bg-slate-700 p-3 rounded cursor-pointer hover:bg-slate-600">
+                      <p className="text-sm text-white">RFQ-002</p>
+                      <p className="text-xs text-slate-400">Feb 20, 2024</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Chat Area */}
+                <div className="flex-1 flex flex-col">
+                  {/* Chat Header */}
+                  <div className="bg-slate-800 p-4 border-b border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-white font-medium">Admin</h3>
+                      <div className="text-xs text-slate-400">Online</div>
+                    </div>
+                  </div>
+                  
+                  {/* Messages */}
+                  <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+                    <div className="flex justify-start">
+                      <div className="bg-slate-700 text-white p-3 rounded-lg max-w-xs">
+                        <p>Halo! Ada yang bisa saya bantu?</p>
+                        <p className="text-xs text-slate-400 mt-1">10:30 AM</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <div className="bg-blue-600 text-white p-3 rounded-lg max-w-xs">
+                        <p>Saya ingin tanya tentang produk solar panel.</p>
+                        <p className="text-xs text-blue-200 mt-1">10:32 AM</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Input */}
+                  <div className="p-4 border-t border-slate-700">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Ketik pesan..."
+                        className="flex-1 bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                      />
+                      <Button className="bg-blue-600 hover:bg-blue-700">
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
