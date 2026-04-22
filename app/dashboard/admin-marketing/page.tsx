@@ -168,6 +168,15 @@ export default function AdminMarketingDashboard() {
   const [userAssignments, setUserAssignments] = useState<Map<string, ClientAssignment>>(new Map())
   const [isEditingProfile, setIsEditingProfile] = useState(false)
 
+  const [otherAdmins, setOtherAdmins] = useState<any[]>([])
+  const [adminMessages, setAdminMessages] = useState<any[]>([])
+  // ✅ STATE UNTUK CHAT FUNCTIONALITY
+  const [activeSession, setActiveSession] = useState<string | null>(null)
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [showChatModal, setShowChatModal] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<any>(null)
+  const adminMessagesEndRef = useRef<HTMLDivElement>(null)
+
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
     'pending': 2,
@@ -285,6 +294,80 @@ export default function AdminMarketingDashboard() {
       fetchWishlistItems()
     }
   }, [isAuthorized, wishlistFilter])
+
+  const fetchOtherAdmins = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
+    const { data } = await supabase
+      .from('admin_marketing_profiles')
+      .select('id, admin_name, admin_phone')
+      .neq('admin_id', session.user.id)
+    
+    setOtherAdmins(data || [])
+  }
+  
+  // Handle take over
+  const handleTakeOver = async (adminId: string) => {
+    if (!selectedWishlistItem) return
+    
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
+    await supabase.rpc('assign_chat_admin', {
+      p_session_id: selectedWishlistItem.chat_session_id,
+      p_admin_id: adminId,
+      p_assigned_by: session.user.id
+    })
+  }
+
+  // ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
+  useEffect(() => {
+    if (!activeSession) return
+    
+    const channel = supabase
+      .channel(`chat:${activeSession}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `session_id=eq.${activeSession}`
+        },
+        (payload) => {
+          // ✅ GUNAKAN chatMessages, BUKAN messages
+          setChatMessages((prev: any) => [...prev, payload.new])
+          
+          // HAPUS ATAU COMMENT BARIS INI KARENA FUNGSI BELUM ADA
+          // countUnreadMessages() 
+        }
+      )
+      .subscribe()
+  
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [activeSession])
+  
+  // Load chat messages untuk admin
+  const loadAdminChatMessages = async (sessionId: string) => {
+    // Fetch messages
+    // Setup realtime
+  }
+
+  const getAdminDisplayName = (session: any) => {
+    // ✅ GUNAKAN chatMessages, BUKAN messages
+    // Pastikan kamu punya state: const [chatMessages, setChatMessages] = useState([])
+    const adminHasReplied = chatMessages?.some(
+      (msg: any) => msg.sender_type === 'admin'
+    )
+    
+    if (adminHasReplied && session.admin_name) {
+      return session.admin_name 
+    }
+    return 'Admin' 
+  }
 
   const fetchAuctionHistory = useCallback(async () => {
     try {

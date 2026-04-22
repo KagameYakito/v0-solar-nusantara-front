@@ -123,6 +123,21 @@ export default function UserDashboard() {
   const [auctionParticipation, setAuctionParticipation] = useState<any[]>([])
   const [auctionLoading, setAuctionLoading] = useState(false)
 
+  // ✅ TAMBAHKAN STATE UNTUK CHAT (setelah state existing)
+  const [showChatModal, setShowChatModal] = useState(false)
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [chatLoading, setChatLoading] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [adminInfo, setAdminInfo] = useState<{ name: string; phone?: string } | null>(null)
+  const [activeRfqSession, setActiveRfqSession] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const [chatSessions, setChatSessions] = useState<any[]>([])
+  const [activeSession, setActiveSession] = useState<string | null>(null)
+  const [messages, setMessages] = useState<any[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [unreadCount, setUnreadCount] = useState(0)
+
   // Ref so fetchAuctionParticipation always reads the latest profile without needing
   // to be recreated (avoids tearing down realtime subscriptions on profile changes).
   const profileRef = useRef<Profile | null>(null)
@@ -189,6 +204,105 @@ export default function UserDashboard() {
   useEffect(() => {
     profileRef.current = profile
   }, [profile])
+
+  const openChatForProduct = async (item: any) => {
+    const rfqId = (item as any).request_id
+    if (!rfqId) return
+    
+    // Call function create_chat_session_for_rfq
+    const { data, error } = await supabase.rpc(
+      'create_chat_session_for_rfq',
+      { p_user_id: profile?.id, p_rfq_id: rfqId }
+    )
+    
+    if (data) {
+      setActiveSession(data)
+      setActiveTab('chat') // Switch ke tab chat
+      loadMessages(data)
+    }
+  }
+  
+  // ✅ IMPLEMENTASI LENGKAP
+  const loadMessages = useCallback(async (sessionId: string) => {
+    try {
+      setChatLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select(`
+          *,
+          sender_profile:profiles!sender_id(full_name),
+          admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        `)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+      
+      if (error) throw error
+      setMessages(data || [])
+      
+      // Mark as read
+      const unreadMessages = data?.filter(m => 
+        m.admin_id !== null && !m.read_by_user
+      ) || []
+      
+      if (unreadMessages.length > 0) {
+        await supabase
+          .from('chat_messages')
+          .update({ read_by_user: true })
+          .in('id', unreadMessages.map(m => m.id))
+      }
+    } catch (err) {
+      console.error("Failed to load messages:", err)
+    } finally {
+      setChatLoading(false)
+    }
+  }, [])
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !activeSession) return
+    
+    try {
+      setSendingMessage(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      
+      const { error } = await supabase.rpc('send_chat_message', {
+        p_session_id: activeSession,
+        p_sender_id: session.user.id,
+        p_message: newMessage.trim(),
+        p_sender_type: 'user'
+      })
+      
+      if (error) throw error
+      setNewMessage('')
+      await loadMessages(activeSession)
+    } catch (err: any) {
+      alert("❌ Gagal mengirim pesan: " + err.message)
+    } finally {
+      setSendingMessage(false)
+    }
+  }
+
+  const countUnreadMessages = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      
+      const { count, error } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('session_id', activeSession)
+        .eq('read_by_user', false)
+        .not('admin_id', 'is', null)
+      
+      if (error) throw error
+      setUnreadCount(count || 0)
+    } catch (err) {
+      console.error("Failed to count unread:", err)
+    }
+  }, [activeSession])
 
   const handlePlaceBidFromHistory = (product: BidHistory) => {
     // Redirect ke halaman auctions dengan parameter highlight
@@ -416,6 +530,58 @@ useEffect(() => {
   const interval = setInterval(updateCountdown, 1000)
   return () => clearInterval(interval)
 }, [bidHistory])
+
+// ✅ REALTIME CHAT SUBSCRIPTION
+useEffect(() => {
+  if (!activeSession) return
+  
+  const channel = supabase
+    .channel(`chat:${activeSession}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_id=eq.${activeSession}`
+      },
+      (payload) => {
+        setMessages(prev => [...prev, payload.new])
+        countUnreadMessages()
+      }
+    )
+    .subscribe()
+  
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [activeSession, countUnreadMessages])
+
+// ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
+const fetchChatSessions = useCallback(async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('last_message_at', { ascending: false })
+    
+    if (error) throw error
+    setChatSessions(data || [])
+  } catch (err) {
+    console.error("Failed to fetch chat sessions:", err)
+  }
+}, [])
+
+// ✅ LOAD CHAT SESSIONS SAAT COMPONENT MOUNT
+useEffect(() => {
+  if (activeTab === 'chat') {
+    fetchChatSessions()
+  }
+}, [activeTab, fetchChatSessions])
 
 // ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
 const getStatusBadgeColor = (status: string) => {
@@ -1273,7 +1439,7 @@ const confirmSubmitRequest = async () => {
 
       {/* TABS */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-800">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-900 border border-slate-800">
           <TabsTrigger value="profile" className="data-[state=active]:bg-green-600">
             <Building2 className="h-4 w-4 mr-2" />
             {t.dashboard.tabs.profile}
@@ -1314,17 +1480,33 @@ const confirmSubmitRequest = async () => {
             <ShoppingCart className="h-4 w-4 mr-2" />
             {t.dashboard.tabs.requests}
           </TabsTrigger>
-          <TabsTrigger 
-            value="chat-admin" 
-            className="data-[state=active]:bg-green-600"
+          <TabsTrigger
+            value="chat"
+            className="data-[state=active]:bg-green-600 relative"
             onClick={(e) => {
               if (!checkProfileCompletion()) {
                 e.preventDefault()
+                return
+              }
+              // Check if user has any RFQ
+              const hasRFQ = wishlist.some((item: any) => 
+                (item as any).status === 'requested' || 
+                (item as any).status === 'accepted' ||
+                (item as any).status === 'deal'
+              )
+              if (!hasRFQ) {
+                e.preventDefault()
+                alert("ℹ️ Belum ada RFQ yang diajukan")
               }
             }}
           >
             <MessageSquare className="h-4 w-4 mr-2" />
             Chat Admin
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -2026,29 +2208,18 @@ const confirmSubmitRequest = async () => {
                               </Button>
                             </td>
 
-                            {/* 8. Aksi (Delete Button or Chat) */}
+                            {/* 8. Aksi (Delete Button) */}
                             <td className="px-4 py-3 text-center">
-                              {(item as any).status === 'wishlist' ? (
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => removeItem(item.product_id)}
-                                  className="h-8 w-8 p-0"
-                                  title="Hapus dari wishlist"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setActiveTab('chat-admin')}
-                                  className="h-8 w-8 p-0 border-slate-600 hover:bg-slate-700"
-                                  title="Chat dengan Admin"
-                                >
-                                  <MessageSquare className="h-3 w-3" />
-                                </Button>
-                              )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removeItem(item.product_id)}
+                                disabled={(item as any).status !== 'wishlist'}
+                                className={`h-8 w-8 p-0 ${(item as any).status !== 'wishlist' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                title={(item as any).status !== 'wishlist' ? 'Item tidak dapat dihapus setelah diajukan' : 'Hapus dari wishlist'}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -2153,75 +2324,151 @@ const confirmSubmitRequest = async () => {
           )}
         </TabsContent>
 
-        <TabsContent value="chat-admin" className="space-y-4 mt-6">
+        {/* TAB 5: CHAT ADMIN - UPDATED */}
+        <TabsContent value="chat" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-white">
-                <MessageSquare className="h-5 w-5 text-blue-400" />
-                Chat Admin
+              <CardTitle className="flex items-center justify-between text-white">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-blue-400" />
+                  Chat dengan Admin
+                </div>
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Komunikasi dengan tim admin untuk RFQ dan pertanyaan lainnya.
+                Komunikasi dengan admin untuk RFQ dan pertanyaan lainnya.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex h-96">
-                {/* Sidebar RFQ Dates */}
-                <div className="w-1/4 bg-slate-800 rounded-l-lg p-4 border-r border-slate-700">
-                  <h3 className="text-white font-medium mb-4">RFQ Sessions</h3>
-                  <div className="space-y-2">
-                    <div className="bg-slate-700 p-3 rounded cursor-pointer hover:bg-slate-600">
-                      <p className="text-sm text-white">RFQ-001</p>
-                      <p className="text-xs text-slate-400">Jan 15, 2024</p>
-                    </div>
-                    <div className="bg-slate-700 p-3 rounded cursor-pointer hover:bg-slate-600">
-                      <p className="text-sm text-white">RFQ-002</p>
-                      <p className="text-xs text-slate-400">Feb 20, 2024</p>
-                    </div>
-                  </div>
+              {chatSessions.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg font-medium">Belum ada percakapan.</p>
+                  <p className="text-sm mt-2">
+                    Ajukan RFQ untuk memulai percakapan dengan admin.
+                  </p>
                 </div>
-                
-                {/* Chat Area */}
-                <div className="flex-1 flex flex-col">
-                  {/* Chat Header */}
-                  <div className="bg-slate-800 p-4 border-b border-slate-700">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-white font-medium">Admin</h3>
-                      <div className="text-xs text-slate-400">Online</div>
-                    </div>
-                  </div>
-                  
-                  {/* Messages */}
-                  <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-                    <div className="flex justify-start">
-                      <div className="bg-slate-700 text-white p-3 rounded-lg max-w-xs">
-                        <p>Halo! Ada yang bisa saya bantu?</p>
-                        <p className="text-xs text-slate-400 mt-1">10:30 AM</p>
+              ) : (
+                <div className="space-y-2">
+                  {chatSessions.map((sessionItem) => (
+                    <button
+                      key={sessionItem.id}
+                      onClick={() => {
+                        setActiveSession(sessionItem.id)
+                        loadMessages(sessionItem.id)
+                      }}
+                      className={`w-full p-4 rounded-lg border text-left transition-colors ${
+                        activeSession === sessionItem.id
+                          ? 'bg-blue-600/20 border-blue-500'
+                          : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-medium">
+                            {sessionItem.admin_name || 'Admin'}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID')}
+                          </p>
+                        </div>
+                        {sessionItem.admin_name && (
+                          <Badge className="bg-green-500/20 text-green-400">
+                            Aktif
+                          </Badge>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <div className="bg-blue-600 text-white p-3 rounded-lg max-w-xs">
-                        <p>Saya ingin tanya tentang produk solar panel.</p>
-                        <p className="text-xs text-blue-200 mt-1">10:32 AM</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {/* CHAT INTERFACE */}
+              {activeSession && (
+                <div className="mt-6 border-t border-slate-700 pt-4">
+                  <div className="bg-slate-800/50 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-white font-medium">
+                          {chatMessages.find(m => m.admin_profile)?.admin_profile?.admin_name || 'Admin'}
+                        </p>
+                        <p className="text-xs text-slate-400">Online</p>
                       </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setActiveSession(null)}
+                        className="border-slate-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </div>
-                  
-                  {/* Input */}
-                  <div className="p-4 border-t border-slate-700">
+                    
+                    {/* MESSAGES AREA */}
+                    <div className="bg-slate-900 rounded-lg p-4 h-96 overflow-y-auto space-y-3 mb-4">
+                      {chatLoading ? (
+                        <div className="flex justify-center items-center h-full">
+                          <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                        </div>
+                      ) : chatMessages.length === 0 ? (
+                        <p className="text-center text-slate-500">Belum ada pesan</p>
+                      ) : (
+                        chatMessages.map((msg) => {
+                          const isUser = msg.sender_type === 'user'
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div
+                                className={`max-w-[70%] rounded-lg p-3 ${
+                                  isUser
+                                    ? 'bg-blue-600 text-white rounded-br-none'
+                                    : 'bg-slate-700 text-slate-100 rounded-bl-none'
+                                }`}
+                              >
+                                <p className="text-sm">{msg.message}</p>
+                                <p className={`text-[10px] mt-1 ${
+                                  isUser ? 'text-blue-200' : 'text-slate-400'
+                                }`}>
+                                  {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+                    
+                    {/* INPUT AREA */}
                     <div className="flex gap-2">
                       <input
                         type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                         placeholder="Ketik pesan..."
                         className="flex-1 bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                        disabled={sendingMessage}
                       />
-                      <Button className="bg-blue-600 hover:bg-blue-700">
-                        <MessageSquare className="h-4 w-4" />
+                      <Button
+                        onClick={sendMessage}
+                        disabled={!newMessage.trim() || sendingMessage}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {sendingMessage ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -2386,14 +2633,32 @@ const confirmSubmitRequest = async () => {
 
                         {/* 8. Aksi (Delete Button) */}
                         <td className="px-4 py-3 text-center">
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => removeItem(item.product_id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                          {(item as any).status === 'wishlist' ? (
+                            // Tombol trash untuk wishlist
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => removeItem(item.product_id)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          ) : (
+                            // ✅ TOMBOL CHAT untuk produk requested/accepted/deal
+                            <Button
+                              size="sm"
+                              onClick={() => openChatForProduct(item)}
+                              className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 relative"
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                              {/* Unread badge untuk produk ini */}
+                              {((item as any).unread_count || 0) > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                                  {(item as any).unread_count}
+                                </span>
+                              )}
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
