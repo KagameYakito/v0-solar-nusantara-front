@@ -13,7 +13,7 @@ import {
   User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, 
   Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, 
   Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, 
-  MessageSquare, Bookmark, CheckCircle2, XCircle, Lock 
+  MessageSquare, Bookmark, CheckCircle2, XCircle, Lock, Check
 } from 'lucide-react'
 import { useLanguage } from '@/lib/language-context'
 
@@ -1439,7 +1439,7 @@ const confirmSubmitRequest = async () => {
 
       {/* TABS */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-900 border border-slate-800">
+        <TabsList className="grid w-full grid-cols-5 bg-slate-900 border border-slate-800">
           <TabsTrigger value="profile" className="data-[state=active]:bg-green-600">
             <Building2 className="h-4 w-4 mr-2" />
             {t.dashboard.tabs.profile}
@@ -2208,18 +2208,45 @@ const confirmSubmitRequest = async () => {
                               </Button>
                             </td>
 
-                            {/* 8. Aksi (Delete Button) */}
+                            {/* 8. Aksi (Delete atau Chat Button) */}
                             <td className="px-4 py-3 text-center">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => removeItem(item.product_id)}
-                                disabled={(item as any).status !== 'wishlist'}
-                                className={`h-8 w-8 p-0 ${(item as any).status !== 'wishlist' ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                title={(item as any).status !== 'wishlist' ? 'Item tidak dapat dihapus setelah diajukan' : 'Hapus dari wishlist'}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                              {(item as any).status === 'wishlist' ? (
+                                // Tombol trash HANYA untuk wishlist
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => removeItem(item.product_id)}
+                                  className="h-8 w-8 p-0"
+                                  title="Hapus dari wishlist"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              ) : (
+                                // ✅ TOMBOL CHAT untuk produk requested/accepted/deal
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    // Open chat for this specific product
+                                    const rfqId = (item as any).request_id
+                                    if (rfqId) {
+                                      openChatForProduct(item)
+                                    } else {
+                                      alert("❌ Produk ini belum memiliki request ID")
+                                    }
+                                  }}
+                                  className="h-8 px-3 bg-blue-600 hover:bg-blue-700 relative"
+                                  title="Chat dengan admin tentang produk ini"
+                                >
+                                  <MessageSquare className="h-4 w-4 mr-1" />
+                                  Chat
+                                  {/* Unread badge untuk produk ini */}
+                                  {((item as any).unread_count || 0) > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                                      {(item as any).unread_count}
+                                    </span>
+                                  )}
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
