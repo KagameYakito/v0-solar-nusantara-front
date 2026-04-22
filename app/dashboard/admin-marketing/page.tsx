@@ -166,6 +166,7 @@ export default function AdminMarketingDashboard() {
   })
   const [blockingFeature, setBlockingFeature] = useState<string | null>(null)
   const [userAssignments, setUserAssignments] = useState<Map<string, ClientAssignment>>(new Map())
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
 
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
@@ -367,6 +368,18 @@ const loadUserAssignments = useCallback(async (adminId: string) => {
     console.error("Failed to load user assignments:", err)
   }
 }, [])
+
+// ✅ BUKA MODAL EDIT PROFIL DARI HEADER
+const openEditProfileModal = () => {
+  if (adminProfile) {
+    setProfileData({
+      admin_name: adminProfile.admin_name || '',
+      admin_phone: adminProfile.admin_phone || ''
+    })
+  }
+  setIsEditingProfile(true)
+  setShowProfileModal(true)
+}
 
   const openNoteModal = (item: any) => {
     setSelectedWishlistItem(item)
@@ -581,16 +594,20 @@ const loadUserAssignments = useCallback(async (adminId: string) => {
     }
   }, [loadAdminMarketingProfile, loadUserAssignments])
 
-  // ✅ SAVE PROFIL KE TABEL TERPISAH
+// ✅ SAVE PROFIL KE TABEL TERPISAH
 const handleSaveProfile = async () => {
-  if (!profileData.admin_name.trim() || !profileData.admin_phone.trim()) {
+  // ✅ VALIDASI: TIDAK BOLEH KOSONG
+  const trimmedName = profileData.admin_name.trim()
+  const trimmedPhone = profileData.admin_phone.trim()
+  
+  if (!trimmedName || !trimmedPhone) {
     alert("❌ Nama dan nomor telepon wajib diisi!")
     return
   }
 
   // ✅ VALIDASI NOMOR TELEPON
   const phoneRegex = /^(?:\+62|62|0)8[1-9][0-9]{6,11}$/
-  const normalizedPhone = profileData.admin_phone.replace(/\s+/g, '')
+  const normalizedPhone = trimmedPhone.replace(/\s+/g, '')
   
   if (!phoneRegex.test(normalizedPhone)) {
     alert("❌ Format nomor telepon tidak valid!\nContoh: 081234567890")
@@ -617,7 +634,7 @@ const handleSaveProfile = async () => {
       const { error: updateError } = await supabase
         .from('admin_marketing_profiles')
         .update({
-          admin_name: profileData.admin_name.trim(),
+          admin_name: trimmedName,
           admin_phone: normalizedPhone,
           profile_completed: true,
           updated_at: new Date().toISOString()
@@ -630,7 +647,7 @@ const handleSaveProfile = async () => {
         .from('admin_marketing_profiles')
         .insert({
           admin_id: session.user.id,
-          admin_name: profileData.admin_name.trim(),
+          admin_name: trimmedName,
           admin_phone: normalizedPhone,
           profile_completed: true
         })
@@ -642,7 +659,8 @@ const handleSaveProfile = async () => {
     // ✅ RELOAD PROFILE
     await loadAdminMarketingProfile(session.user.id)
     setShowProfileModal(false)
-    alert("✅ Profil berhasil disimpan!")
+    setIsEditingProfile(false)
+    alert("✅ Profil berhasil diupdate!")
     
     // ✅ UNBLOCK FITUR
     if (blockingFeature) {
@@ -1438,17 +1456,25 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
             <>
               <div className="text-right">
                 <p className="text-sm font-medium text-white">{adminProfile.admin_name}</p>
-                {/* ✅ Nomor telepon TIDAK ditampilkan - hanya untuk privasi admin */}
+                <p className="text-xs text-slate-400">Klik untuk edit profil</p>
               </div>
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold">
+              <button
+                onClick={openEditProfileModal}
+                className="w-10 h-10 bg-gradient-to-br from-orange-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold hover:scale-110 transition-transform cursor-pointer border-2 border-transparent hover:border-orange-400"
+                title="Edit Profil"
+              >
                 {adminProfile.admin_name.charAt(0).toUpperCase()}
-              </div>
+              </button>
             </>
           ) : (
-            <Badge variant="outline" className="text-orange-400 border-orange-400 px-4 py-2 bg-orange-900/20">
-              <AlertCircle className="h-4 w-4 mr-1" />
+            <button
+              onClick={openEditProfileModal}
+              className="text-orange-400 border-orange-400 px-4 py-2 bg-orange-900/20 hover:bg-orange-900/30 transition-colors cursor-pointer rounded-md border flex items-center gap-2"
+              title="Lengkapi Profil"
+            >
+              <AlertCircle className="h-4 w-4" />
               Isi Profil
-            </Badge>
+            </button>
           )}
         </div>
       </div>
@@ -2938,8 +2964,16 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
             <DialogFooter>
               <Button
                 onClick={handleSaveProfile}
-                className="w-full bg-orange-600 hover:bg-orange-700"
-                disabled={profileLoading}
+                disabled={
+                  profileLoading || 
+                  !profileData.admin_name.trim() || 
+                  !profileData.admin_phone.trim()
+                }
+                className={`w-full ${
+                  !profileData.admin_name.trim() || !profileData.admin_phone.trim()
+                    ? 'bg-slate-700 cursor-not-allowed opacity-50'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }`}
               >
                 {profileLoading ? (
                   <>
@@ -2953,6 +2987,13 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   </>
                 )}
               </Button>
+              
+              {/* ✅ WARNING JIKA FIELD KOSONG */}
+              {(!profileData.admin_name.trim() || !profileData.admin_phone.trim()) && (
+                <p className="text-xs text-red-400 text-center w-full mt-2">
+                  ⚠️ Nama dan nomor telepon wajib diisi
+                </p>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
