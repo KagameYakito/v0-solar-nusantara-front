@@ -1431,14 +1431,14 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
             <p className="text-slate-400 mt-1">Kelola harga, lelang, dan permintaan.</p>
           </div>
         </div>
-        
+
         {/* GANTI BADGE DI HEADER */}
         <div className="flex items-center gap-3 hidden md:flex">
           {adminProfile?.profile_completed ? (
             <>
               <div className="text-right">
                 <p className="text-sm font-medium text-white">{adminProfile.admin_name}</p>
-                <p className="text-xs text-green-400 font-mono">{adminProfile.admin_phone}</p>
+                {/* ✅ Nomor telepon TIDAK ditampilkan - hanya untuk privasi admin */}
               </div>
               <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold">
                 {adminProfile.admin_name.charAt(0).toUpperCase()}
