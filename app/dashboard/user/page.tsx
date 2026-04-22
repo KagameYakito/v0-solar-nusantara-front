@@ -207,18 +207,30 @@ export default function UserDashboard() {
 
   const openChatForProduct = async (item: any) => {
     const rfqId = (item as any).request_id
-    if (!rfqId) return
+    if (!rfqId) {
+      alert("❌ Produk ini belum memiliki request ID")
+      return
+    }
     
-    // Call function create_chat_session_for_rfq
-    const { data, error } = await supabase.rpc(
-      'create_chat_session_for_rfq',
-      { p_user_id: profile?.id, p_rfq_id: rfqId }
-    )
-    
-    if (data) {
-      setActiveSession(data)
-      setActiveTab('chat') // Switch ke tab chat
-      loadMessages(data)
+    try {
+      // Call function create_chat_session_for_rfq
+      const { data, error } = await supabase.rpc(
+        'create_chat_session_for_rfq',
+        { p_user_id: profile?.id, p_rfq_id: rfqId }
+      )
+      
+      if (error) throw error
+      
+      if (data) {
+        // Switch ke tab chat
+        setActiveTab('chat')
+        setActiveSession(data)
+        // Load messages untuk session ini
+        await loadMessages(data)
+      }
+    } catch (err: any) {
+      console.error("Failed to open chat:", err)
+      alert("❌ Gagal membuka chat: " + err.message)
     }
   }
   
@@ -259,6 +271,18 @@ export default function UserDashboard() {
       setChatLoading(false)
     }
   }, [])
+
+  const getAdminDisplayName = (messages: any[]) => {
+    // Cari pesan pertama dari admin
+    const adminMessage = messages.find(m => m.admin_id !== null)
+    
+    if (adminMessage?.admin_profile?.admin_name) {
+      return adminMessage.admin_profile.admin_name
+    }
+    
+    // Default ke "Admin" jika belum ada balasan
+    return 'Admin'
+  }  
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeSession) return
@@ -2366,65 +2390,72 @@ const confirmSubmitRequest = async () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {chatSessions.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-lg font-medium">Belum ada percakapan.</p>
-                  <p className="text-sm mt-2">
-                    Ajukan RFQ untuk memulai percakapan dengan admin.
-                  </p>
-                </div>
+              {!activeSession ? (
+                // TAMPILAN DAFTAR CHAT SESSIONS
+                chatSessions.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p className="text-lg font-medium">Belum ada percakapan.</p>
+                    <p className="text-sm mt-2">
+                      Ajukan RFQ untuk memulai percakapan dengan admin.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {chatSessions.map((sessionItem) => (
+                      <button
+                        key={sessionItem.id}
+                        onClick={() => {
+                          setActiveSession(sessionItem.id)
+                          loadMessages(sessionItem.id)
+                        }}
+                        className={`w-full p-4 rounded-lg border text-left transition-colors ${
+                          activeSession === sessionItem.id
+                            ? 'bg-blue-600/20 border-blue-500'
+                            : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium">
+                              {sessionItem.admin_name || 'Admin'}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID')}
+                            </p>
+                          </div>
+                          {sessionItem.admin_name && (
+                            <Badge className="bg-green-500/20 text-green-400">
+                              Aktif
+                            </Badge>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )
               ) : (
-                <div className="space-y-2">
-                  {chatSessions.map((sessionItem) => (
-                    <button
-                      key={sessionItem.id}
-                      onClick={() => {
-                        setActiveSession(sessionItem.id)
-                        loadMessages(sessionItem.id)
-                      }}
-                      className={`w-full p-4 rounded-lg border text-left transition-colors ${
-                        activeSession === sessionItem.id
-                          ? 'bg-blue-600/20 border-blue-500'
-                          : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
+                // CHAT INTERFACE - TAMPILAN CHAT AKTIF
+                <div className="border-t border-slate-700 pt-4">
+                  <div className="bg-slate-800/50 rounded-lg p-4">
+                    {/* HEADER CHAT */}
+                    <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                          <MessageSquare className="h-5 w-5 text-white" />
+                        </div>
                         <div>
                           <p className="text-white font-medium">
-                            {sessionItem.admin_name || 'Admin'}
+                            {getAdminDisplayName(messages)}
                           </p>
-                          <p className="text-xs text-slate-400">
-                            {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID')}
-                          </p>
+                          <p className="text-xs text-green-400">Online</p>
                         </div>
-                        {sessionItem.admin_name && (
-                          <Badge className="bg-green-500/20 text-green-400">
-                            Aktif
-                          </Badge>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              
-              {/* CHAT INTERFACE */}
-              {activeSession && (
-                <div className="mt-6 border-t border-slate-700 pt-4">
-                  <div className="bg-slate-800/50 rounded-lg p-4 mb-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-white font-medium">
-                          {chatMessages.find(m => m.admin_profile)?.admin_profile?.admin_name || 'Admin'}
-                        </p>
-                        <p className="text-xs text-slate-400">Online</p>
                       </div>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => setActiveSession(null)}
-                        className="border-slate-600"
+                        className="border-slate-600 hover:bg-slate-700"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -2436,10 +2467,14 @@ const confirmSubmitRequest = async () => {
                         <div className="flex justify-center items-center h-full">
                           <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
                         </div>
-                      ) : chatMessages.length === 0 ? (
-                        <p className="text-center text-slate-500">Belum ada pesan</p>
+                      ) : messages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                          <MessageSquare className="h-12 w-12 mb-2 opacity-50" />
+                          <p className="text-sm">Belum ada pesan</p>
+                          <p className="text-xs mt-1">Kirim pesan pertama Anda</p>
+                        </div>
                       ) : (
-                        chatMessages.map((msg) => {
+                        messages.map((msg) => {
                           const isUser = msg.sender_type === 'user'
                           return (
                             <div
