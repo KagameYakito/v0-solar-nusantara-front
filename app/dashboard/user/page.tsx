@@ -1330,11 +1330,21 @@ const confirmSubmitRequest = async () => {
     )
 
     // ✅ 3. GENERATE REQUEST_ID dari sequence
-    const { data: sequenceData } = await supabase.rpc('nextval', {
+    const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
       sequence_name: 'request_id_seq'
     })
 
-    const newRequestId: number = sequenceData || 60000000
+    // ✅ PERBAIKAN: Jangan pakai default 60000000 statis!
+    // Kalau RPC berhasil, pakai itu. Kalau gagal, pakai timestamp unik.
+    let newRequestId: number;
+
+    if (seqError || !sequenceData) {
+      console.error("Gagal ambil ID dari database, pakai fallback timestamp", seqError);
+      // Fallback: Gunakan timestamp (misal: 1713900000000) agar tetap unik
+      newRequestId = Date.now(); 
+    } else {
+      newRequestId = sequenceData;
+    }
 
     // ✅ 4. UPDATE WISHLISTS - Status = 'requested' (BUKAN 'pending'!)
     const { error: updateError } = await supabase
