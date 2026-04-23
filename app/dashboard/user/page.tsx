@@ -219,7 +219,7 @@ export default function UserDashboard() {
         .from('chat_sessions')
         .select('*')
         .eq('user_id', profile?.id)
-        .eq('request_id', requestId)  // Match dengan request_id
+        .eq('request_id', requestId)
         .single()
       
       let sessionId = existingSession?.id
@@ -230,8 +230,8 @@ export default function UserDashboard() {
           .from('chat_sessions')
           .insert({
             user_id: profile?.id,
-            request_id: requestId,  // Simpan request_id
-            session_name: `RFQ-${requestId}`,  // Nama chat: RFQ-600xxxxx
+            request_id: requestId,
+            session_name: `RFQ-${requestId}`,
             status: 'active',
             created_at: new Date().toISOString()
           })
@@ -562,7 +562,7 @@ const fetchChatSessions = useCallback(async () => {
       .from('chat_sessions')
       .select(`
         *,
-        admin_marketing_profiles!inner(admin_name),
+        admin_marketing_profiles(admin_name),  // ✅ Hapus !inner - jadi LEFT JOIN
         wishlists(request_id)
       `)
       .eq('user_id', session.user.id)
@@ -1342,7 +1342,6 @@ const confirmSubmitRequest = async () => {
 
   try {
     setSubmittingRequest(true)
-
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       alert("❌ Session expired. Silakan login ulang.")
@@ -1444,6 +1443,21 @@ const confirmSubmitRequest = async () => {
     setSelectedItems(new Set())
     setShowConfirmModal(false)
     setShowRequestModal(false)
+
+    // ✅ 7. BUAT CHAT SESSION OTOMATIS
+    const { data: newChatSession, error: chatError } = await supabase
+      .from('chat_sessions')
+      .insert({
+        user_id: session.user.id,
+        request_id: newRequestId,
+        session_name: `RFQ-${newRequestId}`,
+        status: 'active',
+        created_at: new Date().toISOString()
+      })
+    
+    if (chatError) {
+      console.error("Failed to create chat session:", chatError)
+    }
 
     alert(`✅ Permintaan produk berhasil dikirim!\nRFQ ID: #${newRequestId}\n\nTim kami akan segera memverifikasi.`)
 
