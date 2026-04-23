@@ -2382,7 +2382,7 @@ const confirmSubmitRequest = async () => {
           )}
         </TabsContent>
 
-        {/* TAB 5: CHAT ADMIN - UPDATED */}
+        {/* TAB 5: CHAT ADMIN - UPDATED WITH SIDEBAR */}
         <TabsContent value="chat" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
@@ -2397,144 +2397,170 @@ const confirmSubmitRequest = async () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!activeSession ? (
-                // TAMPILAN DAFTAR CHAT SESSIONS
-                chatSessions.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500">
-                    <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p className="text-lg font-medium">Belum ada percakapan.</p>
-                    <p className="text-sm mt-2">
-                      Ajukan RFQ untuk memulai percakapan dengan admin.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {chatSessions.map((sessionItem) => (
-                      <button
-                        key={sessionItem.id}
-                        onClick={() => {
-                          setActiveSession(sessionItem.id)
-                          loadMessages(sessionItem.id)
-                        }}
-                        className={`w-full p-4 rounded-lg border text-left transition-colors ${
-                          activeSession === sessionItem.id
-                            ? 'bg-blue-600/20 border-blue-500'
-                            : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-white font-medium">
-                              {sessionItem.admin_name || 'Admin'}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID')}
-                            </p>
-                          </div>
-                          {sessionItem.admin_name && (
-                            <Badge className="bg-green-500/20 text-green-400">
-                              Aktif
-                            </Badge>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )
+              {chatSessions.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg font-medium">Belum ada percakapan.</p>
+                  <p className="text-sm mt-2">
+                    Ajukan RFQ untuk memulai percakapan dengan admin.
+                  </p>
+                </div>
               ) : (
-                // CHAT INTERFACE - TAMPILAN CHAT AKTIF
-                <div className="border-t border-slate-700 pt-4">
-                  <div className="bg-slate-800/50 rounded-lg p-4">
-                    {/* HEADER CHAT */}
-                    <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                          <MessageSquare className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">
-                            {getAdminDisplayName(messages)}
-                          </p>
-                          <p className="text-xs text-green-400">Online</p>
+                // TWO COLUMN LAYOUT
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px]">
+                  {/* LEFT SIDEBAR - HISTORY CHAT */}
+                  <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-700 bg-slate-800">
+                      <h3 className="text-white font-semibold flex items-center gap-2">
+                        <History className="h-4 w-4 text-blue-400" />
+                        History Chat
+                      </h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                      {chatSessions.map((sessionItem) => (
+                        <button
+                          key={sessionItem.id}
+                          onClick={() => {
+                            setActiveSession(sessionItem.id)
+                            loadMessages(sessionItem.id)
+                          }}
+                          className={`w-full p-3 rounded-lg text-left transition-colors ${
+                            activeSession === sessionItem.id
+                              ? 'bg-blue-600/20 border border-blue-500'
+                              : 'bg-slate-700/50 border border-slate-600 hover:bg-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-mono text-sm font-medium truncate">
+                                RFQ-{sessionItem.request_id || sessionItem.id.slice(0, 6)}
+                              </p>
+                              <p className="text-xs text-slate-400 truncate mt-1">
+                                {sessionItem.admin_name || 'Admin'}
+                              </p>
+                              <p className="text-[10px] text-slate-500 mt-1">
+                                {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </p>
+                            </div>
+                            {activeSession === sessionItem.id && (
+                              <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* RIGHT SIDE - CHAT INTERFACE */}
+                  <div className="md:col-span-2 bg-slate-800/30 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+                    {!activeSession ? (
+                      <div className="flex-1 flex items-center justify-center text-slate-500">
+                        <div className="text-center">
+                          <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                          <p className="text-lg">Pilih percakapan untuk memulai</p>
+                          <p className="text-sm mt-2">Klik salah satu RFQ di sidebar kiri</p>
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setActiveSession(null)}
-                        className="border-slate-600 hover:bg-slate-700"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    
-                    {/* MESSAGES AREA */}
-                    <div className="bg-slate-900 rounded-lg p-4 h-96 overflow-y-auto space-y-3 mb-4">
-                      {chatLoading ? (
-                        <div className="flex justify-center items-center h-full">
-                          <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                        </div>
-                      ) : messages.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                          <MessageSquare className="h-12 w-12 mb-2 opacity-50" />
-                          <p className="text-sm">Belum ada pesan</p>
-                          <p className="text-xs mt-1">Kirim pesan pertama Anda</p>
-                        </div>
-                      ) : (
-                        messages.map((msg) => {
-                          const isUser = msg.sender_type === 'user'
-                          return (
-                            <div
-                              key={msg.id}
-                              className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                            >
-                              <div
-                                className={`max-w-[70%] rounded-lg p-3 ${
-                                  isUser
-                                    ? 'bg-blue-600 text-white rounded-br-none'
-                                    : 'bg-slate-700 text-slate-100 rounded-bl-none'
-                                }`}
-                              >
-                                <p className="text-sm">{msg.message}</p>
-                                <p className={`text-[10px] mt-1 ${
-                                  isUser ? 'text-blue-200' : 'text-slate-400'
-                                }`}>
-                                  {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
-                              </div>
+                    ) : (
+                      <>
+                        {/* CHAT HEADER */}
+                        <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                              <MessageSquare className="h-5 w-5 text-white" />
                             </div>
-                          )
-                        })
-                      )}
-                      <div ref={messagesEndRef} />
-                    </div>
-                    
-                    {/* INPUT AREA */}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                        placeholder="Ketik pesan..."
-                        className="flex-1 bg-slate-800 border border-slate-600 rounded px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                        disabled={sendingMessage}
-                      />
-                      <Button
-                        onClick={sendMessage}
-                        disabled={!newMessage.trim() || sendingMessage}
-                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {sendingMessage ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
+                            <div>
+                              <p className="text-white font-medium">
+                                {getAdminDisplayName(messages)}
+                              </p>
+                              <p className="text-xs text-green-400">Online</p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setActiveSession(null)}
+                            className="border-slate-600 hover:bg-slate-700"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {/* MESSAGES AREA */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-900/50">
+                          {chatLoading ? (
+                            <div className="flex justify-center items-center h-full">
+                              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                            </div>
+                          ) : messages.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                              <MessageSquare className="h-12 w-12 mb-2 opacity-30" />
+                              <p className="text-sm">Belum ada pesan</p>
+                              <p className="text-xs mt-1">Kirim pesan pertama Anda</p>
+                            </div>
+                          ) : (
+                            messages.map((msg) => {
+                              const isUser = msg.sender_type === 'user'
+                              return (
+                                <div
+                                  key={msg.id}
+                                  className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                                >
+                                  <div
+                                    className={`max-w-[75%] rounded-lg p-3 ${
+                                      isUser
+                                        ? 'bg-blue-600 text-white rounded-br-none'
+                                        : 'bg-slate-700 text-slate-100 rounded-bl-none'
+                                    }`}
+                                  >
+                                    <p className="text-sm">{msg.message}</p>
+                                    <p className={`text-[10px] mt-1 ${
+                                      isUser ? 'text-blue-200' : 'text-slate-400'
+                                    }`}>
+                                      {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                          <div ref={messagesEndRef} />
+                        </div>
+
+                        {/* INPUT AREA */}
+                        <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newMessage}
+                              onChange={(e) => setNewMessage(e.target.value)}
+                              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                              placeholder="Ketik pesan..."
+                              className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                              disabled={sendingMessage}
+                            />
+                            <Button
+                              onClick={sendMessage}
+                              disabled={!newMessage.trim() || sendingMessage}
+                              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {sendingMessage ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
