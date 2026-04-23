@@ -206,14 +206,22 @@ export default function UserDashboard() {
   }, [profile])
 
   const openChatForProduct = async (item: any) => {
+    console.log('🔵 [CHAT] openChatForProduct called')
+    console.log('🔵 [CHAT] Item:', item)
+    
     const requestId = (item as any).request_id
+    console.log('🔵 [CHAT] Request ID:', requestId)
     
     if (!requestId) {
+      console.error('🔴 [CHAT] No request_id found!')
       alert("❌ Produk ini belum memiliki Request ID. Silakan submit request terlebih dahulu.")
       return
     }
     
     try {
+      console.log('🔵 [CHAT] Searching for existing chat session...')
+      console.log('🔵 [CHAT] Profile ID:', profile?.id)
+      
       // 1. CARI chat session berdasarkan request_id
       const { data: existingSession, error: fetchError } = await supabase
         .from('chat_sessions')
@@ -222,10 +230,15 @@ export default function UserDashboard() {
         .eq('request_id', requestId)
         .single()
       
+      console.log('🔵 [CHAT] Existing session:', existingSession)
+      console.log('🔵 [CHAT] Fetch error:', fetchError)
+      
       let sessionId = existingSession?.id
       
       // 2. Jika belum ada, BUAT chat session baru
       if (!sessionId) {
+        console.log(' [CHAT] No existing session found. Creating new one...')
+        
         const { data: newSession, error: insertError } = await supabase
           .from('chat_sessions')
           .insert({
@@ -238,18 +251,29 @@ export default function UserDashboard() {
           .select('id')
           .single()
         
+        console.log('🔵 [CHAT] New session created:', newSession)
+        console.log('🔵 [CHAT] Insert error:', insertError)
+        
         if (insertError) throw insertError
         sessionId = newSession.id
       }
       
       // 3. Switch ke tab chat dan buka session
+      console.log('🔵 [CHAT] Switching to chat tab, session ID:', sessionId)
       setActiveTab('chat')
       setActiveSession(sessionId)
+      
+      console.log('🔵 [CHAT] Loading messages...')
       await loadMessages(sessionId)
-      await fetchChatSessions()  // Refresh list chat sessions
+      
+      console.log('🔵 [CHAT] Fetching chat sessions...')
+      await fetchChatSessions()
+      
+      console.log('🟢 [CHAT] Chat opened successfully!')
       
     } catch (err: any) {
-      console.error("Failed to open chat:", err)
+      console.error('🔴 [CHAT] Failed to open chat:', err)
+      console.error('🔴 [CHAT] Error details:', err.message)
       alert("❌ Gagal membuka chat: " + err.message)
     }
   }
@@ -552,35 +576,72 @@ useEffect(() => {
 }, [activeSession, countUnreadMessages])
 
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
-// Fungsi untuk load chat sessions
 const fetchChatSessions = useCallback(async () => {
+  console.log('🔵 [SESSIONS] fetchChatSessions called')
+  
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session) {
+      console.log('🔵 [SESSIONS] No session found')
+      return
+    }
     
+    console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
+    
+    // Simplified query - remove complex joins first
     const { data, error } = await supabase
       .from('chat_sessions')
-      .select(`
-        *,
-        admin_marketing_profiles(admin_name),  // ✅ Hapus !inner - jadi LEFT JOIN
-        wishlists(request_id)
-      `)
+      .select('*')  // Start simple
       .eq('user_id', session.user.id)
-      .order('last_message_at', { ascending: false })
+      .order('created_at', { ascending: false })
     
-    if (error) throw error
+    console.log('🔵 [SESSIONS] Raw data:', data)
+    console.log('🔵 [SESSIONS] Error:', error)
+    
+    if (error) {
+      console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
+      throw error
+    }
+    
+    const sessionsCount = data?.length || 0
+    console.log(`🟢 [SESSIONS] Fetched ${sessionsCount} chat sessions`)
+    console.log(' [SESSIONS] Sessions:', data)
+    
     setChatSessions(data || [])
   } catch (err) {
-    console.error("Failed to fetch chat sessions:", err)
+    console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
   }
 }, [])
 
+// Load chat sessions saat component mount
+useEffect(() => {
+  console.log('🔵 [EFFECT] Component mounted, fetching chat sessions')
+  fetchChatSessions()
+}, [fetchChatSessions])
+
+// Load chat sessions saat tab chat aktif
+useEffect(() => {
+  console.log('🔵 [EFFECT] Active tab changed to:', activeTab)
+  if (activeTab === 'chat') {
+    console.log('🔵 [EFFECT] Chat tab is active, fetching sessions')
+    fetchChatSessions()
+  }
+}, [activeTab, fetchChatSessions])
+
 // Fungsi untuk load messages
 const loadMessages = useCallback(async (sessionId: string) => {
+  console.log('🔵 [MESSAGES] loadMessages called with session ID:', sessionId)
+  
   try {
     setChatLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    
+    if (!session) {
+      console.error('🔴 [MESSAGES] No user session found')
+      return
+    }
+    
+    console.log('🔵 [MESSAGES] Fetching messages from database...')
     
     const { data, error } = await supabase
       .from('chat_messages')
@@ -592,21 +653,35 @@ const loadMessages = useCallback(async (sessionId: string) => {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
     
-    if (error) throw error
+    console.log('🔵 [MESSAGES] Raw data:', data)
+    console.log('🔵 [MESSAGES] Error:', error)
+    
+    if (error) {
+      console.error('🔴 [MESSAGES] Query error:', error)
+      throw error
+    }
+    
+    const messagesCount = data?.length || 0
+    console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
+    
     setMessages(data || [])
     
     // Mark as read
     const unreadMessages = data?.filter(m => 
       m.admin_id !== null && !m.read_by_user
     ) || []
+    
+    console.log('🔵 [MESSAGES] Unread messages:', unreadMessages.length)
+    
     if (unreadMessages.length > 0) {
       await supabase
         .from('chat_messages')
         .update({ read_by_user: true })
         .in('id', unreadMessages.map(m => m.id))
     }
+    
   } catch (err) {
-    console.error("Failed to load messages:", err)
+    console.error('🔴 [MESSAGES] Failed to load messages:', err)
   } finally {
     setChatLoading(false)
   }
@@ -614,10 +689,17 @@ const loadMessages = useCallback(async (sessionId: string) => {
 
 // Fungsi untuk mendapatkan nama admin
 const getAdminDisplayName = (messages: any[]) => {
+  console.log('🔵 [ADMIN] getAdminDisplayName called, messages:', messages)
+  
   const adminMessage = messages.find(m => m.admin_id !== null)
+  console.log('🔵 [ADMIN] Admin message:', adminMessage)
+  
   if (adminMessage?.admin_profile?.admin_name) {
+    console.log('🟢 [ADMIN] Found admin name:', adminMessage.admin_profile.admin_name)
     return adminMessage.admin_profile.admin_name
   }
+  
+  console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
   return 'Admin'
 }
 
@@ -630,7 +712,12 @@ useEffect(() => {
 
 // Realtime subscription untuk chat
 useEffect(() => {
-  if (!activeSession) return
+  if (!activeSession) {
+    console.log('🔵 [REALTIME] No active session, skipping subscription')
+    return
+  }
+  
+  console.log('🔵 [REALTIME] Setting up subscription for session:', activeSession)
   
   const channel = supabase
     .channel(`chat:${activeSession}`)
@@ -643,15 +730,24 @@ useEffect(() => {
         filter: `session_id=eq.${activeSession}`
       },
       (payload) => {
-        setMessages(prev => [...prev, payload.new])
+        console.log('🔵 [REALTIME] New message received:', payload.new)
+        setMessages(prev => {
+          const newMessages = [...prev, payload.new]
+          console.log('🔵 [REALTIME] Updated messages:', newMessages)
+          return newMessages
+        })
+        countUnreadMessages()
       }
     )
-    .subscribe()
+    .subscribe((status) => {
+      console.log('🔵 [REALTIME] Subscription status:', status)
+    })
   
   return () => {
+    console.log('🔵 [REALTIME] Cleaning up subscription')
     supabase.removeChannel(channel)
   }
-}, [activeSession])
+}, [activeSession, countUnreadMessages])
 
 // ✅ LOAD CHAT SESSIONS SAAT COMPONENT MOUNT
 useEffect(() => {
@@ -2486,42 +2582,46 @@ const confirmSubmitRequest = async () => {
 
         {/* TAB 5: CHAT ADMIN - UPDATED */}
         <TabsContent value="chat" className="space-y-4 mt-6">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-white">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-blue-400" />
-                  Chat dengan Admin
-                </div>
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                Komunikasi dengan admin untuk RFQ dan pertanyaan lainnya.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {chatSessions.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-lg font-medium">Belum ada percakapan.</p>
-                  <p className="text-sm mt-2">
-                    Ajukan RFQ untuk memulai percakapan dengan admin.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px]">
-                  {/* LEFT SIDEBAR - HISTORY CHAT */}
-                  <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-700 bg-slate-800">
-                      <h3 className="text-white font-semibold flex items-center gap-2">
-                        <History className="h-4 w-4 text-blue-400" />
-                        History Chat
-                      </h3>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                      {chatSessions.map((sessionItem) => (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-blue-400" />
+                Chat dengan Admin
+              </div>
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Komunikasi dengan admin untuk RFQ dan pertanyaan lainnya.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            
+            {chatSessions.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-lg font-medium">Belum ada percakapan.</p>
+                <p className="text-sm mt-2">
+                  Ajukan RFQ untuk memulai percakapan dengan admin.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px]">
+                {/* LEFT SIDEBAR - HISTORY CHAT */}
+                <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+                  <div className="p-4 border-b border-slate-700 bg-slate-800">
+                    <h3 className="text-white font-semibold flex items-center gap-2">
+                      <History className="h-4 w-4 text-blue-400" />
+                      History Chat
+                    </h3>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {chatSessions.map((sessionItem, index) => {
+                      console.log(`🔵 [RENDER] Rendering session ${index}:`, sessionItem)
+                      return (
                         <button
                           key={sessionItem.id}
                           onClick={() => {
+                            console.log('🔵 [CLICK] Session clicked:', sessionItem.id)
                             setActiveSession(sessionItem.id)
                             loadMessages(sessionItem.id)
                           }}
@@ -2540,7 +2640,7 @@ const confirmSubmitRequest = async () => {
                                 {sessionItem.admin_name || 'Admin'}
                               </p>
                               <p className="text-[10px] text-slate-500 mt-1">
-                                {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID', {
+                                {new Date(sessionItem.last_message_at || sessionItem.created_at).toLocaleDateString('id-ID', {
                                   day: '2-digit',
                                   month: 'short',
                                   year: 'numeric'
@@ -2552,122 +2652,138 @@ const confirmSubmitRequest = async () => {
                             )}
                           </div>
                         </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* RIGHT SIDE - CHAT INTERFACE */}
-                  <div className="md:col-span-2 bg-slate-800/30 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
-                    {!activeSession ? (
-                      <div className="flex-1 flex items-center justify-center text-slate-500">
-                        <div className="text-center">
-                          <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-30" />
-                          <p className="text-lg">Pilih percakapan untuk memulai</p>
-                          <p className="text-sm mt-2">Klik salah satu RFQ di sidebar kiri</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {/* CHAT HEADER */}
-                        <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                              <MessageSquare className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-white font-medium">
-                                {getAdminDisplayName(messages)}
-                              </p>
-                              <p className="text-xs text-green-400">Online</p>
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setActiveSession(null)}
-                            className="border-slate-600 hover:bg-slate-700"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        {/* MESSAGES AREA */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-900/50">
-                          {chatLoading ? (
-                            <div className="flex justify-center items-center h-full">
-                              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                            </div>
-                          ) : messages.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                              <MessageSquare className="h-12 w-12 mb-2 opacity-30" />
-                              <p className="text-sm">Belum ada pesan</p>
-                              <p className="text-xs mt-1">Kirim pesan pertama Anda</p>
-                            </div>
-                          ) : (
-                            messages.map((msg) => {
-                              const isUser = msg.sender_type === 'user'
-                              return (
-                                <div
-                                  key={msg.id}
-                                  className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                                >
-                                  <div
-                                    className={`max-w-[75%] rounded-lg p-3 ${
-                                      isUser
-                                        ? 'bg-blue-600 text-white rounded-br-none'
-                                        : 'bg-slate-700 text-slate-100 rounded-bl-none'
-                                    }`}
-                                  >
-                                    <p className="text-sm">{msg.message}</p>
-                                    <p className={`text-[10px] mt-1 ${
-                                      isUser ? 'text-blue-200' : 'text-slate-400'
-                                    }`}>
-                                      {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      })}
-                                    </p>
-                                  </div>
-                                </div>
-                              )
-                            })
-                          )}
-                          <div ref={messagesEndRef} />
-                        </div>
-
-                        {/* INPUT AREA */}
-                        <div className="p-4 border-t border-slate-700 bg-slate-800/50">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={newMessage}
-                              onChange={(e) => setNewMessage(e.target.value)}
-                              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                              placeholder="Ketik pesan..."
-                              className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                              disabled={sendingMessage}
-                            />
-                            <Button
-                              onClick={sendMessage}
-                              disabled={!newMessage.trim() || sendingMessage}
-                              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                            >
-                              {sendingMessage ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Check className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                      )
+                    })}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+
+                {/* RIGHT SIDE - CHAT INTERFACE */}
+                <div className="md:col-span-2 bg-slate-800/30 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+                  {!activeSession ? (
+                    <div className="flex-1 flex items-center justify-center text-slate-500">
+                      <div className="text-center">
+                        <MessageSquare className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                        <p className="text-lg">Pilih percakapan untuk memulai</p>
+                        <p className="text-sm mt-2">Klik salah satu RFQ di sidebar kiri</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* CHAT HEADER */}
+                      <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                            <MessageSquare className="h-5 w-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">
+                              {getAdminDisplayName(messages)}
+                            </p>
+                            <p className="text-xs text-green-400">Online</p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            console.log('🔵 [CLICK] Close chat button clicked')
+                            setActiveSession(null)
+                          }}
+                          className="border-slate-600 hover:bg-slate-700"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* MESSAGES AREA */}
+                      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-900/50">
+                        {chatLoading ? (
+                          <div className="flex justify-center items-center h-full">
+                            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                          </div>
+                        ) : messages.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                            <MessageSquare className="h-12 w-12 mb-2 opacity-30" />
+                            <p className="text-sm">Belum ada pesan</p>
+                            <p className="text-xs mt-1">Kirim pesan pertama Anda</p>
+                          </div>
+                        ) : (
+                          messages.map((msg, index) => {
+                            console.log(`🔵 [RENDER] Rendering message ${index}:`, msg)
+                            const isUser = msg.sender_type === 'user'
+                            return (
+                              <div
+                                key={msg.id}
+                                className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                              >
+                                <div
+                                  className={`max-w-[75%] rounded-lg p-3 ${
+                                    isUser
+                                      ? 'bg-blue-600 text-white rounded-br-none'
+                                      : 'bg-slate-700 text-slate-100 rounded-bl-none'
+                                  }`}
+                                >
+                                  <p className="text-sm">{msg.message}</p>
+                                  <p className={`text-[10px] mt-1 ${
+                                    isUser ? 'text-blue-200' : 'text-slate-400'
+                                  }`}>
+                                    {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                        <div ref={messagesEndRef} />
+                      </div>
+
+                      {/* INPUT AREA - LOGIKA 1 ARAH (User bisa kirim, admin belum) */}
+                      <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newMessage}
+                            onChange={(e) => {
+                              console.log('🔵 [INPUT] Message input changed:', e.target.value)
+                              setNewMessage(e.target.value)
+                            }}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                console.log('🔵 [INPUT] Enter key pressed')
+                                sendMessage()
+                              }
+                            }}
+                            placeholder="Ketik pesan..."
+                            className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                            disabled={sendingMessage}
+                          />
+                          <Button
+                            onClick={() => {
+                              console.log('🔵 [CLICK] Send button clicked')
+                              sendMessage()
+                            }}
+                            disabled={!newMessage.trim() || sendingMessage}
+                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {sendingMessage ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
       </Tabs>
 
       {/* MODAL WISHLIST & REQUEST - UPDATED WITH CHECKBOX TABLE */}
