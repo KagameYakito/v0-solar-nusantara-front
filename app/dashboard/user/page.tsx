@@ -1303,7 +1303,7 @@ const confirmSubmitRequest = async () => {
       return
     }
 
-    // ✅ 1. Get ONLY selected items from wishlist (dengan type annotation)
+    // ✅ 1. Get ONLY selected items from wishlist
     const selectedWishlistItems: WishlistItem[] = wishlist.filter(
       (item: WishlistItem) => selectedItems.has(item.product_id)
     )
@@ -1329,29 +1329,43 @@ const confirmSubmitRequest = async () => {
       0
     )
 
-    // ✅ 3. GENERATE REQUEST_ID dari sequence
-    const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
-      sequence_name: 'request_id_seq'
-    })
+    // ✅ 3. CEK DULU: Apakah user sudah punya RFQ yang masih aktif?
+    const { data: existingRFQ } = await supabase
+      .from('wishlists')
+      .select('request_id')
+      .eq('user_id', session.user.id)
+      .in('status', ['requested', 'accepted']) // Status yang masih aktif
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
 
-    // ✅ PERBAIKAN: Jangan pakai default 60000000 statis!
-    // Kalau RPC berhasil, pakai itu. Kalau gagal, pakai timestamp unik.
-    let newRequestId: number;
+    let newRequestId: number
 
-    if (seqError || !sequenceData) {
-      console.error("Gagal ambil ID dari database, pakai fallback timestamp", seqError);
-      // Fallback: Gunakan timestamp (misal: 1713900000000) agar tetap unik
-      newRequestId = Date.now(); 
+    if (existingRFQ?.request_id) {
+      // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
+      newRequestId = existingRFQ.request_id
+      console.log("✅ Merge ke RFQ existing:", newRequestId)
     } else {
-      newRequestId = sequenceData;
+      // ✅ GENERATE REQUEST_ID BARU (hanya jika belum ada RFQ aktif)
+      const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
+        sequence_name: 'request_id_seq'
+      })
+
+      if (seqError || !sequenceData) {
+        console.error("Gagal ambil ID dari database, pakai fallback timestamp", seqError)
+        newRequestId = Date.now() 
+      } else {
+        newRequestId = sequenceData
+      }
+      console.log("✅ Buat RFQ baru dengan ID:", newRequestId)
     }
 
-    // ✅ 4. UPDATE WISHLISTS - Status = 'requested' (BUKAN 'pending'!)
+    // ✅ 4. UPDATE WISHLISTS
     const { error: updateError } = await supabase
       .from('wishlists')
       .update({
-        status: 'requested',  // ✅ BENAR: 'requested' bukan 'pending'
-        request_id: newRequestId,
+        status: 'requested',
+        request_id: newRequestId, // ✅ PAKAI ID YANG SUDAH DITENTUKAN
         updated_at: new Date().toISOString()
       })
       .eq('user_id', session.user.id)
