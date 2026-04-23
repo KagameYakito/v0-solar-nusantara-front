@@ -206,54 +206,47 @@ export default function UserDashboard() {
   }, [profile])
 
   const openChatForProduct = async (item: any) => {
-    const rfqId = (item as any).request_id 
-    const wishlistId = (item as any).wishlist_id || item.id
+    const requestId = (item as any).request_id
     
-    if (!rfqId) {
-      alert("❌ Produk ini belum memiliki Request ID. Silakan request terlebih dahulu.")
+    if (!requestId) {
+      alert("❌ Produk ini belum memiliki Request ID. Silakan submit request terlebih dahulu.")
       return
     }
-  
+    
     try {
-      // Cari atau buat chat session berdasarkan wishlist_id
+      // 1. CARI chat session berdasarkan request_id
       const { data: existingSession, error: fetchError } = await supabase
         .from('chat_sessions')
-        .select('id, is_locked')
+        .select('*')
         .eq('user_id', profile?.id)
-        .eq('wishlist_id', wishlistId)
+        .eq('request_id', requestId)  // Match dengan request_id
         .single()
-  
-      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError
-  
+      
       let sessionId = existingSession?.id
-  
+      
+      // 2. Jika belum ada, BUAT chat session baru
       if (!sessionId) {
-        // Buat session baru dengan wishlist_id
-        const { data, error } = await supabase.rpc(
-          'create_chat_session_for_rfq',
-          {
-            p_user_id: profile?.id,
-            p_wishlist_id: wishlistId,
-            p_request_id: rfqId
-          }
-        )
-        if (error) throw error
-        sessionId = data
+        const { data: newSession, error: insertError } = await supabase
+          .from('chat_sessions')
+          .insert({
+            user_id: profile?.id,
+            request_id: requestId,  // Simpan request_id
+            session_name: `RFQ-${requestId}`,  // Nama chat: RFQ-600xxxxx
+            status: 'active',
+            created_at: new Date().toISOString()
+          })
+          .select('id')
+          .single()
+        
+        if (insertError) throw insertError
+        sessionId = newSession.id
       }
-  
-      // Cek apakah session terkunci
-      if (existingSession?.is_locked) {
-        // Tetap buka tapi dalam mode read-only
-        setActiveTab('chat')
-        setActiveSession(sessionId)
-        await loadMessages(sessionId)
-        alert("ℹ️ Chat ini sudah terkunci karena RFQ telah selesai.")
-        return
-      }
-  
+      
+      // 3. Switch ke tab chat dan buka session
       setActiveTab('chat')
       setActiveSession(sessionId)
       await loadMessages(sessionId)
+      await fetchChatSessions()  // Refresh list chat sessions
       
     } catch (err: any) {
       console.error("Failed to open chat:", err)
@@ -614,27 +607,21 @@ const fetchChatSessions = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     
+    // ✅ FETCH DENGAN request_id DAN JOIN ke wishlists untuk info produk
     const { data, error } = await supabase
       .from('chat_sessions')
       .select(`
         *,
-        wishlist:wishlists(request_id, status)
+        wishlist:wishlists!request_id (
+          product_name,
+          request_id
+        )
       `)
       .eq('user_id', session.user.id)
       .order('last_message_at', { ascending: false })
     
     if (error) throw error
-    
-    // Map data untuk menambahkan request_id yang benar
-    const sessionsWithRFQ = data?.map(sessionItem => ({
-      ...sessionItem,
-      request_id: sessionItem.wishlist?.request_id || null,
-      is_locked: sessionItem.wishlist?.status === 'deal' || 
-                 sessionItem.wishlist?.status === 'declined' ||
-                 sessionItem.is_locked === true
-    })) || []
-    
-    setChatSessions(sessionsWithRFQ)
+    setChatSessions(data || [])
   } catch (err) {
     console.error("Failed to fetch chat sessions:", err)
   }
@@ -2538,6 +2525,8 @@ const confirmSubmitRequest = async () => {
                     ))}
                     </div>
                   </div>
+
+                  // ✅ UPDATE input area agar disabled jika session locked
                   <div className="p-4 border-t border-slate-700 bg-slate-800/50">
                     <div className="flex gap-2">
                       <input
