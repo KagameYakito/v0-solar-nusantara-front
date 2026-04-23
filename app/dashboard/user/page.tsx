@@ -205,47 +205,36 @@ export default function UserDashboard() {
     profileRef.current = profile
   }, [profile])
 
-  const openChatForProduct = async (item: any) => {
-    const rfqId = (item as any).request_id
-    const wishlistId = (item as any).wishlist_id || item.id
+    const openChatForProduct = async (item: any) => {
+    // Ambil Request ID dari wishlist item
+    const rfqId = (item as any).request_id 
     
+    // Validasi: Jika belum ada Request ID, user tidak bisa chat dulu
     if (!rfqId) {
-      alert("❌ Produk ini belum memiliki request ID")
+      alert("❌ Produk ini belum memiliki Request ID (Belum diajukan ke Admin). Silakan request terlebih dahulu.")
       return
     }
-    
+
     try {
-      // Cari atau buat chat session berdasarkan wishlist_id atau request_id
-      const { data: existingSession, error: fetchError } = await supabase
-        .from('chat_sessions')
-        .select('id')
-        .eq('user_id', profile?.id)
-        .eq('wishlist_id', wishlistId)
-        .single()
-  
-      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError
-  
-      let sessionId = existingSession?.id
-  
-      if (!sessionId) {
-        // Buat session baru
-        const { data, error } = await supabase.rpc(
-          'create_chat_session_for_rfq',
-          { 
-            p_user_id: profile?.id, 
-            p_wishlist_id: wishlistId,  // Gunakan wishlist_id (UUID)
-            p_rfq_id: rfqId  // Tetap kirim request_id untuk referensi
-          }
-        )
-        
-        if (error) throw error
-        sessionId = data
+      // Cek atau Buat Chat Session berdasarkan Request ID
+      const { data, error: fetchError } = await supabase.rpc(
+        'create_chat_session_for_rfq',
+        {
+          p_user_id: profile?.id,
+          p_request_id: rfqId
+        }
+      )
+      const sessionId = data
+
+      if (fetchError) throw fetchError
+
+      // Setelah dapat ID Session, buka tab chat
+      if (sessionId) {
+        setActiveTab('chat')
+        setActiveSession(sessionId)
+        await loadMessages(sessionId)
       }
-  
-      // Switch ke tab chat
-      setActiveTab('chat')
-      setActiveSession(sessionId)
-      await loadMessages(sessionId)
+      
     } catch (err: any) {
       console.error("Failed to open chat:", err)
       alert("❌ Gagal membuka chat: " + err.message)
