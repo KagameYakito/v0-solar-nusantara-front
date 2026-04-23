@@ -205,35 +205,55 @@ export default function UserDashboard() {
     profileRef.current = profile
   }, [profile])
 
-    const openChatForProduct = async (item: any) => {
-    // Ambil Request ID dari wishlist item
+  const openChatForProduct = async (item: any) => {
     const rfqId = (item as any).request_id 
+    const wishlistId = (item as any).wishlist_id || item.id
     
-    // Validasi: Jika belum ada Request ID, user tidak bisa chat dulu
     if (!rfqId) {
-      alert("❌ Produk ini belum memiliki Request ID (Belum diajukan ke Admin). Silakan request terlebih dahulu.")
+      alert("❌ Produk ini belum memiliki Request ID. Silakan request terlebih dahulu.")
       return
     }
-
+  
     try {
-      // Cek atau Buat Chat Session berdasarkan Request ID
-      const { data, error: fetchError } = await supabase.rpc(
-        'create_chat_session_for_rfq',
-        {
-          p_user_id: profile?.id,
-          p_request_id: rfqId
-        }
-      )
-      const sessionId = data
-
-      if (fetchError) throw fetchError
-
-      // Setelah dapat ID Session, buka tab chat
-      if (sessionId) {
+      // Cari atau buat chat session berdasarkan wishlist_id
+      const { data: existingSession, error: fetchError } = await supabase
+        .from('chat_sessions')
+        .select('id, is_locked')
+        .eq('user_id', profile?.id)
+        .eq('wishlist_id', wishlistId)
+        .single()
+  
+      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError
+  
+      let sessionId = existingSession?.id
+  
+      if (!sessionId) {
+        // Buat session baru dengan wishlist_id
+        const { data, error } = await supabase.rpc(
+          'create_chat_session_for_rfq',
+          {
+            p_user_id: profile?.id,
+            p_wishlist_id: wishlistId,
+            p_request_id: rfqId
+          }
+        )
+        if (error) throw error
+        sessionId = data
+      }
+  
+      // Cek apakah session terkunci
+      if (existingSession?.is_locked) {
+        // Tetap buka tapi dalam mode read-only
         setActiveTab('chat')
         setActiveSession(sessionId)
         await loadMessages(sessionId)
+        alert("ℹ️ Chat ini sudah terkunci karena RFQ telah selesai.")
+        return
       }
+  
+      setActiveTab('chat')
+      setActiveSession(sessionId)
+      await loadMessages(sessionId)
       
     } catch (err: any) {
       console.error("Failed to open chat:", err)
@@ -596,12 +616,25 @@ const fetchChatSessions = useCallback(async () => {
     
     const { data, error } = await supabase
       .from('chat_sessions')
-      .select('*')
+      .select(`
+        *,
+        wishlist:wishlists(request_id, status)
+      `)
       .eq('user_id', session.user.id)
       .order('last_message_at', { ascending: false })
     
     if (error) throw error
-    setChatSessions(data || [])
+    
+    // Map data untuk menambahkan request_id yang benar
+    const sessionsWithRFQ = data?.map(sessionItem => ({
+      ...sessionItem,
+      request_id: sessionItem.wishlist?.request_id || null,
+      is_locked: sessionItem.wishlist?.status === 'deal' || 
+                 sessionItem.wishlist?.status === 'declined' ||
+                 sessionItem.is_locked === true
+    })) || []
+    
+    setChatSessions(sessionsWithRFQ)
   } catch (err) {
     console.error("Failed to fetch chat sessions:", err)
   }
@@ -2459,41 +2492,78 @@ const confirmSubmitRequest = async () => {
                       </h3>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                      {chatSessions.map((sessionItem) => (
-                        <button
-                          key={sessionItem.id}
-                          onClick={() => {
-                            setActiveSession(sessionItem.id)
-                            loadMessages(sessionItem.id)
-                          }}
-                          className={`w-full p-3 rounded-lg text-left transition-colors ${
-                            activeSession === sessionItem.id
-                              ? 'bg-blue-600/20 border border-blue-500'
-                              : 'bg-slate-700/50 border border-slate-600 hover:bg-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white font-mono text-sm font-medium truncate">
-                                RFQ-{sessionItem.request_id || sessionItem.id.slice(0, 6)}
+                    {chatSessions.map((sessionItem) => (
+                      <button
+                        key={sessionItem.id}
+                        onClick={() => {
+                          if (sessionItem.is_locked) {
+                            alert("ℹ️ Chat ini sudah terkunci karena RFQ telah selesai.")
+                          }
+                          setActiveSession(sessionItem.id)
+                          loadMessages(sessionItem.id)
+                        }}
+                        className={`w-full p-3 rounded-lg text-left transition-colors ${
+                          activeSession === sessionItem.id
+                            ? 'bg-blue-600/20 border border-blue-500'
+                            : 'bg-slate-700/50 border border-slate-600 hover:bg-slate-700'
+                        } ${sessionItem.is_locked ? 'opacity-60' : ''}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-mono text-sm font-medium truncate">
+                              {sessionItem.request_id ? `RFQ-${sessionItem.request_id}` : `RFQ-${sessionItem.id.slice(0, 6)}`}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate mt-1">
+                              {sessionItem.admin_name || 'Admin'}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </p>
+                            {sessionItem.is_locked && (
+                              <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1">
+                                <Lock className="h-3 w-3" />
+                                Terkunci
                               </p>
-                              <p className="text-xs text-slate-400 truncate mt-1">
-                                {sessionItem.admin_name || 'Admin'}
-                              </p>
-                              <p className="text-[10px] text-slate-500 mt-1">
-                                {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  year: 'numeric'
-                                })}
-                              </p>
-                            </div>
-                            {activeSession === sessionItem.id && (
-                              <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
                             )}
                           </div>
-                        </button>
-                      ))}
+                          {activeSession === sessionItem.id && (
+                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                    </div>
+                  </div>
+
+                  // ✅ UPDATE input area agar disabled jika session locked
+                  <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder={chatSessions.find(s => s.id === activeSession)?.is_locked 
+                          ? "Chat ini sudah terkunci" 
+                          : "Ketik pesan..."}
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={sendingMessage || chatSessions.find(s => s.id === activeSession)?.is_locked}
+                      />
+                      <Button
+                        onClick={sendMessage}
+                        disabled={!newMessage.trim() || sendingMessage || chatSessions.find(s => s.id === activeSession)?.is_locked}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {sendingMessage ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
                   </div>
 
