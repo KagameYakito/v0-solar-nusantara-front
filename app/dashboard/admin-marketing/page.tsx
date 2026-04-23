@@ -1866,7 +1866,6 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                         </td>
                         
                         {/* Aksi */}
-                        {/* Aksi */}
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2 items-center">
                             {/* ✅ DROPDOWN SELECT - HANYA AKTIF JIKA STATUS = REQUESTED */}
@@ -1895,30 +1894,14 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                               </Badge>
                             )}
                             
-                            {/* ✅ Chat Button - AKTIF UNTUK REQUESTED, ACCEPTED, DECLINED, DEAL */}
-                            <Button
-                              size="sm" 
-                              onClick={() => handleOpenChatForRequest(item)} // Ganti fungsi di sini
-                              className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700"
-                              disabled={
-                                item.status !== 'requested' && 
-                                item.status !== 'accepted' && 
-                                item.status !== 'declined' && 
-                                item.status !== 'deal'
-                              }
-                              className={`h-8 w-8 p-0 ${
-                                (item.status === 'requested' || item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
-                                  ? 'text-slate-400 hover:text-white hover:bg-slate-700' 
-                                  : 'text-slate-600 cursor-not-allowed opacity-50'
-                              }`}
-                              title={
-                                (item.status === 'requested' || item.status === 'accepted' || item.status === 'declined' || item.status === 'deal')
-                                  ? "Chat ke Client"
-                                  : "Chat hanya tersedia setelah Request/Accept/Decline"
-                              }
+                            {/* ✅ Tombol Chat - Sekarang bisa diklik */}
+                            <button
+                              onClick={() => handleOpenChat(item)}
+                              className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                              title="Chat dengan User"
                             >
                               <MessageSquare className="h-4 w-4" />
-                            </Button>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -2934,6 +2917,7 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
           </DialogContent>
         </Dialog>
       )}
+      
       <Dialog open={showProductDetailModal} onOpenChange={setShowProductDetailModal}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
           <DialogHeader>
