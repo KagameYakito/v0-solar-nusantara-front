@@ -1341,22 +1341,31 @@ const confirmSubmitRequest = async () => {
     let newRequestId: number
 
     if (existingRFQs && existingRFQs.length > 0 && existingRFQs[0].request_id) {
-      // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
-      newRequestId = existingRFQs[0].request_id
-      console.log("✅ Merge ke RFQ existing:", newRequestId)
+    // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
+    newRequestId = existingRFQs[0].request_id
+    console.log("✅ Merge ke RFQ existing:", newRequestId)
     } else {
-      // ✅ GENERATE REQUEST_ID BARU
-      const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
-        sequence_name: 'request_id_seq'
-      })
+    // ✅ GENERATE REQUEST_ID BARU DENGAN SEQUENCE
+    const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
+      sequence_name: 'request_id_seq'
+    })
 
-      if (seqError || !sequenceData) {
-        console.error("Gagal ambil sequence, pakai timestamp:", seqError)
-        newRequestId = parseInt(Date.now().toString().slice(-8)) // Ambil 8 digit terakhir
-      } else {
-        newRequestId = sequenceData
-      }
-      console.log("✅ Buat RFQ baru dengan ID:", newRequestId)
+    if (seqError || !sequenceData) {
+      console.error("Sequence error, fallback to timestamp:", seqError)
+      // Fallback: Generate based on timestamp but ensure it starts with 6
+      const timestamp = Date.now()
+      newRequestId = 60000000 + (timestamp % 10000000) // Ensure it's between 60000000-69999999
+    } else {
+      newRequestId = sequenceData
+    }
+
+    // ✅ VALIDASI: Pastikan request_id 8 digit dan dimulai dari 6
+    if (newRequestId < 60000000 || newRequestId > 69999999) {
+      console.warn("Request ID out of range, adjusting:", newRequestId)
+      newRequestId = 60000000 + (newRequestId % 10000000)
+    }
+
+    console.log("✅ RFQ ID generated:", newRequestId)
     }
 
     // ✅ 4. UPDATE WISHLISTS
