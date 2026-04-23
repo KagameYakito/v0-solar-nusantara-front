@@ -253,56 +253,6 @@ export default function UserDashboard() {
       alert("❌ Gagal membuka chat: " + err.message)
     }
   }
-  
-  // ✅ IMPLEMENTASI LENGKAP
-  const loadMessages = useCallback(async (sessionId: string) => {
-    try {
-      setChatLoading(true)
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .select(`
-          *,
-          sender_profile:profiles!sender_id(full_name),
-          admin_profile:admin_marketing_profiles!admin_id(admin_name)
-        `)
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: true })
-      
-      if (error) throw error
-      setMessages(data || [])
-      
-      // Mark as read
-      const unreadMessages = data?.filter(m => 
-        m.admin_id !== null && !m.read_by_user
-      ) || []
-      
-      if (unreadMessages.length > 0) {
-        await supabase
-          .from('chat_messages')
-          .update({ read_by_user: true })
-          .in('id', unreadMessages.map(m => m.id))
-      }
-    } catch (err) {
-      console.error("Failed to load messages:", err)
-    } finally {
-      setChatLoading(false)
-    }
-  }, [])
-
-  const getAdminDisplayName = (messages: any[]) => {
-    // Cari pesan pertama dari admin
-    const adminMessage = messages.find(m => m.admin_id !== null)
-    
-    if (adminMessage?.admin_profile?.admin_name) {
-      return adminMessage.admin_profile.admin_name
-    }
-    
-    // Default ke "Admin" jika belum ada balasan
-    return 'Admin'
-  }  
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeSession) return
@@ -602,20 +552,18 @@ useEffect(() => {
 }, [activeSession, countUnreadMessages])
 
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
+// Fungsi untuk load chat sessions
 const fetchChatSessions = useCallback(async () => {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     
-    // ✅ FETCH DENGAN request_id DAN JOIN ke wishlists untuk info produk
     const { data, error } = await supabase
       .from('chat_sessions')
       .select(`
         *,
-        wishlist:wishlists!request_id (
-          product_name,
-          request_id
-        )
+        admin_marketing_profiles!inner(admin_name),
+        wishlists(request_id)
       `)
       .eq('user_id', session.user.id)
       .order('last_message_at', { ascending: false })
@@ -626,6 +574,84 @@ const fetchChatSessions = useCallback(async () => {
     console.error("Failed to fetch chat sessions:", err)
   }
 }, [])
+
+// Fungsi untuk load messages
+const loadMessages = useCallback(async (sessionId: string) => {
+  try {
+    setChatLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select(`
+        *,
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+      `)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+    
+    if (error) throw error
+    setMessages(data || [])
+    
+    // Mark as read
+    const unreadMessages = data?.filter(m => 
+      m.admin_id !== null && !m.read_by_user
+    ) || []
+    if (unreadMessages.length > 0) {
+      await supabase
+        .from('chat_messages')
+        .update({ read_by_user: true })
+        .in('id', unreadMessages.map(m => m.id))
+    }
+  } catch (err) {
+    console.error("Failed to load messages:", err)
+  } finally {
+    setChatLoading(false)
+  }
+}, [])
+
+// Fungsi untuk mendapatkan nama admin
+const getAdminDisplayName = (messages: any[]) => {
+  const adminMessage = messages.find(m => m.admin_id !== null)
+  if (adminMessage?.admin_profile?.admin_name) {
+    return adminMessage.admin_profile.admin_name
+  }
+  return 'Admin'
+}
+
+// Load chat sessions saat tab chat aktif
+useEffect(() => {
+  if (activeTab === 'chat') {
+    fetchChatSessions()
+  }
+}, [activeTab, fetchChatSessions])
+
+// Realtime subscription untuk chat
+useEffect(() => {
+  if (!activeSession) return
+  
+  const channel = supabase
+    .channel(`chat:${activeSession}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_id=eq.${activeSession}`
+      },
+      (payload) => {
+        setMessages(prev => [...prev, payload.new])
+      }
+    )
+    .subscribe()
+  
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}, [activeSession])
 
 // ✅ LOAD CHAT SESSIONS SAAT COMPONENT MOUNT
 useEffect(() => {
@@ -2444,7 +2470,7 @@ const confirmSubmitRequest = async () => {
           )}
         </TabsContent>
 
-        {/* TAB 5: CHAT ADMIN - UPDATED WITH SIDEBAR */}
+        {/* TAB 5: CHAT ADMIN - UPDATED */}
         <TabsContent value="chat" className="space-y-4 mt-6">
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
@@ -2468,7 +2494,6 @@ const confirmSubmitRequest = async () => {
                   </p>
                 </div>
               ) : (
-                // TWO COLUMN LAYOUT
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px]">
                   {/* LEFT SIDEBAR - HISTORY CHAT */}
                   <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
@@ -2479,78 +2504,41 @@ const confirmSubmitRequest = async () => {
                       </h3>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {chatSessions.map((sessionItem) => (
-                      <button
-                        key={sessionItem.id}
-                        onClick={() => {
-                          if (sessionItem.is_locked) {
-                            alert("ℹ️ Chat ini sudah terkunci karena RFQ telah selesai.")
-                          }
-                          setActiveSession(sessionItem.id)
-                          loadMessages(sessionItem.id)
-                        }}
-                        className={`w-full p-3 rounded-lg text-left transition-colors ${
-                          activeSession === sessionItem.id
-                            ? 'bg-blue-600/20 border border-blue-500'
-                            : 'bg-slate-700/50 border border-slate-600 hover:bg-slate-700'
-                        } ${sessionItem.is_locked ? 'opacity-60' : ''}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-mono text-sm font-medium truncate">
-                              {sessionItem.request_id ? `RFQ-${sessionItem.request_id}` : `RFQ-${sessionItem.id.slice(0, 6)}`}
-                            </p>
-                            <p className="text-xs text-slate-400 truncate mt-1">
-                              {sessionItem.admin_name || 'Admin'}
-                            </p>
-                            <p className="text-[10px] text-slate-500 mt-1">
-                              {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric'
-                              })}
-                            </p>
-                            {sessionItem.is_locked && (
-                              <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1">
-                                <Lock className="h-3 w-3" />
-                                Terkunci
+                      {chatSessions.map((sessionItem) => (
+                        <button
+                          key={sessionItem.id}
+                          onClick={() => {
+                            setActiveSession(sessionItem.id)
+                            loadMessages(sessionItem.id)
+                          }}
+                          className={`w-full p-3 rounded-lg text-left transition-colors ${
+                            activeSession === sessionItem.id
+                              ? 'bg-blue-600/20 border border-blue-500'
+                              : 'bg-slate-700/50 border border-slate-600 hover:bg-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-mono text-sm font-medium truncate">
+                                RFQ-{sessionItem.request_id || sessionItem.id.slice(0, 6)}
                               </p>
+                              <p className="text-xs text-slate-400 truncate mt-1">
+                                {sessionItem.admin_name || 'Admin'}
+                              </p>
+                              <p className="text-[10px] text-slate-500 mt-1">
+                                {new Date(sessionItem.last_message_at).toLocaleDateString('id-ID', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </p>
+                            </div>
+                            {activeSession === sessionItem.id && (
+                              <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
                             )}
                           </div>
-                          {activeSession === sessionItem.id && (
-                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                    </div>
-                  </div>
-
-                  // ✅ UPDATE input area agar disabled jika session locked
-                  <div className="p-4 border-t border-slate-700 bg-slate-800/50">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                        placeholder={chatSessions.find(s => s.id === activeSession)?.is_locked 
-                          ? "Chat ini sudah terkunci" 
-                          : "Ketik pesan..."}
-                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={sendingMessage || chatSessions.find(s => s.id === activeSession)?.is_locked}
-                      />
-                      <Button
-                        onClick={sendMessage}
-                        disabled={!newMessage.trim() || sendingMessage || chatSessions.find(s => s.id === activeSession)?.is_locked}
-                        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {sendingMessage ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check className="h-4 w-4" />
-                        )}
-                      </Button>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
