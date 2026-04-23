@@ -2538,8 +2538,6 @@ const confirmSubmitRequest = async () => {
                     ))}
                     </div>
                   </div>
-
-                  // ✅ UPDATE input area agar disabled jika session locked
                   <div className="p-4 border-t border-slate-700 bg-slate-800/50">
                     <div className="flex gap-2">
                       <input
