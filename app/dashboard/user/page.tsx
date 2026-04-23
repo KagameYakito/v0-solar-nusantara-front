@@ -1331,41 +1331,51 @@ const confirmSubmitRequest = async () => {
 
     // ✅ 3. CEK DULU: Apakah user sudah punya RFQ yang masih aktif?
     const { data: existingRFQs, error: checkError } = await supabase
-    .from('wishlists')
-    .select('request_id')
-    .eq('user_id', session.user.id)
-    .in('status', ['requested', 'accepted'])
-    .order('created_at', { ascending: false })
-    .limit(1)
+      .from('wishlists')
+      .select('request_id')
+      .eq('user_id', session.user.id)
+      .in('status', ['requested', 'accepted'])
+      .order('created_at', { ascending: false })
+      .limit(1)
 
     let newRequestId: number
 
     if (existingRFQs && existingRFQs.length > 0 && existingRFQs[0].request_id) {
-    // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
-    newRequestId = existingRFQs[0].request_id
-    console.log("✅ Merge ke RFQ existing:", newRequestId)
+      // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
+      newRequestId = existingRFQs[0].request_id
+      console.log("✅ Merge ke RFQ existing:", newRequestId)
     } else {
-    // ✅ GENERATE REQUEST_ID BARU DENGAN SEQUENCE
-    const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
-      sequence_name: 'request_id_seq'
-    })
-
-    if (seqError || !sequenceData) {
-      console.error("Sequence error, fallback to timestamp:", seqError)
-      // Fallback: Generate based on timestamp but ensure it starts with 6
-      const timestamp = Date.now()
-      newRequestId = 60000000 + (timestamp % 10000000) // Ensure it's between 60000000-69999999
-    } else {
-      newRequestId = sequenceData
-    }
-
-    // ✅ VALIDASI: Pastikan request_id 8 digit dan dimulai dari 6
-    if (newRequestId < 60000000 || newRequestId > 69999999) {
-      console.warn("Request ID out of range, adjusting:", newRequestId)
-      newRequestId = 60000000 + (newRequestId % 10000000)
-    }
-
-    console.log("✅ RFQ ID generated:", newRequestId)
+      // ✅ CARA 1: Coba pakai sequence
+      const { data: sequenceData, error: seqError } = await supabase.rpc('get_next_request_id')
+      
+      if (!seqError && sequenceData) {
+        newRequestId = sequenceData
+        console.log("✅ Request ID dari sequence:", newRequestId)
+      } else {
+        // ✅ CARA 2: Fallback - Generate dari max existing + 1
+        console.log("⚠️ Sequence tidak ada, pakai fallback...")
+        
+        const { data: maxData } = await supabase
+          .from('wishlists')
+          .select('request_id')
+          .order('request_id', { ascending: false })
+          .limit(1)
+        
+        if (maxData && maxData.length > 0 && maxData[0].request_id) {
+          newRequestId = maxData[0].request_id + 1
+        } else {
+          // First request ever
+          newRequestId = 60000000
+        }
+        
+        console.log("✅ Request ID dari max+1:", newRequestId)
+      }
+      
+      // ✅ VALIDASI: Pastikan request_id 8 digit dan dimulai dari 6
+      if (newRequestId < 60000000 || newRequestId > 69999999) {
+        console.warn("Request ID out of range, adjusting:", newRequestId)
+        newRequestId = 60000000 + (newRequestId % 10000000)
+      }
     }
 
     // ✅ 4. UPDATE WISHLISTS
@@ -1373,7 +1383,7 @@ const confirmSubmitRequest = async () => {
       .from('wishlists')
       .update({
         status: 'requested',
-        request_id: newRequestId, // ✅ PAKAI ID YANG SUDAH DITENTUKAN
+        request_id: newRequestId,
         updated_at: new Date().toISOString()
       })
       .eq('user_id', session.user.id)
@@ -1389,7 +1399,7 @@ const confirmSubmitRequest = async () => {
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    alert("✅ Permintaan produk berhasil dikirim! Tim kami akan segera memverifikasi.")
+    alert(`✅ Permintaan produk berhasil dikirim!\nRFQ ID: #${newRequestId}\n\nTim kami akan segera memverifikasi.`)
 
   } catch (err: any) {
     console.error("Failed to submit request:", err)
