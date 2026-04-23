@@ -1330,30 +1330,29 @@ const confirmSubmitRequest = async () => {
     )
 
     // ✅ 3. CEK DULU: Apakah user sudah punya RFQ yang masih aktif?
-    const { data: existingRFQ } = await supabase
-      .from('wishlists')
-      .select('request_id')
-      .eq('user_id', session.user.id)
-      .in('status', ['requested', 'accepted']) // Status yang masih aktif
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+    const { data: existingRFQs, error: checkError } = await supabase
+    .from('wishlists')
+    .select('request_id')
+    .eq('user_id', session.user.id)
+    .in('status', ['requested', 'accepted'])
+    .order('created_at', { ascending: false })
+    .limit(1)
 
     let newRequestId: number
 
-    if (existingRFQ?.request_id) {
+    if (existingRFQs && existingRFQs.length > 0 && existingRFQs[0].request_id) {
       // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
-      newRequestId = existingRFQ.request_id
+      newRequestId = existingRFQs[0].request_id
       console.log("✅ Merge ke RFQ existing:", newRequestId)
     } else {
-      // ✅ GENERATE REQUEST_ID BARU (hanya jika belum ada RFQ aktif)
+      // ✅ GENERATE REQUEST_ID BARU
       const { data: sequenceData, error: seqError } = await supabase.rpc('nextval', {
         sequence_name: 'request_id_seq'
       })
 
       if (seqError || !sequenceData) {
-        console.error("Gagal ambil ID dari database, pakai fallback timestamp", seqError)
-        newRequestId = Date.now() 
+        console.error("Gagal ambil sequence, pakai timestamp:", seqError)
+        newRequestId = parseInt(Date.now().toString().slice(-8)) // Ambil 8 digit terakhir
       } else {
         newRequestId = sequenceData
       }
