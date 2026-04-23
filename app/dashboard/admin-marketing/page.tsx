@@ -181,6 +181,7 @@ export default function AdminMarketingDashboard() {
   const [selectedChatSession, setSelectedChatSession] = useState<any>(null);
   const [newMessage, setNewMessage] = useState('');
   const [selectedAdminForTakeover, setSelectedAdminForTakeover] = useState('');
+  const [chatInput, setChatInput] = useState('')
 
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
@@ -538,6 +539,50 @@ const openEditProfileModal = () => {
   }
   setIsEditingProfile(true)
   setShowProfileModal(true)
+}
+
+const fetchChatMessages = async (sessionId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+     .select(`
+        *,
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+      `)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+    
+    if (error) throw error
+    setChatMessages(data || [])
+  } catch (err) {
+    console.error("Error fetching chat messages:", err)
+  }
+}
+
+const sendChatMessage = async (sessionId: string, message: string) => {
+  if (!message.trim()) return
+  
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
+    const { error } = await supabase.rpc('send_chat_message', {
+      p_session_id: sessionId,
+      p_sender_id: session.user.id,
+      p_message: message.trim(),
+      p_sender_type: 'admin'
+    })
+    
+    if (error) throw error
+    
+    // Clear input dan refresh messages
+    setChatInput('')
+    await fetchChatMessages(sessionId)
+  } catch (err) {
+    console.error("Error sending message:", err)
+    alert("Gagal mengirim pesan")
+  }
 }
 
   const openChatWithClient = (item: any) => {
