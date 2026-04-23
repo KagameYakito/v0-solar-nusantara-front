@@ -177,6 +177,11 @@ export default function AdminMarketingDashboard() {
   const [selectedClient, setSelectedClient] = useState<any>(null)
   const adminMessagesEndRef = useRef<HTMLDivElement>(null)
 
+  // ✅ CHAT MODAL STATES
+  const [selectedChatSession, setSelectedChatSession] = useState<any>(null);
+  const [newMessage, setNewMessage] = useState('');
+  const [selectedAdminForTakeover, setSelectedAdminForTakeover] = useState('');
+
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
     'pending': 2,
@@ -296,30 +301,88 @@ export default function AdminMarketingDashboard() {
   }, [isAuthorized, wishlistFilter])
 
   const fetchOtherAdmins = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        
+        // Assuming you have an admin_marketing_profiles table
+        const { data } = await supabase
+            .from('admin_marketing_profiles')
+            .select('id, admin_name')
+            .neq('admin_id', session.user.id); // Exclude current admin
+        
+        setOtherAdmins(data || []);
+    } catch (err) {
+        console.error("Error fetching admins:", err);
+    }
+  };
+
+  const loadMessagesForAdmin = async (sessionId: string) => {
+    try {
+        const { data, error } = await supabase
+            .from('chat_messages')
+            .select(`
+                *,
+                sender_profile:profiles!sender_id(full_name),
+                admin_profile:admin_marketing_profiles!admin_id(admin_name)
+            `)
+            .eq('session_id', sessionId)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        setChatMessages(data || []);
+    } catch (err) {
+        console.error("Error loading messages:", err);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !activeSession) return
     
-    const { data } = await supabase
-      .from('admin_marketing_profiles')
-      .select('id, admin_name, admin_phone')
-      .neq('admin_id', session.user.id)
-    
-    setOtherAdmins(data || [])
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      
+      const { error } = await supabase.rpc('send_chat_message', {
+        p_session_id: activeSession,
+        p_sender_id: session.user.id,
+        p_message: newMessage.trim(),
+        p_sender_type: 'admin'
+      })
+      
+      if (error) throw error
+      setNewMessage('')
+      await loadAdminChatMessages(activeSession)
+    } catch (err) {
+      alert("Gagal mengirim pesan")
+    }
   }
+
+const handleOpenChatForRequest = (request: any) => {
+  setSelectedChatSession(request);
+  loadMessagesForAdmin(request.id);
+  fetchOtherAdmins();
+};
   
   // Handle take over
-  const handleTakeOver = async (adminId: string) => {
-    if (!selectedWishlistItem) return
+  const handleTakeOver = async () => {
+    if (!selectedAdminForTakeover || !selectedChatSession) return;
     
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    
-    await supabase.rpc('assign_chat_admin', {
-      p_session_id: selectedWishlistItem.chat_session_id,
-      p_admin_id: adminId,
-      p_assigned_by: session.user.id
-    })
-  }
+    try {
+        // Update chat session admin_id
+        const { error } = await supabase
+            .from('chat_sessions')
+            .update({ admin_id: selectedAdminForTakeover })
+            .eq('id', selectedChatSession.id);
+            
+        if (error) throw error;
+        
+        alert("Chat diambil alih!");
+        setSelectedChatSession(null); // Close modal or refresh
+    } catch (err) {
+        alert("Gagal mengambil alih chat");
+    }
+};
 
   // ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
   useEffect(() => {
@@ -336,15 +399,11 @@ export default function AdminMarketingDashboard() {
           filter: `session_id=eq.${activeSession}`
         },
         (payload) => {
-          // ✅ GUNAKAN chatMessages, BUKAN messages
           setChatMessages((prev: any) => [...prev, payload.new])
-          
-          // HAPUS ATAU COMMENT BARIS INI KARENA FUNGSI BELUM ADA
-          // countUnreadMessages() 
         }
       )
       .subscribe()
-  
+    
     return () => {
       supabase.removeChannel(channel)
     }
@@ -352,8 +411,25 @@ export default function AdminMarketingDashboard() {
   
   // Load chat messages untuk admin
   const loadAdminChatMessages = async (sessionId: string) => {
-    // Fetch messages
-    // Setup realtime
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      
+      const { data, error } = await supabase
+        .from('chat_messages')
+       .select(`
+          *,
+          sender_profile:profiles!sender_id(full_name),
+          admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        `)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+      
+      if (error) throw error
+      setChatMessages(data || [])
+    } catch (err) {
+      console.error("Error loading messages:", err)
+    }
   }
 
   const getAdminDisplayName = (session: any) => {
@@ -1821,8 +1897,9 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                             
                             {/* ✅ Chat Button - AKTIF UNTUK REQUESTED, ACCEPTED, DECLINED, DEAL */}
                             <Button
-                              size="sm"
-                              onClick={() => openNoteModal(item.items[0])}
+                              size="sm" 
+                              onClick={() => handleOpenChatForRequest(item)} // Ganti fungsi di sini
+                              className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700"
                               disabled={
                                 item.status !== 'requested' && 
                                 item.status !== 'accepted' && 
