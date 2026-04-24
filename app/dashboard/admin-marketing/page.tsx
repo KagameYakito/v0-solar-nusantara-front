@@ -541,22 +541,22 @@ const openEditProfileModal = () => {
   setShowProfileModal(true)
 }
 
-const fetchChatMessages = async (sessionId: string) => {
+const fetchChatMessages = async (requestId: string) => {
   try {
     const { data, error } = await supabase
       .from('chat_messages')
-     .select(`
+      .select(`
         *,
         sender_profile:profiles!sender_id(full_name),
         admin_profile:admin_marketing_profiles!admin_id(admin_name)
       `)
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
-    
-    if (error) throw error
-    setChatMessages(data || [])
+      .eq('session_id', `rfq-${requestId}`)
+      .order('created_at', { ascending: true });
+      
+    if (error) throw error;
+    setChatMessages(data || []);
   } catch (err) {
-    console.error("Error fetching chat messages:", err)
+    console.error("Error fetching chat messages:", err);
   }
 }
 
@@ -585,16 +585,31 @@ const sendChatMessage = async (sessionId: string, message: string) => {
   }
 }
 
-  const openChatWithClient = (item: any) => {
-    // Get the request_id from the item
-    const requestId = item.request_id;
-    
-    // Set the active session (this will trigger the chat UI to appear)
-    setActiveSession(`rfq-${requestId}`);
-    
-    // Load messages for this RFQ (you'll need to implement the fetch logic)
-    fetchChatMessages(requestId);
-  };
+const openChatWithClient = (item: any) => {
+  console.log("Opening chat for item:", item);
+  
+  // Get the request_id from the item
+  const requestId = item.request_id;
+  
+  if (!requestId) {
+    alert("❌ Item ini tidak memiliki request_id");
+    return;
+  }
+  
+  // Set the active session 
+  setActiveSession(`rfq-${requestId}`);
+  
+  // Load messages for this RFQ
+  fetchChatMessages(requestId);
+  
+  // Scroll to chat section
+  setTimeout(() => {
+    const chatSection = document.getElementById('chat-interface-section');
+    if (chatSection) {
+      chatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
+}
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -2876,52 +2891,62 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
 
       {/* Chat Interface Section */}
       {activeSession && (
-        <div className="mt-6 bg-slate-900 rounded-lg p-4 border border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-white">
-              Chat untuk RFQ: {activeSession}
-            </h3>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setActiveSession(null)}
-            >
-              Tutup
-            </Button>
-          </div>
-          
-          {/* Chat Messages Area */}
-          <div className="bg-slate-800 p-4 rounded h-64 overflow-y-auto mb-4">
-            {/* Render messages here */}
-            {chatMessages.length === 0 ? (
-              <p className="text-slate-400 text-center mt-10">
-                Belum ada pesan untuk RFQ ini
-              </p>
-            ) : (
-              chatMessages.map((msg: any) => (
-                <div key={msg.id} className="mb-2">
-                  <span className="text-slate-300">{msg.sender_name}: </span>
-                  <span className="text-white">{msg.message}</span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Chat Input Area */}
-          <div className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="Ketik pesan..." 
-              className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-            />
-            <Button onClick={() => sendChatMessage(activeSession, chatInput)}>
-              Kirim
-            </Button>
-          </div>
+      <div id="chat-interface-section" className="mt-6 bg-slate-900 rounded-lg p-4 border border-slate-800">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-white">
+            Chat untuk RFQ: {activeSession}
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setActiveSession(null);
+              setChatMessages([]);
+            }}
+          >
+            Tutup
+          </Button>
         </div>
-      )}
+        
+        {/* Chat Messages Area */}
+        <div className="bg-slate-800 p-4 rounded h-64 overflow-y-auto mb-4">
+          {chatMessages.length === 0 ? (
+            <p className="text-slate-400 text-center mt-10">
+              Belum ada pesan untuk RFQ ini
+            </p>
+          ) : (
+            chatMessages.map((msg: any) => (
+              <div key={msg.id} className="mb-2">
+                <span className="text-slate-300">{msg.sender_profile?.full_name || 'Unknown'}: </span>
+                <span className="text-white">{msg.message}</span>
+              </div>
+            ))
+          )}
+        </div>
+        
+        {/* Chat Input Area */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Ketik pesan..."
+            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                sendChatMessage(activeSession, chatInput);
+              }
+            }}
+          />
+          <Button 
+            onClick={() => sendChatMessage(activeSession, chatInput)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            Kirim
+          </Button>
+        </div>
+      </div>
+    )}
 
       {/* ✅ MODAL CHAT KE CLIENT - ADDED AT END */}
       {showNoteModal && (
