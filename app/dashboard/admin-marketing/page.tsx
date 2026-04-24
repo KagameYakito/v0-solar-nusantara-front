@@ -428,23 +428,23 @@ const handleOpenChatForRequest = (request: any) => {
   // Load chat messages untuk admin
   const loadAdminChatMessages = async (sessionId: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       
       const { data, error } = await supabase
         .from('chat_messages')
-       .select(`
+        .select(`
           *,
           sender_profile:profiles!sender_id(full_name),
           admin_profile:admin_marketing_profiles!admin_id(admin_name)
         `)
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: true })
+        .eq('session_id', sessionId)  // ✅ Gunakan UUID, bukan request_id
+        .order('created_at', { ascending: true });
       
-      if (error) throw error
-      setChatMessages(data || [])
+      if (error) throw error;
+      setChatMessages(data || []);
     } catch (err) {
-      console.error("Error loading messages:", err)
+      console.error("Error loading messages:", err);
     }
   }
 
@@ -611,28 +611,34 @@ const openChatWithClient = async (item: any) => {
     return;
   }
 
-  // ✅ CARI session_id dari database chat_sessions
-  const { data: chatSession, error } = await supabase
-    .from('chat_sessions')
-    .select('id')
-    .eq('request_id', requestId)
-    .single();
+  try {
+    // 1. Cari session_id (UUID) dari chat_sessions berdasarkan request_id
+    const { data: chatSession, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('request_id', requestId)
+      .single();
+    
+    if (sessionError || !chatSession) {
+      console.error("Chat session not found:", sessionError);
+      return alert("❌ Sesi chat tidak ditemukan. Pastikan user sudah mengirim pesan terlebih dahulu.");
+    }
 
-  if (error || !chatSession) {
-    alert("❌ Chat session tidak ditemukan");
-    return;
+    // 2. Gunakan UUID yang benar (bukan string/angka)
+    const sessionUUID = chatSession.id;
+    setActiveSession(sessionUUID);
+    setSelectedClient(item);
+    
+    // 3. Load messages menggunakan UUID
+    await loadAdminChatMessages(sessionUUID);
+    
+    // 4. Setup realtime subscription
+    setupChatRealtimeSubscription(sessionUUID);
+    
+  } catch (err) {
+    console.error("Error opening chat:", err);
+    alert("❌ Gagal membuka chat. Silakan coba lagi.");
   }
-
-  // ✅ GUNAKAN session_id yang sama dengan user
-  const sessionId = chatSession.id;
-  setActiveSession(sessionId);
-  setSelectedClient(item);
-  
-  // Load messages
-  await loadAdminChatMessages(sessionId);
-  
-  // Setup realtime subscription
-  setupChatRealtimeSubscription(sessionId);
 }
 
 // Tambahkan fungsi realtime subscription
