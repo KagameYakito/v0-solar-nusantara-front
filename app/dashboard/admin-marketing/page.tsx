@@ -8,7 +8,7 @@ import {
   Package, ArrowLeft, AlertCircle, Loader2, Edit2, X, Check, Gavel, 
   MessageSquare, Clock, DollarSign, TrendingUp, FileText, Timer, Eye, 
   EyeOff, Image as ImageIcon, Upload, Trash2, Save, Search, Bookmark, 
-  CheckCircle2, CheckCircle, XCircle, Hourglass, CreditCard, FileCheck, Lock, Plus
+  CheckCircle2, CheckCircle, XCircle, Hourglass, CreditCard, FileCheck, Lock, Plus, Circle, CircleDot
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -320,22 +320,37 @@ export default function AdminMarketingDashboard() {
 
   const loadMessagesForAdmin = async (sessionId: string) => {
     try {
-        const { data, error } = await supabase
-            .from('chat_messages')
-            .select(`
-                *,
-                sender_profile:profiles!sender_id(full_name),
-                admin_profile:admin_marketing_profiles!admin_id(admin_name)
-            `)
-            .eq('session_id', sessionId)
-            .order('created_at', { ascending: true });
-
-        if (error) throw error;
-        setChatMessages(data || []);
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select(`
+        *,
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        `)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+        
+      if (error) throw error
+      
+      // ✅ PERBAIKAN TIPE: Casting ke any[] agar tidak error ParserError
+      const messages = (data as any[]) || []
+      setChatMessages(messages)
+      
+      // Fitur Auto Read: Tandai pesan dari user sebagai terbaca
+      const unreadUserMessages = messages.filter(m => m.sender_type === 'user' && !m.is_read)
+      if (unreadUserMessages.length > 0) {
+        await supabase
+          .from('chat_messages')
+          .update({ is_read: true })
+          .in('id', unreadUserMessages.map(m => m.id))
+      }
     } catch (err) {
-        console.error("Error loading messages:", err);
+      console.error("Error fetching chat messages:", err)
     }
-  };
+  }
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !activeSession) return
@@ -541,70 +556,95 @@ const openEditProfileModal = () => {
   setShowProfileModal(true)
 }
 
-const fetchChatMessages = async (requestId: string) => {
+// Ganti fungsi fetchChatMessages yang lama dengan ini:
+const fetchChatMessages = async (sessionId: string) => {
   try {
     const { data, error } = await supabase
       .from('chat_messages')
       .select(`
         *,
         sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
-      `)
-      .eq('session_id', `rfq-${requestId}`)
+        admin_profile:admin_marketing_profiles!sender_id(admin_name)
+      `)  // ← Hapus comment di dalam string
+      .eq('session_id', sessionId)
       .order('created_at', { ascending: true });
-      
+
     if (error) throw error;
     setChatMessages(data || []);
+
+    // FITUR AUTO READ: Tandai pesan dari user sebagai terbaca
+    const unreadUserMessages = data?.filter(m => m.sender_type === 'user' && !m.is_read) || [];
+    if (unreadUserMessages.length > 0) {
+      await supabase
+        .from('chat_messages')
+        .update({ is_read: true })
+        .in('id', unreadUserMessages.map(m => m.id));
+    }
   } catch (err) {
     console.error("Error fetching chat messages:", err);
   }
-}
+};
 
+// Ganti fungsi sendChatMessage yang lama dengan ini:
 const sendChatMessage = async (sessionId: string, message: string) => {
-  if (!message.trim()) return
-  
+  if (!message.trim()) return;
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
     const { error } = await supabase.rpc('send_chat_message', {
-      p_session_id: sessionId,
+      p_session_id: sessionId, // Kirim UUID
       p_sender_id: session.user.id,
       p_message: message.trim(),
       p_sender_type: 'admin'
-    })
+    });
+
+    if (error) throw error;
+
+    setChatInput('');
+    // Refresh pesan agar pesan baru muncul langsung
+    await fetchChatMessages(sessionId);
     
-    if (error) throw error
-    
-    // Clear input dan refresh messages
-    setChatInput('')
-    await fetchChatMessages(sessionId)
   } catch (err) {
-    console.error("Error sending message:", err)
-    alert("Gagal mengirim pesan")
+    console.error("Error sending message:", err);
+    alert("Gagal mengirim pesan: " + (err as Error).message);
   }
-}
+};
 
 // Perbaiki fungsi openChatWithClient
-const openChatWithClient = (item: any) => {
-  console.log("Opening chat for item:", item);
+const openChatWithClient = async (item: any) => {
   const requestId = item.request_id;
-  if (!requestId) {
-    alert("❌ Item ini tidak memiliki request_id");
-    return;
+  if (!requestId) return alert("❌ Item ini tidak memiliki request_id");
+
+  try {
+    // 1. Cari session_id (UUID) yang sesuai dengan request_id di tabel chat_sessions
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('request_id', requestId)
+      .single();
+
+    if (sessionError || !sessionData) {
+      console.error("Chat session not found:", sessionError);
+      return alert("❌ Sesi chat tidak ditemukan. Pastikan user sudah mengirim pesan terlebih dahulu.");
+    }
+
+    const sessionUUID = sessionData.id;
+
+    // 2. Set activeSession menggunakan UUID yang benar
+    setActiveSession(sessionUUID);
+    setSelectedClient(item);
+
+    // 3. Load messages menggunakan UUID
+    await fetchChatMessages(sessionUUID);
+
+    // 4. Setup realtime subscription
+    setupChatRealtimeSubscription(sessionUUID);
+    
+  } catch (err) {
+    console.error("Error opening chat:", err);
   }
-  
-  // Set session ID dengan format yang benar
-  const sessionId = `rfq-${requestId}`;
-  setActiveSession(sessionId);
-  setSelectedClient(item);
-  
-  // Load messages
-  fetchChatMessages(requestId);
-  
-  // Setup realtime subscription untuk session ini
-  setupChatRealtimeSubscription(sessionId);
-}
+};
 
 // Tambahkan fungsi realtime subscription
 const setupChatRealtimeSubscription = (sessionId: string) => {
@@ -2964,9 +3004,54 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                 const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type
                 
                 // Tentukan nama pengirim
-                const senderName = isAdmin 
-                  ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
-                  : (msg.sender_profile?.full_name || 'User')
+                {chatMessages.map((msg: any, index: number) => {
+                  const isAdmin = msg.sender_type === 'admin';
+                  const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type;
+                  
+                  // ✅ SOLUSI FINAL: Inline conditional dengan fallback aman
+                  const senderName = isAdmin 
+                    ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
+                    : (msg.sender_profile?.full_name || 'User');
+                
+                  return (
+                    <div
+                      key={msg.id || index}
+                      className={`flex ${isAdmin ? 'justify-start' : 'justify-end'} ${
+                        isSameSender ? 'mt-1' : 'mt-4'
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[70%] ${
+                          isAdmin
+                            ? 'bg-slate-800 border border-slate-700 text-slate-100'
+                            : 'bg-blue-600 text-white'
+                        } rounded-2xl px-4 py-3 shadow-sm ${
+                          isAdmin ? 'rounded-tl-none' : 'rounded-tr-none'
+                        }`}
+                      >
+                        {/* ✅ TAMPILKAN NAMA HANYA JIKA PENGIRIM BERGANTI */}
+                        {!isSameSender && (
+                          <p className={`text-xs font-semibold mb-1 ${
+                            isAdmin ? 'text-blue-400' : 'text-blue-200'
+                          }`}>
+                            {senderName}
+                          </p>
+                        )}
+                        
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {msg.message}
+                        </p>
+                        
+                        <p className="text-xs text-right mt-2 opacity-60">
+                          {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               
                 return (
                   <div
@@ -2986,10 +3071,10 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                     >
                       {/* Tampilkan Nama Pengirim jika berganti */}
                       {!isSameSender && (
-                        <p className={`text-xs font-semibold mb-1 ${
-                          isAdmin ? 'text-blue-400' : 'text-blue-200'
-                        }`}>
-                          {senderName}
+                        <p className={`text-xs font-semibold mb-1 ${isAdmin ? 'text-blue-400' : 'text-blue-200'}`}>
+                          {isAdmin 
+                            ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
+                            : (msg.sender_profile?.full_name || 'User')}
                         </p>
                       )}
                       
