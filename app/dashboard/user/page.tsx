@@ -731,6 +731,31 @@ const loadMessages = useCallback(async (sessionId: string) => {
   }
 }, [])
 
+// ✅ TAMBAHKAN useEffect INI untuk restore chat session setelah refresh
+useEffect(() => {
+  const restoreChatSession = async () => {
+    // Cek apakah ada activeSession tersimpan di localStorage
+    const savedSessionId = localStorage.getItem('activeChatSession')
+    if (savedSessionId && activeTab === 'chat') {
+      console.log('🔵 [RESTORE] Restoring chat session:', savedSessionId)
+      setActiveSession(savedSessionId)
+      await loadMessages(savedSessionId)
+      await fetchChatSessions()
+    }
+  }
+  
+  restoreChatSession()
+}, [activeTab]) // Jalankan saat tab chat aktif
+
+// ✅ SIMPAN activeSession ke localStorage setiap kali berubah
+useEffect(() => {
+  if (activeSession) {
+    localStorage.setItem('activeChatSession', activeSession)
+  } else {
+    localStorage.removeItem('activeChatSession')
+  }
+}, [activeSession])
+
 // Fungsi untuk mendapatkan nama admin
 const getAdminDisplayName = (messages: any[]) => {
   console.log('🔵 [ADMIN] getAdminDisplayName called, messages:', messages)
