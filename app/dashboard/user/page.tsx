@@ -283,23 +283,46 @@ export default function UserDashboard() {
     
     try {
       setSendingMessage(true)
-      const { data: { session } } = await supabase.auth.getSession()  // ✅ PERBAIKI DESTRUCTURING
+      const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
   
+      // ✅ TAMBAHKAN PESAN KE STATE LOKAL SEBELUM KIRIM
+      const optimisticMessage = {
+        id: Date.now(), // Temporary ID
+        session_id: activeSession,
+        sender_id: session.user.id,
+        sender_type: 'user',
+        message: newMessage.trim(),
+        created_at: new Date().toISOString(),
+        read_by_user: true
+      }
+      
+      setMessages(prev => [...prev, optimisticMessage])
+      
+      // Clear input immediately
+      const messageToSend = newMessage.trim()
+      setNewMessage('')
+  
+      // Kirim ke database
       const { error } = await supabase.rpc('send_chat_message', {
         p_session_id: activeSession,
         p_sender_id: session.user.id,
-        p_message: newMessage.trim(),
+        p_message: messageToSend,
         p_sender_type: 'user'
       })
-  
+      
       if (error) throw error
-  
-      setNewMessage('')
+      
+      // Refresh messages dari database untuk dapat ID yang benar
       await loadMessages(activeSession)
       
     } catch (err: any) {
+      console.error("Failed to send message:", err)
       alert("❌ Gagal mengirim pesan: " + err.message)
+      // Reload messages untuk rollback jika gagal
+      if (activeSession) {
+        await loadMessages(activeSession)
+      }
     } finally {
       setSendingMessage(false)
     }
