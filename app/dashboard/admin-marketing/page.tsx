@@ -564,52 +564,42 @@ const fetchChatMessages = async (sessionId: string) => {
       .select(`
         *,
         sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!sender_id(admin_name)
-      `)  // ← Hapus comment di dalam string
-      .eq('session_id', sessionId)
+        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+      `)
+      .eq('session_id', sessionId)  // ✅ Gunakan session_id, bukan request_id
       .order('created_at', { ascending: true });
-
+      
     if (error) throw error;
     setChatMessages(data || []);
-
-    // FITUR AUTO READ: Tandai pesan dari user sebagai terbaca
-    const unreadUserMessages = data?.filter(m => m.sender_type === 'user' && !m.is_read) || [];
-    if (unreadUserMessages.length > 0) {
-      await supabase
-        .from('chat_messages')
-        .update({ is_read: true })
-        .in('id', unreadUserMessages.map(m => m.id));
-    }
   } catch (err) {
     console.error("Error fetching chat messages:", err);
   }
-};
+}
 
 // Ganti fungsi sendChatMessage yang lama dengan ini:
 const sendChatMessage = async (sessionId: string, message: string) => {
-  if (!message.trim()) return;
+  if (!message.trim()) return
+  
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
     const { error } = await supabase.rpc('send_chat_message', {
-      p_session_id: sessionId, // Kirim UUID
+      p_session_id: sessionId,  // ✅ session_id dari database
       p_sender_id: session.user.id,
       p_message: message.trim(),
       p_sender_type: 'admin'
-    });
-
-    if (error) throw error;
-
-    setChatInput('');
-    // Refresh pesan agar pesan baru muncul langsung
-    await fetchChatMessages(sessionId);
+    })
     
+    if (error) throw error
+    
+    setChatInput('')
+    await fetchChatMessages(sessionId)  // ✅ Refresh messages
   } catch (err) {
-    console.error("Error sending message:", err);
-    alert("Gagal mengirim pesan: " + (err as Error).message);
+    console.error("Error sending message:", err)
+    alert("Gagal mengirim pesan")
   }
-};
+}
 
 // Perbaiki fungsi openChatWithClient
 const openChatWithClient = async (item: any) => {
@@ -617,51 +607,33 @@ const openChatWithClient = async (item: any) => {
   const requestId = item.request_id;
   
   if (!requestId) {
-  alert("❌ Item ini tidak memiliki request_id");
-  return;
+    alert("❌ Item ini tidak memiliki request_id");
+    return;
   }
-  
-  try {
-  // Set session ID dengan format yang benar
-  const sessionId = `rfq-${requestId}`;
-  
-  // ✅ LANGSUNG BUKA CHAT TANPA VALIDASI
-  // Load messages (kalau ada)
-  await fetchChatMessages(requestId);
-  
-  // Set active session
+
+  // ✅ CARI session_id dari database chat_sessions
+  const { data: chatSession, error } = await supabase
+    .from('chat_sessions')
+    .select('id')
+    .eq('request_id', requestId)
+    .single();
+
+  if (error || !chatSession) {
+    alert("❌ Chat session tidak ditemukan");
+    return;
+  }
+
+  // ✅ GUNAKAN session_id yang sama dengan user
+  const sessionId = chatSession.id;
   setActiveSession(sessionId);
   setSelectedClient(item);
   
+  // Load messages
+  await loadAdminChatMessages(sessionId);
+  
   // Setup realtime subscription
   setupChatRealtimeSubscription(sessionId);
-  
-  // ✅ OPSIONAL: Jika chat session belum ada, buat otomatis
-  const { data: existingSession } = await supabase
-  .from('chat_sessions')
-  .select('id')
-  .eq('session_id', sessionId)
-  .single();
-  
-  if (!existingSession) {
-  // Buat chat session baru jika belum ada
-  await supabase
-  .from('chat_sessions')
-  .insert({
-  session_id: sessionId,
-  request_id: requestId,
-  user_id: item.user_id,
-  admin_id: adminProfile?.admin_id, // ID admin yang sedang login
-  status: 'active',
-  created_at: new Date().toISOString()
-  });
-  }
-  
-  } catch (err) {
-  console.error("Error opening chat:", err);
-  alert("❌ Gagal membuka chat. Silakan coba lagi.");
-  }
-  }
+}
 
 // Tambahkan fungsi realtime subscription
 const setupChatRealtimeSubscription = (sessionId: string) => {
@@ -673,7 +645,7 @@ const setupChatRealtimeSubscription = (sessionId: string) => {
         event: 'INSERT',
         schema: 'public',
         table: 'chat_messages',
-        filter: `session_id=eq.${sessionId}`
+        filter: `session_id=eq.${sessionId}`  // ✅ Filter by session_id
       },
       (payload) => {
         console.log('🔵 New message received:', payload.new);
