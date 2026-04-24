@@ -2936,8 +2936,14 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
             ) : (
               chatMessages.map((msg: any, index: number) => {
                 const isAdmin = msg.sender_type === 'admin'
+                const isUser = msg.sender_type === 'user'
                 const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type
                 
+                // Tentukan nama pengirim
+                const senderName = isAdmin 
+                  ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
+                  : (msg.sender_profile?.full_name || 'User')
+              
                 return (
                   <div
                     key={msg.id || index}
@@ -2948,21 +2954,26 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                     <div
                       className={`max-w-[70%] ${
                         isAdmin
-                          ? 'bg-slate-800 border border-slate-700'
-                          : 'bg-blue-600/20 border border-blue-600/30'
-                      } rounded-2xl px-4 py-3 ${
+                          ? 'bg-slate-800 border border-slate-700 text-slate-100'
+                          : 'bg-blue-600 text-white'
+                      } rounded-2xl px-4 py-3 shadow-sm ${
                         isAdmin ? 'rounded-tl-none' : 'rounded-tr-none'
                       }`}
                     >
+                      {/* Tampilkan Nama Pengirim jika berganti */}
                       {!isSameSender && (
                         <p className={`text-xs font-semibold mb-1 ${
-                          isAdmin ? 'text-blue-400' : 'text-blue-300'
+                          isAdmin ? 'text-blue-400' : 'text-blue-200'
                         }`}>
-                          {msg.admin_profile?.admin_name || msg.sender_profile?.full_name || 'Unknown'}
+                          {senderName}
                         </p>
                       )}
-                      <p className="text-white text-sm leading-relaxed">{msg.message}</p>
-                      <p className="text-xs text-slate-500 mt-2 text-right">
+                      
+                      {/* Isi Pesan */}
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                      
+                      {/* Footer: Waktu */}
+                      <p className="text-xs text-right mt-2 opacity-60">
                         {new Date(msg.created_at).toLocaleTimeString('id-ID', {
                           hour: '2-digit',
                           minute: '2-digit'

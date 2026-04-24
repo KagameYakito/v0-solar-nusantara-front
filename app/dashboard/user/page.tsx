@@ -13,7 +13,7 @@ import {
   User, Building2, Phone, MapPin, Mail, Calendar, CheckCircle, AlertCircle, Loader2, 
   Edit2, Save, X, Package, Gavel, History, FileText, ArrowLeft, ShoppingCart, Plus, 
   Trash2, Minus, ExternalLink, CheckSquare, Square, Image as ImageIcon, Eye, Clock, 
-  MessageSquare, Bookmark, CheckCircle2, XCircle, Lock, Check
+  MessageSquare, Bookmark, CheckCircle2, XCircle, Lock, Check, Circle, CircleDot
 } from 'lucide-react'
 import { useLanguage } from '@/lib/language-context'
 
@@ -566,10 +566,29 @@ useEffect(() => {
       (payload) => {
         setMessages(prev => [...prev, payload.new])
         countUnreadMessages()
+        // Auto-scroll ke pesan terbaru
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_id=eq.${activeSession}`
+      },
+      (payload) => {
+        // Update pesan yang sudah ada (misal: status read berubah)
+        setMessages(prev => 
+          prev.map(msg => msg.id === payload.new.id ? payload.new : msg)
+        )
       }
     )
     .subscribe()
-  
+    
   return () => {
     supabase.removeChannel(channel)
   }
@@ -1461,77 +1480,83 @@ const confirmSubmitRequest = async () => {
       return sum + (latestPrice * item.quantity)
     }, 0)
 
-    // ✅ 3. PANGGIL FUNCTION YANG AMAN (dengan locking)
+    // ✅ 3. GENERATE REQUEST ID DENGAN LOCKING (Pakai RPC Safe)
     const { data: generatedId, error: idError } = await supabase
-  .rpc('get_next_request_id_safe', {
-    p_user_id: session.user.id
-  })
+    .rpc('get_next_request_id_safe', {
+      p_user_id: session.user.id
+    })
 
-    // ✅ BUAT VARIABEL 'let' BARU DARI HASIL RPC
+    // ✅ PAKAI 'let' AGAR BISA DI-REASSIGN JIKA COLLISION
     let finalRequestId = generatedId
 
     if (idError || !finalRequestId) {
-      console.error("Failed to generate request ID:", idError)
-      throw new Error("Gagal generate Request ID")
+    console.error("Failed to generate request ID:", idError)
+    throw new Error("Gagal generate Request ID. Pastikan SQL Script sudah dijalankan.")
     }
 
-    console.log("✅ Request ID:", finalRequestId, "untuk user:", session.user.id)
+    console.log("✅ Request ID awal:", finalRequestId, "untuk user:", session.user.id)
 
-    // ✅ 4. DOUBLE CHECK - Pastikan tidak ada user lain yang pakai ID ini
+    // ✅ 4. DOUBLE CHECK - Pastikan tidak ada user LAIN yang sudah pakai ID ini
     const { data: collisionCheck } = await supabase
-      .from('wishlists')
-      .select('user_id')
-      .eq('request_id', finalRequestId)
-      .neq('user_id', session.user.id)
-      .limit(1)
-      .maybeSingle()
+    .from('wishlists')
+    .select('user_id')
+    .eq('request_id', finalRequestId)
+    .neq('user_id', session.user.id)  // Exclude user sendiri
+    .limit(1)
+    .maybeSingle()
 
     if (collisionCheck) {
-      // Ada collision! Generate ID baru lagi
-      console.warn("⚠️ Collision detected! Retrying...")
-      const { data: retryId } = await supabase
-        .rpc('get_next_request_id_safe', {
-          p_user_id: session.user.id
-        })
-      
-      // ✅ INI YANG ERROR SEBELUMNYA. SEKARANG AMAN KARENA PAKAI 'let'
-      finalRequestId = retryId 
+    // ⚠️ Collision terdeteksi! Generate ID baru
+    console.warn("⚠️ Collision detected untuk ID:", finalRequestId, "- Retrying...")
+
+    const { data: retryId, error: retryError } = await supabase
+      .rpc('get_next_request_id_safe', {
+        p_user_id: session.user.id
+      })
+
+    if (retryError || !retryId) {
+      throw new Error("Gagal retry generate Request ID setelah collision")
     }
 
-    // ✅ 5. UPDATE WISHLISTS (Gunakan finalRequestId)
+    // ✅ Reassign ke variabel 'let' - INI YANG AMAN
+    finalRequestId = retryId
+    console.log("✅ Request ID setelah retry:", finalRequestId)
+    }
+
+    // ✅ 5. UPDATE WISHLISTS - PASTIKAN PAKAI finalRequestId
     const { error: updateError } = await supabase
-      .from('wishlists')
-      .update({
-        status: 'requested',
-        request_id: finalRequestId, // <-- PASTIKAN INI
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', session.user.id)
-      .in('product_id', Array.from(selectedItems))
+    .from('wishlists')
+    .update({
+      status: 'requested',
+      request_id: finalRequestId,  // <-- WAJIB: finalRequestId
+      updated_at: new Date().toISOString()
+    })
+    .eq('user_id', session.user.id)
+    .in('product_id', Array.from(selectedItems))
 
     if (updateError) throw updateError
 
-    // ✅ 6. Refresh & cleanup
+    // ✅ 6. Refresh UI & cleanup
     await fetchWishlist()
     setSelectedItems(new Set())
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    // ✅ 7. BUAT CHAT SESSION (Gunakan finalRequestId)
+    // ✅ 7. BUAT/UPDATE CHAT SESSION - PASTIKAN PAKAI finalRequestId
     const { data: existingChat } = await supabase
-      .from('chat_sessions')
-      .select('id')
-      .eq('request_id', finalRequestId) // <-- PASTIKAN INI
-      .single()
+    .from('chat_sessions')
+    .select('id')
+    .eq('request_id', finalRequestId)  // <-- WAJIB: finalRequestId
+    .single()
 
     if (!existingChat) {
-      await supabase.from('chat_sessions').insert({
-        user_id: session.user.id,
-        request_id: finalRequestId, // <-- PASTIKAN INI
-        session_name: `RFQ-${finalRequestId}`,
-        status: 'active',
-        created_at: new Date().toISOString()
-      })
+    await supabase.from('chat_sessions').insert({
+      user_id: session.user.id,
+      request_id: finalRequestId,      // <-- WAJIB: finalRequestId
+      session_name: `RFQ-${finalRequestId}`,  // <-- WAJIB: finalRequestId
+      status: 'active',
+      created_at: new Date().toISOString()
+    })
     }
 
     alert(`✅ Permintaan produk berhasil dikirim!
@@ -2692,27 +2717,59 @@ const confirmSubmitRequest = async () => {
                           messages.map((msg, index) => {
                             console.log(`🔵 [RENDER] Rendering message ${index}:`, msg)
                             const isUser = msg.sender_type === 'user'
+                            const isAdmin = msg.sender_type === 'admin'
+                            
+                            // Tentukan nama pengirim
+                            const senderName = isUser ? 'Anda' : (msg.admin_profile?.admin_name || 'Admin')
+                            
+                            // Status read icons
+                            const isRead = msg.is_read === true
+                            const readIcon = isRead ? (
+                              <CircleDot size={12} className="text-blue-200" />
+                            ) : (
+                              <Circle size={12} className="text-blue-300" />
+                            )
+                          
                             return (
                               <div
                                 key={msg.id}
                                 className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                               >
                                 <div
-                                  className={`max-w-[75%] rounded-lg p-3 ${
+                                  className={`max-w-[75%] rounded-2xl px-4 py-3 shadow-sm ${
                                     isUser
                                       ? 'bg-blue-600 text-white rounded-br-none'
                                       : 'bg-slate-700 text-slate-100 rounded-bl-none'
                                   }`}
                                 >
-                                  <p className="text-sm">{msg.message}</p>
-                                  <p className={`text-[10px] mt-1 ${
-                                    isUser ? 'text-blue-200' : 'text-slate-400'
-                                  }`}>
-                                    {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </p>
+                                  {/* Tampilkan Nama Admin jika bukan pesan sendiri */}
+                                  {isAdmin && (
+                                    <p className="text-[10px] font-bold text-blue-400 mb-1 uppercase tracking-wider">
+                                      {senderName}
+                                    </p>
+                                  )}
+                                  
+                                  {/* Isi Pesan */}
+                                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                                  
+                                  {/* Footer: Waktu & Status */}
+                                  <div className="flex items-center justify-end gap-1 mt-2">
+                                    <span className={`text-[10px] ${
+                                      isUser ? 'text-blue-200' : 'text-slate-400'
+                                    }`}>
+                                      {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </span>
+                                    
+                                    {/* Icon Status (Hanya untuk pesan User) */}
+                                    {isUser && (
+                                      <span className="text-xs">
+                                        {readIcon}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             )
