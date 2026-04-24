@@ -692,7 +692,7 @@ const loadMessages = useCallback(async (sessionId: string) => {
       .select(`
         *,
         sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        admin_profile:admin_marketing_profiles!sender_id(admin_name)
       `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
