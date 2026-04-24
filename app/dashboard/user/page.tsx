@@ -1462,24 +1462,26 @@ const confirmSubmitRequest = async () => {
     }, 0)
 
     // ✅ 3. PANGGIL FUNCTION YANG AMAN (dengan locking)
-    const { data: newRequestId, error: idError } = await supabase
-      .rpc('get_next_request_id_safe', { 
-        p_user_id: session.user.id 
-      })
+    const { data: generatedId, error: idError } = await supabase
+  .rpc('get_next_request_id_safe', {
+    p_user_id: session.user.id
+  })
 
-    if (idError || !newRequestId) {
+    // ✅ BUAT VARIABEL 'let' BARU DARI HASIL RPC
+    let finalRequestId = generatedId
+
+    if (idError || !finalRequestId) {
       console.error("Failed to generate request ID:", idError)
       throw new Error("Gagal generate Request ID")
     }
 
-    console.log("✅ Request ID:", newRequestId, "untuk user:", session.user.id)
+    console.log("✅ Request ID:", finalRequestId, "untuk user:", session.user.id)
 
     // ✅ 4. DOUBLE CHECK - Pastikan tidak ada user lain yang pakai ID ini
-    // (untuk berjaga-jaga jika ada race condition)
     const { data: collisionCheck } = await supabase
       .from('wishlists')
       .select('user_id')
-      .eq('request_id', newRequestId)
+      .eq('request_id', finalRequestId)
       .neq('user_id', session.user.id)
       .limit(1)
       .maybeSingle()
@@ -1488,18 +1490,20 @@ const confirmSubmitRequest = async () => {
       // Ada collision! Generate ID baru lagi
       console.warn("⚠️ Collision detected! Retrying...")
       const { data: retryId } = await supabase
-        .rpc('get_next_request_id_safe', { 
-          p_user_id: session.user.id 
+        .rpc('get_next_request_id_safe', {
+          p_user_id: session.user.id
         })
-      newRequestId = retryId
+      
+      // ✅ INI YANG ERROR SEBELUMNYA. SEKARANG AMAN KARENA PAKAI 'let'
+      finalRequestId = retryId 
     }
 
-    // ✅ 5. UPDATE WISHLISTS
+    // ✅ 5. UPDATE WISHLISTS (Gunakan finalRequestId)
     const { error: updateError } = await supabase
       .from('wishlists')
       .update({
         status: 'requested',
-        request_id: newRequestId,
+        request_id: finalRequestId, // <-- PASTIKAN INI
         updated_at: new Date().toISOString()
       })
       .eq('user_id', session.user.id)
@@ -1513,26 +1517,26 @@ const confirmSubmitRequest = async () => {
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    // ✅ 7. BUAT CHAT SESSION
+    // ✅ 7. BUAT CHAT SESSION (Gunakan finalRequestId)
     const { data: existingChat } = await supabase
       .from('chat_sessions')
       .select('id')
-      .eq('request_id', newRequestId)
+      .eq('request_id', finalRequestId) // <-- PASTIKAN INI
       .single()
 
     if (!existingChat) {
       await supabase.from('chat_sessions').insert({
         user_id: session.user.id,
-        request_id: newRequestId,
-        session_name: `RFQ-${newRequestId}`,
+        request_id: finalRequestId, // <-- PASTIKAN INI
+        session_name: `RFQ-${finalRequestId}`,
         status: 'active',
         created_at: new Date().toISOString()
       })
     }
 
     alert(`✅ Permintaan produk berhasil dikirim!
-RFQ ID: #${newRequestId}
-Tim kami akan segera memverifikasi.`)
+    RFQ ID: #${finalRequestId}
+    Tim kami akan segera memverifikasi.`)
 
   } catch (err: any) {
     console.error("Failed to submit request:", err)
