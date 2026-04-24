@@ -2889,64 +2889,123 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
         </div>
       )}
 
-      {/* Chat Interface Section */}
-      {activeSession && (
-      <div id="chat-interface-section" className="mt-6 bg-slate-900 rounded-lg p-4 border border-slate-800">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white">
-            Chat untuk RFQ: {activeSession}
-          </h3>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setActiveSession(null);
-              setChatMessages([]);
-            }}
-          >
-            Tutup
-          </Button>
-        </div>
-        
-        {/* Chat Messages Area */}
-        <div className="bg-slate-800 p-4 rounded h-64 overflow-y-auto mb-4">
-          {chatMessages.length === 0 ? (
-            <p className="text-slate-400 text-center mt-10">
-              Belum ada pesan untuk RFQ ini
-            </p>
-          ) : (
-            chatMessages.map((msg: any) => (
-              <div key={msg.id} className="mb-2">
-                <span className="text-slate-300">{msg.sender_profile?.full_name || 'Unknown'}: </span>
-                <span className="text-white">{msg.message}</span>
+      {/* ✅ MODAL CHAT ADMIN - POPUP LEBAR & RESPONSIVE */}
+      <Dialog open={!!activeSession} onOpenChange={(open) => {
+        if (!open) {
+          setActiveSession(null);
+          setChatMessages([]);
+        }
+      }}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl w-[90vw] h-[85vh] flex flex-col p-0 gap-0">
+          {/* HEADER MODAL */}
+          <DialogHeader className="px-6 py-4 border-b border-slate-700 bg-slate-800/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-600/20 p-2 rounded-lg">
+                  <MessageSquare className="h-5 w-5 text-blue-400" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold text-white">
+                    Chat dengan Client
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-slate-400">
+                    {activeSession?.startsWith('rfq-') ? `RFQ: ${activeSession.toUpperCase()}` : 'Session Chat'}
+                  </DialogDescription>
+                </div>
               </div>
-            ))
-          )}
-        </div>
-        
-        {/* Chat Input Area */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Ketik pesan..."
-            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                sendChatMessage(activeSession, chatInput);
-              }
-            }}
-          />
-          <Button 
-            onClick={() => sendChatMessage(activeSession, chatInput)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            Kirim
-          </Button>
-        </div>
-      </div>
-    )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setActiveSession(null);
+                  setChatMessages([]);
+                }}
+                className="text-slate-400 hover:text-white hover:bg-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </DialogHeader>
+
+          {/* CHAT MESSAGES - SCROLLABLE AREA */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-950">
+            {chatMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
+                <p className="text-lg font-medium">Belum ada pesan</p>
+                <p className="text-sm">Mulai percakapan dengan client</p>
+              </div>
+            ) : (
+              chatMessages.map((msg: any, index: number) => {
+                const isAdmin = msg.sender_type === 'admin'
+                const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type
+                
+                return (
+                  <div
+                    key={msg.id || index}
+                    className={`flex ${isAdmin ? 'justify-start' : 'justify-end'} ${
+                      isSameSender ? 'mt-1' : 'mt-4'
+                    }`}
+                  >
+                    <div
+                      className={`max-w-[70%] ${
+                        isAdmin
+                          ? 'bg-slate-800 border border-slate-700'
+                          : 'bg-blue-600/20 border border-blue-600/30'
+                      } rounded-2xl px-4 py-3 ${
+                        isAdmin ? 'rounded-tl-none' : 'rounded-tr-none'
+                      }`}
+                    >
+                      {!isSameSender && (
+                        <p className={`text-xs font-semibold mb-1 ${
+                          isAdmin ? 'text-blue-400' : 'text-blue-300'
+                        }`}>
+                          {msg.admin_profile?.admin_name || msg.sender_profile?.full_name || 'Unknown'}
+                        </p>
+                      )}
+                      <p className="text-white text-sm leading-relaxed">{msg.message}</p>
+                      <p className="text-xs text-slate-500 mt-2 text-right">
+                        {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+            {/* Dummy div untuk auto-scroll */}
+            <div ref={adminMessagesEndRef} />
+          </div>
+
+          {/* CHAT INPUT - FIXED AT BOTTOM */}
+          <div className="border-t border-slate-700 bg-slate-800/50 p-4">
+            <div className="flex gap-3">
+              <input
+                type="text"
+                placeholder="Ketik pesan..."
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && chatInput.trim()) {
+                    sendChatMessage(activeSession, chatInput);
+                  }
+                }}
+              />
+              <Button
+                onClick={() => chatInput.trim() && sendChatMessage(activeSession, chatInput)}
+                disabled={!chatInput.trim()}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed px-6"
+              >
+                Kirim
+                <MessageSquare className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ✅ MODAL CHAT KE CLIENT - ADDED AT END */}
       {showNoteModal && (
