@@ -2989,15 +2989,19 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyPress={(e) => {
-                  if (e.key === 'Enter' && chatInput.trim()) {
+                  if (e.key === 'Enter' && chatInput.trim() && activeSession) {
                     sendChatMessage(activeSession, chatInput);
                   }
                 }}
               />
               <Button
-                onClick={() => chatInput.trim() && sendChatMessage(activeSession, chatInput)}
-                disabled={!chatInput.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed px-6"
+                onClick={() => {
+                  if (chatInput.trim() && activeSession) {  // ✅ Tambah check activeSession
+                    sendChatMessage(activeSession, chatInput);
+                  }
+                }}
+                disabled={!chatInput.trim() || !activeSession}  // ✅ Disable jika activeSession null
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed"
               >
                 Kirim
                 <MessageSquare className="h-4 w-4 ml-2" />
