@@ -283,19 +283,21 @@ export default function UserDashboard() {
     
     try {
       setSendingMessage(true)
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await supabase.auth.getSession()  // ✅ PERBAIKI DESTRUCTURING
       if (!session) return
-      
+  
       const { error } = await supabase.rpc('send_chat_message', {
         p_session_id: activeSession,
         p_sender_id: session.user.id,
         p_message: newMessage.trim(),
         p_sender_type: 'user'
       })
-      
+  
       if (error) throw error
+  
       setNewMessage('')
       await loadMessages(activeSession)
+      
     } catch (err: any) {
       alert("❌ Gagal mengirim pesan: " + err.message)
     } finally {
