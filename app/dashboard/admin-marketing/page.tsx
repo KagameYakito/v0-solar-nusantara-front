@@ -587,19 +587,14 @@ const sendChatMessage = async (sessionId: string, message: string) => {
 
 const openChatWithClient = (item: any) => {
   console.log("Opening chat for item:", item);
-  
-  // Get the request_id from the item
   const requestId = item.request_id;
-  
   if (!requestId) {
     alert("❌ Item ini tidak memiliki request_id");
     return;
   }
   
-  // Set the active session 
   setActiveSession(`rfq-${requestId}`);
-  
-  // Load messages for this RFQ
+  setSelectedClient(item); // ✅ TAMBAHKAN INI: Simpan data user
   fetchChatMessages(requestId);
   
   // Scroll to chat section
@@ -2894,6 +2889,7 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
         if (!open) {
           setActiveSession(null);
           setChatMessages([]);
+          setSelectedClient(null); // ✅ TAMBAHKAN INI: Bersihkan data user saat tutup
         }
       }}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl w-[90vw] h-[85vh] flex flex-col p-0 gap-0">
@@ -2906,10 +2902,12 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                 </div>
                 <div>
                   <DialogTitle className="text-lg font-bold text-white">
-                    Chat dengan Client
+                    {/* ✅ GANTI JUDUL MENJADI NAMA USER */}
+                    {selectedClient?.user_name || 'Client'}
                   </DialogTitle>
                   <DialogDescription className="text-sm text-slate-400">
-                    {activeSession?.startsWith('rfq-') ? `RFQ: ${activeSession.toUpperCase()}` : 'Session Chat'}
+                    {/* ✅ GANTI SUBTITLE HANYA ID RFQ (TANPA "RFQ: " DI DEPAN) */}
+                    {activeSession?.toUpperCase()} 
                   </DialogDescription>
                 </div>
               </div>
