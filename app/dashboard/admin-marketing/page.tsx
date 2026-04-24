@@ -585,6 +585,7 @@ const sendChatMessage = async (sessionId: string, message: string) => {
   }
 }
 
+// Perbaiki fungsi openChatWithClient
 const openChatWithClient = (item: any) => {
   console.log("Opening chat for item:", item);
   const requestId = item.request_id;
@@ -593,17 +594,40 @@ const openChatWithClient = (item: any) => {
     return;
   }
   
-  setActiveSession(`rfq-${requestId}`);
-  setSelectedClient(item); // ✅ TAMBAHKAN INI: Simpan data user
+  // Set session ID dengan format yang benar
+  const sessionId = `rfq-${requestId}`;
+  setActiveSession(sessionId);
+  setSelectedClient(item);
+  
+  // Load messages
   fetchChatMessages(requestId);
   
-  // Scroll to chat section
-  setTimeout(() => {
-    const chatSection = document.getElementById('chat-interface-section');
-    if (chatSection) {
-      chatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, 100);
+  // Setup realtime subscription untuk session ini
+  setupChatRealtimeSubscription(sessionId);
+}
+
+// Tambahkan fungsi realtime subscription
+const setupChatRealtimeSubscription = (sessionId: string) => {
+  const channel = supabase
+    .channel(`chat:${sessionId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_id=eq.${sessionId}`
+      },
+      (payload) => {
+        console.log('🔵 New message received:', payload.new);
+        setChatMessages((prev: any) => [...prev, payload.new]);
+      }
+    )
+    .subscribe();
+    
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
   const getStatusConfig = (status: string) => {
