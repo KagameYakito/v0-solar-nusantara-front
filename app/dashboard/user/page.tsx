@@ -1444,55 +1444,51 @@ const confirmSubmitRequest = async () => {
       return
     }
 
-    // ✅ 1. Get ONLY selected items from wishlist
+    // ✅ 1. Ambil item yang dipilih
     const selectedWishlistItems = wishlist.filter(
       (item) => selectedItems.has(item.product_id)
     )
 
-    // ✅ 2. Calculate totals
-    const productIds = selectedWishlistItems.map(item => item.product_id)
-    const { data: latestProducts } = await supabase
-      .from('products')
-      .select('id, harga')
-      .in('id', productIds)
-
-    const totalItems = selectedWishlistItems.length
-    const estimatedTotal = selectedWishlistItems.reduce((sum, item) => {
-      const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
-      return sum + (latestPrice * item.quantity)
-    }, 0)
-
-    // ✅ 3. CEK RFQ AKTIF (Logika Session Grouping)
-    // Kita cari request_id dimana statusnya MASIH HIDUP (requested/accepted)
+    // ✅ 2. CEK APAKAH USER SUDAH PUNYA RFQ AKTIF
+    // Status aktif: requested, pending, accepted (belum deal/rejected/cancelled)
     const { data: activeRFQ } = await supabase
       .from('wishlists')
       .select('request_id')
       .eq('user_id', session.user.id)
-      .in('status', ['requested', 'accepted']) // Status yang dianggap 'Sesi Aktif'
+      .in('status', ['requested', 'pending', 'accepted'])
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
 
     let newRequestId: number
 
-    if (activeRFQ && activeRFQ.request_id) {
-      // ✅ SKENARIO: User punya sesi aktif, kita sambungkan ke sini
+    if (activeRFQ?.request_id) {
+      // 🟢 SKENARIO: User punya RFQ aktif → TAMBAHKAN KE SESI SAMA
       newRequestId = activeRFQ.request_id
-      console.log("✅ Merge ke RFQ Session Aktif:", newRequestId)
+      console.log("✅ Merge ke RFQ Aktif:", newRequestId)
     } else {
-      // ✅ SKENARIO: User tidak punya sesi aktif, kita buat BARU dari Database
-      // Panggil RPC yang kita buat di SQL Editor tadi
-      const { data, error } = await supabase.rpc('get_next_request_id')
-      
-      if (error || !data) {
-        throw new Error("Gagal generate Request ID. Pastikan SQL Script sudah dijalankan.")
+      // 🟢 SKENARIO: Tidak ada RFQ aktif → BUAT ID BARU
+      const { data: maxData, error: maxError } = await supabase
+        .from('wishlists')
+        .select('request_id')
+        .not('request_id', 'is', null)
+        .order('request_id', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (maxError) {
+        console.warn("⚠️ Gagal cek max request_id, pakai fallback 60000000")
+        newRequestId = 60000000
+      } else if (maxData?.request_id) {
+        newRequestId = maxData.request_id + 1
+      } else {
+        // Request pertama di sistem
+        newRequestId = 60000000
       }
-      
-      newRequestId = data
-      console.log("✅ RFQ Session Baru Dibuat:", newRequestId)
+      console.log("✅ RFQ ID Baru Dibuat:", newRequestId)
     }
 
-    // ✅ 4. UPDATE WISHLISTS
+    // ✅ 3. UPDATE WISHLIST KE STATUS 'requested'
     const { error: updateError } = await supabase
       .from('wishlists')
       .update({
@@ -1505,16 +1501,13 @@ const confirmSubmitRequest = async () => {
 
     if (updateError) throw updateError
 
-    // ✅ 5. Refresh wishlist
+    // ✅ 4. REFRESH & CLEANUP UI
     await fetchWishlist()
-
-    // ✅ 6. Clear selection
     setSelectedItems(new Set())
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    // ✅ 7. BUAT/UPDATE CHAT SESSION
-    // Cek apakah chat session sudah ada untuk ID ini
+    // ✅ 5. BUAT CHAT SESSION (JIKA BELUM ADA)
     const { data: existingChat } = await supabase
       .from('chat_sessions')
       .select('id')
@@ -1522,7 +1515,6 @@ const confirmSubmitRequest = async () => {
       .single()
 
     if (!existingChat) {
-      // Jika belum ada, buat baru
       await supabase.from('chat_sessions').insert({
         user_id: session.user.id,
         request_id: newRequestId,
@@ -1533,8 +1525,8 @@ const confirmSubmitRequest = async () => {
     }
 
     alert(`✅ Permintaan produk berhasil dikirim!
-    RFQ ID: #${newRequestId}
-    Tim kami akan segera memverifikasi.`)
+RFQ ID: #${newRequestId}
+Tim kami akan segera memverifikasi.`)
 
   } catch (err: any) {
     console.error("Failed to submit request:", err)
