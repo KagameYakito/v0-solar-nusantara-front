@@ -672,65 +672,6 @@ useEffect(() => {
   }
 }, [activeTab, fetchChatSessions])
 
-// Fungsi untuk load messages
-const loadMessages = useCallback(async (sessionId: string) => {
-  console.log('🔵 [MESSAGES] loadMessages called with session ID:', sessionId)
-  
-  try {
-    setChatLoading(true)
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      console.error('🔴 [MESSAGES] No user session found')
-      return
-    }
-    
-    console.log('🔵 [MESSAGES] Fetching messages from database...')
-    
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select(`
-        *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!sender_id(admin_name)
-      `)
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
-    
-    console.log('🔵 [MESSAGES] Raw data:', data)
-    console.log('🔵 [MESSAGES] Error:', error)
-    
-    if (error) {
-      console.error('🔴 [MESSAGES] Query error:', error)
-      throw error
-    }
-    
-    const messagesCount = data?.length || 0
-    console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
-    
-    setMessages(data || [])
-    
-    // Mark as read
-    const unreadMessages = data?.filter(m => 
-      m.admin_id !== null && !m.read_by_user
-    ) || []
-    
-    console.log('🔵 [MESSAGES] Unread messages:', unreadMessages.length)
-    
-    if (unreadMessages.length > 0) {
-      await supabase
-        .from('chat_messages')
-        .update({ read_by_user: true })
-        .in('id', unreadMessages.map(m => m.id))
-    }
-    
-  } catch (err) {
-    console.error('🔴 [MESSAGES] Failed to load messages:', err)
-  } finally {
-    setChatLoading(false)
-  }
-}, [])
-
 // ✅ TAMBAHKAN useEffect INI untuk restore chat session setelah refresh
 useEffect(() => {
   const restoreChatSession = async () => {
@@ -755,6 +696,77 @@ useEffect(() => {
     localStorage.removeItem('activeChatSession')
   }
 }, [activeSession])
+
+// ✅ BACKUP messages ke localStorage
+useEffect(() => {
+  if (activeSession && messages.length > 0) {
+    localStorage.setItem(`chat_messages_${activeSession}`, JSON.stringify(messages))
+  }
+}, [messages, activeSession])
+
+// ✅ LOAD dari localStorage jika fetch dari DB gagal
+const loadMessages = useCallback(async (sessionId: string) => {
+  try {
+    setChatLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      console.error('🔴 [MESSAGES] No user session found')
+      return
+    }
+    
+    console.log('🔵 [MESSAGES] Fetching messages from database...')
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select(`
+        *,
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!sender_id(admin_name)
+      `)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+    
+    if (error) throw error
+    
+    const messagesCount = data?.length || 0
+    console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
+    
+    // Jika ada data dari DB, simpan ke localStorage
+    if (data && data.length > 0) {
+      setMessages(data)
+      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(data))
+    } else {
+      // Jika DB kosong, coba load dari localStorage
+      const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
+      if (savedMessages) {
+        console.log('🟡 [MESSAGES] Loading from localStorage backup')
+        setMessages(JSON.parse(savedMessages))
+      } else {
+        setMessages([])
+      }
+    }
+    
+    // Mark as read
+    const unreadMessages = data?.filter(m =>
+      m.admin_id !== null && !m.read_by_user
+    ) || []
+    
+    if (unreadMessages.length > 0) {
+      await supabase
+        .from('chat_messages')
+        .update({ read_by_user: true })
+        .in('id', unreadMessages.map(m => m.id))
+    }
+  } catch (err) {
+    console.error('🔴 [MESSAGES] Failed to load messages:', err)
+    // Fallback ke localStorage
+    const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
+    if (savedMessages) {
+      setMessages(JSON.parse(savedMessages))
+    }
+  } finally {
+    setChatLoading(false)
+  }
+}, [])
 
 // Fungsi untuk mendapatkan nama admin
 const getAdminDisplayName = (messages: any[]) => {
