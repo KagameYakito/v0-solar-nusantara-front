@@ -607,52 +607,60 @@ const openChatWithClient = async (item: any) => {
   const requestId = item.request_id;
   
   if (!requestId) {
-      alert("❌ Item ini tidak memiliki request_id");
-      return;
+    alert("❌ Item ini tidak memiliki request_id");
+    return;
   }
-
+  
   try {
-      // 1. CARI SESI CHAT ASLI (UUID) DI DATABASE
-      const { data: sessionData, error: sessionError } = await supabase
-          .from('chat_sessions')
-          .select('id')
-          .eq('request_id', requestId)
-          .single();
-
-      let sessionUUID = sessionData?.id;
-
-      // 2. JIKA BELUM ADA SESI (User belum chat), KITA BUAT BARU AGAR ADMIN BISA MULAI
-      if (!sessionUUID) {
-          console.log("⚠️ Session belum ada, membuat baru untuk Admin...");
-          const { data: newSession, error: createError } = await supabase
-              .from('chat_sessions')
-              .insert({
-                  request_id: requestId,
-                  user_id: item.user_id, // Ambil user_id dari item wishlist
-                  session_name: `RFQ-${requestId}`,
-                  status: 'active'
-              })
-              .select('id')
-              .single();
-          
-          if (createError || !newSession) {
-              alert("❌ Gagal membuka sesi chat");
-              return;
-          }
-          sessionUUID = newSession.id;
-      }
-
-      // 3. SET SESSION DENGAN UUID YANG BENAR
-      setActiveSession(sessionUUID);
-      setSelectedClient(item);
+    // 1. CARI session yang sudah ada di database
+    const { data: existingSession, error: fetchError } = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('request_id', requestId)
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+    
+    let sessionId;
+    
+    if (existingSession) {
+      // 2. Jika session sudah ada, gunakan ID tersebut
+      sessionId = existingSession.id;
+      console.log("✅ Menggunakan session yang sudah ada:", sessionId);
+    } else {
+      // 3. Jika belum ada, buat session baru
+      const { data: newSession, error: insertError } = await supabase
+        .from('chat_sessions')
+        .insert({
+          request_id: requestId,
+          user_id: item.user_id,
+          admin_id: adminProfile?.admin_id,
+          session_name: `RFQ-${requestId}`,
+          status: 'active'
+        })
+        .select('id')
+        .single();
       
-      // 4. LOAD PESAN & SUBSCRIBE
-      fetchChatMessages(sessionUUID);
-      setupChatRealtimeSubscription(sessionUUID);
-      
-  } catch (err) {
-      console.error("Error opening chat:", err);
-      alert("❌ Gagal membuka chat");
+      if (insertError) throw insertError;
+      sessionId = newSession.id;
+      console.log("✅ Session baru dibuat:", sessionId);
+    }
+    
+    // 4. Set active session dengan ID yang benar
+    setActiveSession(sessionId);
+    setSelectedClient(item);
+    
+    // 5. Load messages
+    await fetchChatMessages(requestId);
+    
+    // 6. Setup realtime subscription
+    setupChatRealtimeSubscription(sessionId);
+    
+  } catch (error: any) {
+    console.error("❌ Gagal membuka sesi chat:", error);
+    alert("❌ Gagal membuka sesi chat: " + error.message);
   }
 }
 
