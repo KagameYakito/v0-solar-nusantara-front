@@ -613,38 +613,55 @@ const sendChatMessage = async (sessionId: string, message: string) => {
 
 // Perbaiki fungsi openChatWithClient
 const openChatWithClient = async (item: any) => {
+  console.log("Opening chat for item:", item);
   const requestId = item.request_id;
-  if (!requestId) return alert("❌ Item ini tidak memiliki request_id");
-
-  try {
-    // 1. Cari session_id (UUID) yang sesuai dengan request_id di tabel chat_sessions
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('chat_sessions')
-      .select('id')
-      .eq('request_id', requestId)
-      .single();
-
-    if (sessionError || !sessionData) {
-      console.error("Chat session not found:", sessionError);
-      return alert("❌ Sesi chat tidak ditemukan. Pastikan user sudah mengirim pesan terlebih dahulu.");
-    }
-
-    const sessionUUID = sessionData.id;
-
-    // 2. Set activeSession menggunakan UUID yang benar
-    setActiveSession(sessionUUID);
-    setSelectedClient(item);
-
-    // 3. Load messages menggunakan UUID
-    await fetchChatMessages(sessionUUID);
-
-    // 4. Setup realtime subscription
-    setupChatRealtimeSubscription(sessionUUID);
-    
-  } catch (err) {
-    console.error("Error opening chat:", err);
+  
+  if (!requestId) {
+  alert("❌ Item ini tidak memiliki request_id");
+  return;
   }
-};
+  
+  try {
+  // Set session ID dengan format yang benar
+  const sessionId = `rfq-${requestId}`;
+  
+  // ✅ LANGSUNG BUKA CHAT TANPA VALIDASI
+  // Load messages (kalau ada)
+  await fetchChatMessages(requestId);
+  
+  // Set active session
+  setActiveSession(sessionId);
+  setSelectedClient(item);
+  
+  // Setup realtime subscription
+  setupChatRealtimeSubscription(sessionId);
+  
+  // ✅ OPSIONAL: Jika chat session belum ada, buat otomatis
+  const { data: existingSession } = await supabase
+  .from('chat_sessions')
+  .select('id')
+  .eq('session_id', sessionId)
+  .single();
+  
+  if (!existingSession) {
+  // Buat chat session baru jika belum ada
+  await supabase
+  .from('chat_sessions')
+  .insert({
+  session_id: sessionId,
+  request_id: requestId,
+  user_id: item.user_id,
+  admin_id: adminProfile?.admin_id, // ID admin yang sedang login
+  status: 'active',
+  created_at: new Date().toISOString()
+  });
+  }
+  
+  } catch (err) {
+  console.error("Error opening chat:", err);
+  alert("❌ Gagal membuka chat. Silakan coba lagi.");
+  }
+  }
 
 // Tambahkan fungsi realtime subscription
 const setupChatRealtimeSubscription = (sessionId: string) => {
