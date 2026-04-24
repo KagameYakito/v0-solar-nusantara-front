@@ -557,87 +557,102 @@ const openEditProfileModal = () => {
 }
 
 // Ganti fungsi fetchChatMessages yang lama dengan ini:
-const fetchChatMessages = async (sessionId: string) => {
+const fetchChatMessages = async (sessionUUID: string) => {
   try {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select(`
-        *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
-      `)
-      .eq('session_id', sessionId)  // ✅ Gunakan session_id, bukan request_id
-      .order('created_at', { ascending: true });
-      
-    if (error) throw error;
-    setChatMessages(data || []);
+      const { data, error } = await supabase
+          .from('chat_messages')
+          .select(`
+              *,
+              sender_profile:profiles!sender_id(full_name),
+              admin_profile:admin_marketing_profiles!admin_id(admin_name)
+          `)
+          .eq('session_id', sessionUUID) // ✅ PASTIKAN PAKAI UUID
+          .order('created_at', { ascending: true });
+          
+      if (error) throw error;
+      setChatMessages(data || []);
   } catch (err) {
-    console.error("Error fetching chat messages:", err);
+      console.error("Error fetching chat messages:", err);
   }
 }
 
 // Ganti fungsi sendChatMessage yang lama dengan ini:
-const sendChatMessage = async (sessionId: string, message: string) => {
-  if (!message.trim()) return
-  
+const sendChatMessage = async (sessionUUID: string, message: string) => {
+  if (!message.trim()) return;
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    
-    const { error } = await supabase.rpc('send_chat_message', {
-      p_session_id: sessionId,  // ✅ session_id dari database
-      p_sender_id: session.user.id,
-      p_message: message.trim(),
-      p_sender_type: 'admin'
-    })
-    
-    if (error) throw error
-    
-    setChatInput('')
-    await fetchChatMessages(sessionId)  // ✅ Refresh messages
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const { error } = await supabase.rpc('send_chat_message', {
+          p_session_id: sessionUUID, // ✅ KIRIM UUID YANG BENAR
+          p_sender_id: session.user.id,
+          p_message: message.trim(),
+          p_sender_type: 'admin'
+      });
+      
+      if (error) throw error;
+      
+      setChatInput('');
+      await fetchChatMessages(sessionUUID);
   } catch (err) {
-    console.error("Error sending message:", err)
-    alert("Gagal mengirim pesan")
+      console.error("Error sending message:", err);
+      alert("Gagal mengirim pesan");
   }
 }
 
 // Perbaiki fungsi openChatWithClient
+// GANTI fungsi openChatWithClient yang lama dengan ini
 const openChatWithClient = async (item: any) => {
   console.log("Opening chat for item:", item);
   const requestId = item.request_id;
   
   if (!requestId) {
-    alert("❌ Item ini tidak memiliki request_id");
-    return;
+      alert("❌ Item ini tidak memiliki request_id");
+      return;
   }
 
   try {
-    // 1. Cari session_id (UUID) dari chat_sessions berdasarkan request_id
-    const { data: chatSession, error: sessionError } = await supabase
-      .from('chat_sessions')
-      .select('id')
-      .eq('request_id', requestId)
-      .single();
-    
-    if (sessionError || !chatSession) {
-      console.error("Chat session not found:", sessionError);
-      return alert("❌ Sesi chat tidak ditemukan. Pastikan user sudah mengirim pesan terlebih dahulu.");
-    }
+      // 1. CARI SESI CHAT ASLI (UUID) DI DATABASE
+      const { data: sessionData, error: sessionError } = await supabase
+          .from('chat_sessions')
+          .select('id')
+          .eq('request_id', requestId)
+          .single();
 
-    // 2. Gunakan UUID yang benar (bukan string/angka)
-    const sessionUUID = chatSession.id;
-    setActiveSession(sessionUUID);
-    setSelectedClient(item);
-    
-    // 3. Load messages menggunakan UUID
-    await loadAdminChatMessages(sessionUUID);
-    
-    // 4. Setup realtime subscription
-    setupChatRealtimeSubscription(sessionUUID);
-    
+      let sessionUUID = sessionData?.id;
+
+      // 2. JIKA BELUM ADA SESI (User belum chat), KITA BUAT BARU AGAR ADMIN BISA MULAI
+      if (!sessionUUID) {
+          console.log("⚠️ Session belum ada, membuat baru untuk Admin...");
+          const { data: newSession, error: createError } = await supabase
+              .from('chat_sessions')
+              .insert({
+                  request_id: requestId,
+                  user_id: item.user_id, // Ambil user_id dari item wishlist
+                  session_name: `RFQ-${requestId}`,
+                  status: 'active'
+              })
+              .select('id')
+              .single();
+          
+          if (createError || !newSession) {
+              alert("❌ Gagal membuka sesi chat");
+              return;
+          }
+          sessionUUID = newSession.id;
+      }
+
+      // 3. SET SESSION DENGAN UUID YANG BENAR
+      setActiveSession(sessionUUID);
+      setSelectedClient(item);
+      
+      // 4. LOAD PESAN & SUBSCRIBE
+      fetchChatMessages(sessionUUID);
+      setupChatRealtimeSubscription(sessionUUID);
+      
   } catch (err) {
-    console.error("Error opening chat:", err);
-    alert("❌ Gagal membuka chat. Silakan coba lagi.");
+      console.error("Error opening chat:", err);
+      alert("❌ Gagal membuka chat");
   }
 }
 
