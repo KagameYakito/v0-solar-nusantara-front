@@ -1444,12 +1444,12 @@ const confirmSubmitRequest = async () => {
       return
     }
 
-    // ✅ 1. Get ONLY selected items from wishlist
+    // ✅ 1. Get selected items
     const selectedWishlistItems = wishlist.filter(
       (item) => selectedItems.has(item.product_id)
     )
 
-    // ✅ 2. Calculate totals dengan harga terbaru
+    // ✅ 2. Get harga terbaru
     const productIds = selectedWishlistItems.map(item => item.product_id)
     const { data: latestProducts } = await supabase
       .from('products')
@@ -1461,71 +1461,40 @@ const confirmSubmitRequest = async () => {
       return sum + (latestPrice * item.quantity)
     }, 0)
 
-    // ✅ 3. CEK RFQ AKTIF USER INI SAJA (Session Grouping)
-    const { data: activeRFQ } = await supabase
-      .from('wishlists')
-      .select('request_id')
-      .eq('user_id', session.user.id)  // ✅ PENTING: Filter by current user!
-      .in('status', ['requested', 'pending', 'accepted'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+    // ✅ 3. PANGGIL FUNCTION YANG AMAN (dengan locking)
+    const { data: newRequestId, error: idError } = await supabase
+      .rpc('get_next_request_id_safe', { 
+        p_user_id: session.user.id 
+      })
 
-    let newRequestId: number
-
-    if (activeRFQ?.request_id) {
-      // ✅ SKENARIO: User punya RFQ aktif → MERGE ke sesi yang sama
-      newRequestId = activeRFQ.request_id
-      console.log("✅ Merge ke RFQ Aktif User:", newRequestId, "User:", session.user.id)
-    } else {
-      // ✅ SKENARIO: User tidak punya RFQ aktif → GENERATE ID BARU
-      // CARA 1: Coba pakai MAX request_id dari database + 1
-      const { data: maxData, error: maxError } = await supabase
-        .from('wishlists')
-        .select('request_id')
-        .not('request_id', 'is', null)
-        .order('request_id', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (maxError) {
-        console.warn("⚠️ Gagal cek max request_id, pakai fallback 60000000")
-        newRequestId = 60000000
-      } else if (maxData?.request_id) {
-        newRequestId = maxData.request_id + 1
-        console.log("✅ Request ID Baru dari MAX+1:", newRequestId)
-      } else {
-        // Request pertama di sistem
-        newRequestId = 60000000
-        console.log("✅ Request ID Pertama:", newRequestId)
-      }
-
-      // ✅ VALIDASI: Pastikan request_id unik dan dalam range 60000000-69999999
-      if (newRequestId < 60000000 || newRequestId > 69999999) {
-        console.warn("⚠️ Request ID out of range, adjusting:", newRequestId)
-        newRequestId = 60000000 + (newRequestId % 10000000)
-      }
-
-      // ✅ DOUBLE CHECK: Pastikan ID ini belum dipakai user lain
-      const { data: existingCheck } = await supabase
-        .from('wishlists')
-        .select('request_id, user_id')
-        .eq('request_id', newRequestId)
-        .maybeSingle()
-
-      if (existingCheck && existingCheck.user_id !== session.user.id) {
-        // ID sudah dipakai user lain → increment lagi
-        console.warn("⚠️ Request ID collision detected! Incrementing...")
-        newRequestId = newRequestId + 1
-        
-        // Validasi ulang
-        if (newRequestId > 69999999) {
-          newRequestId = 60000000
-        }
-      }
+    if (idError || !newRequestId) {
+      console.error("Failed to generate request ID:", idError)
+      throw new Error("Gagal generate Request ID")
     }
 
-    // ✅ 4. UPDATE WISHLIST KE STATUS 'requested'
+    console.log("✅ Request ID:", newRequestId, "untuk user:", session.user.id)
+
+    // ✅ 4. DOUBLE CHECK - Pastikan tidak ada user lain yang pakai ID ini
+    // (untuk berjaga-jaga jika ada race condition)
+    const { data: collisionCheck } = await supabase
+      .from('wishlists')
+      .select('user_id')
+      .eq('request_id', newRequestId)
+      .neq('user_id', session.user.id)
+      .limit(1)
+      .maybeSingle()
+
+    if (collisionCheck) {
+      // Ada collision! Generate ID baru lagi
+      console.warn("⚠️ Collision detected! Retrying...")
+      const { data: retryId } = await supabase
+        .rpc('get_next_request_id_safe', { 
+          p_user_id: session.user.id 
+        })
+      newRequestId = retryId
+    }
+
+    // ✅ 5. UPDATE WISHLISTS
     const { error: updateError } = await supabase
       .from('wishlists')
       .update({
@@ -1538,13 +1507,13 @@ const confirmSubmitRequest = async () => {
 
     if (updateError) throw updateError
 
-    // ✅ 5. REFRESH & CLEANUP UI
+    // ✅ 6. Refresh & cleanup
     await fetchWishlist()
     setSelectedItems(new Set())
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    // ✅ 6. BUAT CHAT SESSION (JIKA BELUM ADA)
+    // ✅ 7. BUAT CHAT SESSION
     const { data: existingChat } = await supabase
       .from('chat_sessions')
       .select('id')
