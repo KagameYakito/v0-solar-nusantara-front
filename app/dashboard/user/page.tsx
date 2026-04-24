@@ -1445,78 +1445,51 @@ const confirmSubmitRequest = async () => {
     }
 
     // ✅ 1. Get ONLY selected items from wishlist
-    const selectedWishlistItems: WishlistItem[] = wishlist.filter(
-      (item: WishlistItem) => selectedItems.has(item.product_id)
+    const selectedWishlistItems = wishlist.filter(
+      (item) => selectedItems.has(item.product_id)
     )
 
-    // ✅ 2. Calculate totals dengan harga terbaru
-    const productIds: string[] = selectedWishlistItems.map(
-      (item: WishlistItem) => item.product_id
-    )
-    
+    // ✅ 2. Calculate totals
+    const productIds = selectedWishlistItems.map(item => item.product_id)
     const { data: latestProducts } = await supabase
       .from('products')
       .select('id, harga')
       .in('id', productIds)
 
-    const totalItems: number = selectedWishlistItems.length
-    const estimatedTotal: number = selectedWishlistItems.reduce(
-      (sum: number, item: WishlistItem) => {
-        const latestPrice = latestProducts?.find(
-          (p: any) => p.id.toString() === item.product_id.toString()
-        )?.harga || item.price
-        return sum + (latestPrice * item.quantity)
-      },
-      0
-    )
+    const totalItems = selectedWishlistItems.length
+    const estimatedTotal = selectedWishlistItems.reduce((sum, item) => {
+      const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
+      return sum + (latestPrice * item.quantity)
+    }, 0)
 
-    // ✅ 3. CEK DULU: Apakah user sudah punya RFQ yang masih aktif?
-    const { data: existingRFQs, error: checkError } = await supabase
+    // ✅ 3. CEK RFQ AKTIF (Logika Session Grouping)
+    // Kita cari request_id dimana statusnya MASIH HIDUP (requested/accepted)
+    const { data: activeRFQ } = await supabase
       .from('wishlists')
       .select('request_id')
       .eq('user_id', session.user.id)
-      .in('status', ['requested', 'accepted'])
+      .in('status', ['requested', 'accepted']) // Status yang dianggap 'Sesi Aktif'
       .order('created_at', { ascending: false })
       .limit(1)
+      .single()
 
     let newRequestId: number
 
-    if (existingRFQs && existingRFQs.length > 0 && existingRFQs[0].request_id) {
-      // ✅ PAKAI REQUEST_ID YANG SUDAH ADA (MERGE)
-      newRequestId = existingRFQs[0].request_id
-      console.log("✅ Merge ke RFQ existing:", newRequestId)
+    if (activeRFQ && activeRFQ.request_id) {
+      // ✅ SKENARIO: User punya sesi aktif, kita sambungkan ke sini
+      newRequestId = activeRFQ.request_id
+      console.log("✅ Merge ke RFQ Session Aktif:", newRequestId)
     } else {
-      // ✅ CARA 1: Coba pakai sequence
-      const { data: sequenceData, error: seqError } = await supabase.rpc('get_next_request_id')
+      // ✅ SKENARIO: User tidak punya sesi aktif, kita buat BARU dari Database
+      // Panggil RPC yang kita buat di SQL Editor tadi
+      const { data, error } = await supabase.rpc('get_next_request_id')
       
-      if (!seqError && sequenceData) {
-        newRequestId = sequenceData
-        console.log("✅ Request ID dari sequence:", newRequestId)
-      } else {
-        // ✅ CARA 2: Fallback - Generate dari max existing + 1
-        console.log("⚠️ Sequence tidak ada, pakai fallback...")
-        
-        const { data: maxData } = await supabase
-          .from('wishlists')
-          .select('request_id')
-          .order('request_id', { ascending: false })
-          .limit(1)
-        
-        if (maxData && maxData.length > 0 && maxData[0].request_id) {
-          newRequestId = maxData[0].request_id + 1
-        } else {
-          // First request ever
-          newRequestId = 60000000
-        }
-        
-        console.log("✅ Request ID dari max+1:", newRequestId)
+      if (error || !data) {
+        throw new Error("Gagal generate Request ID. Pastikan SQL Script sudah dijalankan.")
       }
       
-      // ✅ VALIDASI: Pastikan request_id 8 digit dan dimulai dari 6
-      if (newRequestId < 60000000 || newRequestId > 69999999) {
-        console.warn("Request ID out of range, adjusting:", newRequestId)
-        newRequestId = 60000000 + (newRequestId % 10000000)
-      }
+      newRequestId = data
+      console.log("✅ RFQ Session Baru Dibuat:", newRequestId)
     }
 
     // ✅ 4. UPDATE WISHLISTS
@@ -1540,22 +1513,28 @@ const confirmSubmitRequest = async () => {
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    // ✅ 7. BUAT CHAT SESSION OTOMATIS
-    const { data: newChatSession, error: chatError } = await supabase
+    // ✅ 7. BUAT/UPDATE CHAT SESSION
+    // Cek apakah chat session sudah ada untuk ID ini
+    const { data: existingChat } = await supabase
       .from('chat_sessions')
-      .insert({
+      .select('id')
+      .eq('request_id', newRequestId)
+      .single()
+
+    if (!existingChat) {
+      // Jika belum ada, buat baru
+      await supabase.from('chat_sessions').insert({
         user_id: session.user.id,
         request_id: newRequestId,
         session_name: `RFQ-${newRequestId}`,
         status: 'active',
         created_at: new Date().toISOString()
       })
-    
-    if (chatError) {
-      console.error("Failed to create chat session:", chatError)
     }
 
-    alert(`✅ Permintaan produk berhasil dikirim!\nRFQ ID: #${newRequestId}\n\nTim kami akan segera memverifikasi.`)
+    alert(`✅ Permintaan produk berhasil dikirim!
+    RFQ ID: #${newRequestId}
+    Tim kami akan segera memverifikasi.`)
 
   } catch (err: any) {
     console.error("Failed to submit request:", err)
