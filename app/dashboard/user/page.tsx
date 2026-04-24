@@ -1444,17 +1444,28 @@ const confirmSubmitRequest = async () => {
       return
     }
 
-    // ✅ 1. Ambil item yang dipilih
+    // ✅ 1. Get ONLY selected items from wishlist
     const selectedWishlistItems = wishlist.filter(
       (item) => selectedItems.has(item.product_id)
     )
 
-    // ✅ 2. CEK APAKAH USER SUDAH PUNYA RFQ AKTIF
-    // Status aktif: requested, pending, accepted (belum deal/rejected/cancelled)
+    // ✅ 2. Calculate totals dengan harga terbaru
+    const productIds = selectedWishlistItems.map(item => item.product_id)
+    const { data: latestProducts } = await supabase
+      .from('products')
+      .select('id, harga')
+      .in('id', productIds)
+
+    const estimatedTotal = selectedWishlistItems.reduce((sum, item) => {
+      const latestPrice = latestProducts?.find(p => p.id.toString() === item.product_id.toString())?.harga || item.price
+      return sum + (latestPrice * item.quantity)
+    }, 0)
+
+    // ✅ 3. CEK RFQ AKTIF USER INI SAJA (Session Grouping)
     const { data: activeRFQ } = await supabase
       .from('wishlists')
       .select('request_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', session.user.id)  // ✅ PENTING: Filter by current user!
       .in('status', ['requested', 'pending', 'accepted'])
       .order('created_at', { ascending: false })
       .limit(1)
@@ -1463,11 +1474,12 @@ const confirmSubmitRequest = async () => {
     let newRequestId: number
 
     if (activeRFQ?.request_id) {
-      // 🟢 SKENARIO: User punya RFQ aktif → TAMBAHKAN KE SESI SAMA
+      // ✅ SKENARIO: User punya RFQ aktif → MERGE ke sesi yang sama
       newRequestId = activeRFQ.request_id
-      console.log("✅ Merge ke RFQ Aktif:", newRequestId)
+      console.log("✅ Merge ke RFQ Aktif User:", newRequestId, "User:", session.user.id)
     } else {
-      // 🟢 SKENARIO: Tidak ada RFQ aktif → BUAT ID BARU
+      // ✅ SKENARIO: User tidak punya RFQ aktif → GENERATE ID BARU
+      // CARA 1: Coba pakai MAX request_id dari database + 1
       const { data: maxData, error: maxError } = await supabase
         .from('wishlists')
         .select('request_id')
@@ -1481,14 +1493,39 @@ const confirmSubmitRequest = async () => {
         newRequestId = 60000000
       } else if (maxData?.request_id) {
         newRequestId = maxData.request_id + 1
+        console.log("✅ Request ID Baru dari MAX+1:", newRequestId)
       } else {
         // Request pertama di sistem
         newRequestId = 60000000
+        console.log("✅ Request ID Pertama:", newRequestId)
       }
-      console.log("✅ RFQ ID Baru Dibuat:", newRequestId)
+
+      // ✅ VALIDASI: Pastikan request_id unik dan dalam range 60000000-69999999
+      if (newRequestId < 60000000 || newRequestId > 69999999) {
+        console.warn("⚠️ Request ID out of range, adjusting:", newRequestId)
+        newRequestId = 60000000 + (newRequestId % 10000000)
+      }
+
+      // ✅ DOUBLE CHECK: Pastikan ID ini belum dipakai user lain
+      const { data: existingCheck } = await supabase
+        .from('wishlists')
+        .select('request_id, user_id')
+        .eq('request_id', newRequestId)
+        .maybeSingle()
+
+      if (existingCheck && existingCheck.user_id !== session.user.id) {
+        // ID sudah dipakai user lain → increment lagi
+        console.warn("⚠️ Request ID collision detected! Incrementing...")
+        newRequestId = newRequestId + 1
+        
+        // Validasi ulang
+        if (newRequestId > 69999999) {
+          newRequestId = 60000000
+        }
+      }
     }
 
-    // ✅ 3. UPDATE WISHLIST KE STATUS 'requested'
+    // ✅ 4. UPDATE WISHLIST KE STATUS 'requested'
     const { error: updateError } = await supabase
       .from('wishlists')
       .update({
@@ -1501,13 +1538,13 @@ const confirmSubmitRequest = async () => {
 
     if (updateError) throw updateError
 
-    // ✅ 4. REFRESH & CLEANUP UI
+    // ✅ 5. REFRESH & CLEANUP UI
     await fetchWishlist()
     setSelectedItems(new Set())
     setShowConfirmModal(false)
     setShowRequestModal(false)
 
-    // ✅ 5. BUAT CHAT SESSION (JIKA BELUM ADA)
+    // ✅ 6. BUAT CHAT SESSION (JIKA BELUM ADA)
     const { data: existingChat } = await supabase
       .from('chat_sessions')
       .select('id')
