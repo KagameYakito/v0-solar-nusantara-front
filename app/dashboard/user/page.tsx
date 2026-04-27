@@ -713,31 +713,36 @@ const loadMessages = useCallback(async (sessionId: string) => {
       console.error('🔴 [MESSAGES] No user session found')
       return
     }
-
     console.log('🔵 [MESSAGES] Fetching messages from database...')
+    console.log('🔵 [MESSAGES] Session ID:', sessionId)
     
-    // ✅ PERBAIKAN: Gunakan sender_id untuk kedua profile (user & admin)
+    // ✅ PERBAIKAN: Query sederhana TANPA JOIN kompleks
     const { data, error } = await supabase
       .from('chat_messages')
-      .select(`
-        *,
-        user_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!sender_id(admin_name)
-      `)
+      .select('*')  // Ambil semua data dulu tanpa JOIN
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-      
-    if (error) throw error
+    
+    console.log('🔵 [MESSAGES] Raw data:', data)
+    console.log('🔵 [MESSAGES] Error:', error)
+    
+    if (error) {
+      console.error('🔴 [MESSAGES] Query error:', error)
+      throw error
+    }
     
     const messagesCount = data?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
     
+    // Jika ada data dari DB, simpan ke localStorage
     if (data && data.length > 0) {
       setMessages(data)
       localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(data))
     } else {
+      // Jika DB kosong, coba load dari localStorage
       const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
       if (savedMessages) {
+        console.log('🟡 [MESSAGES] Loading from localStorage backup')
         setMessages(JSON.parse(savedMessages))
       } else {
         setMessages([])
@@ -755,8 +760,10 @@ const loadMessages = useCallback(async (sessionId: string) => {
         .update({ read_by_user: true })
         .in('id', unreadMessages.map(m => m.id))
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('🔴 [MESSAGES] Failed to load messages:', err)
+    console.error('🔴 [MESSAGES] Error details:', err.message)
+    // Fallback ke localStorage
     const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
     if (savedMessages) {
       setMessages(JSON.parse(savedMessages))
@@ -2775,13 +2782,14 @@ const confirmSubmitRequest = async () => {
                           </div>
                         ) : (
                           messages.map((msg, index) => {
+                            console.log(`🔵 [RENDER] Rendering message ${index}:`, msg)
                             const isUser = msg.sender_type === 'user'
                             const isAdmin = msg.sender_type === 'admin'
                             
-                            // ✅ PERBAIKAN: Ambil nama berdasarkan sender_type
+                            // ✅ PERBAIKAN: Tentukan nama berdasarkan sender_type
                             const senderName = isUser 
-                              ? (msg.user_profile?.full_name || 'Anda')
-                              : (msg.admin_profile?.admin_name || 'Admin')
+                              ? 'Anda' 
+                              : (msg.admin_name || 'Admin')  // Gunakan admin_name langsung dari data
                             
                             // Status read icons
                             const isRead = msg.is_read === true
@@ -2790,7 +2798,7 @@ const confirmSubmitRequest = async () => {
                             ) : (
                               <Circle size={12} className="text-blue-300" />
                             )
-                          
+                            
                             return (
                               <div
                                 key={msg.id}
@@ -2809,10 +2817,8 @@ const confirmSubmitRequest = async () => {
                                       {senderName}
                                     </p>
                                   )}
-                                  
                                   {/* Isi Pesan */}
                                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.message}</p>
-                                  
                                   {/* Footer: Waktu & Status */}
                                   <div className="flex items-center justify-end gap-1 mt-2">
                                     <span className={`text-[10px] ${
@@ -2823,7 +2829,6 @@ const confirmSubmitRequest = async () => {
                                         minute: '2-digit'
                                       })}
                                     </span>
-                                    
                                     {/* Icon Status (Hanya untuk pesan User) */}
                                     {isUser && (
                                       <span className="text-xs">
