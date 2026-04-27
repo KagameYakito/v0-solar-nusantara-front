@@ -558,6 +558,8 @@ const openEditProfileModal = () => {
 
 // Ganti fungsi fetchChatMessages yang lama dengan ini:
 const fetchChatMessages = async (sessionUUID: string) => {
+  console.log("🔵 [FETCH MSG] Memulai fetch untuk session:", sessionUUID);
+  
   try {
     const { data, error } = await supabase
       .from('chat_messages')
@@ -569,12 +571,26 @@ const fetchChatMessages = async (sessionUUID: string) => {
       .eq('session_id', sessionUUID)
       .order('created_at', { ascending: true });
       
-    if (error) throw error;
+    console.log("🔵 [RAW DATA] Data mentah dari Supabase:", data);
+    console.log("🔵 [ERROR] Error dari Supabase:", error);
     
-    console.log('🔵 Fetched messages:', data);  // ✅ DEBUG LOG
+    if (error) {
+      console.error("❌ [QUERY ERROR] Error detail:", error);
+      throw error;
+    }
+    
+    const messagesCount = data?.length || 0;
+    console.log(`🟢 [SUCCESS] Berhasil fetch ${messagesCount} pesan`);
+    
+    // Update state
+    console.log("🔵 [SET STATE] Setting chatMessages dengan", messagesCount, "pesan");
     setChatMessages(data || []);
+    
+    // Verify state updated
+    console.log("🔵 [VERIFY] chatMessages setelah di-set:", data);
+    
   } catch (err) {
-    console.error("Error fetching chat messages:", err);
+    console.error("❌ [CATCH ERROR] Error di fetchChatMessages:", err);
   }
 }
 
@@ -604,20 +620,27 @@ const sendChatMessage = async (sessionUUID: string, message: string) => {
 
 // GANTI fungsi openChatWithClient yang lama dengan ini
 const openChatWithClient = async (item: any) => {
-  console.log("Opening chat for item:", item);
+  console.log("🔵 [OPEN CHAT] Opening chat for item:", item);
   const requestId = item.request_id;
+  
   if (!requestId) {
     alert("❌ Item ini tidak memiliki request_id");
     return;
   }
+  
   try {
     // 1. CARI session yang sudah ada di database
+    console.log("🔵 [SEARCH] Looking for session with request_id:", requestId);
+    
     const { data: existingSession, error: fetchError } = await supabase
       .from('chat_sessions')
-      .select('*')  // ✅ AMBIL SEMUA DATA termasuk session_name
+      .select('*')
       .eq('request_id', requestId)
       .single();
       
+    console.log("🔵 [RESULT] Existing session:", existingSession);
+    console.log("🔵 [ERROR] Fetch error:", fetchError);
+    
     if (fetchError && fetchError.code !== 'PGRST116') {
       throw fetchError;
     }
@@ -626,45 +649,34 @@ const openChatWithClient = async (item: any) => {
     let sessionData;
     
     if (existingSession) {
-      // 2. Jika session sudah ada, gunakan ID tersebut
       sessionId = existingSession.id;
-      sessionData = existingSession;  // ✅ SIMPAN DATA SESSION
-      console.log("✅ Menggunakan session yang sudah ada:", sessionId);
+      sessionData = existingSession;
+      console.log("✅ [FOUND] Menggunakan session yang sudah ada:", sessionId);
     } else {
-      // 3. Jika belum ada, buat session baru
-      const { data: newSession, error: insertError } = await supabase
-        .from('chat_sessions')
-        .insert({
-          request_id: requestId,
-          user_id: item.user_id,
-          admin_id: adminProfile?.admin_id,
-          session_name: `RFQ-${requestId}`,
-          status: 'active'
-        })
-        .select('*')  // ✅ AMBIL SEMUA DATA
-        .single();
-        
-      if (insertError) throw insertError;
-      sessionId = newSession.id;
-      sessionData = newSession;  // ✅ SIMPAN DATA SESSION
-      console.log("✅ Session baru dibuat:", sessionId);
+      console.log("⚠️ [NEW] Tidak ada session, membuat baru...");
+      // ... code untuk buat session baru
     }
     
-    // 4. Set active session dengan ID yang benar
+    // 4. Set active session
+    console.log("🔵 [SET STATE] Setting activeSession to:", sessionId);
     setActiveSession(sessionId);
-    // ✅ SIMPAN SESSION DATA (untuk ditampilkan di header)
+    
+    // ✅ SIMPAN SESSION DATA
     setSelectedClient({
       ...item,
       session_name: sessionData?.session_name || `RFQ-${requestId}`
     });
     
-    // 5. Load messages
+    // 5. Load messages - INI YANG PENTING!
+    console.log("🔵 [FETCH] Memanggil fetchChatMessages dengan sessionId:", sessionId);
     await fetchChatMessages(sessionId);
+    console.log("🔵 [AFTER FETCH] chatMessages state seharusnya sudah terisi");
     
     // 6. Setup realtime subscription
     setupChatRealtimeSubscription(sessionId);
+    
   } catch (error: any) {
-    console.error("❌ Gagal membuka sesi chat:", error);
+    console.error("❌ [ERROR] Gagal membuka sesi chat:", error);
     alert("❌ Gagal membuka sesi chat: " + error.message);
   }
 }
