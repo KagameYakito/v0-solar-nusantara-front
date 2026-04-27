@@ -559,20 +559,22 @@ const openEditProfileModal = () => {
 // Ganti fungsi fetchChatMessages yang lama dengan ini:
 const fetchChatMessages = async (sessionUUID: string) => {
   try {
-      const { data, error } = await supabase
-          .from('chat_messages')
-          .select(`
-              *,
-              sender_profile:profiles!sender_id(full_name),
-              admin_profile:admin_marketing_profiles!admin_id(admin_name)
-          `)
-          .eq('session_id', sessionUUID) // ✅ PASTIKAN PAKAI UUID
-          .order('created_at', { ascending: true });
-          
-      if (error) throw error;
-      setChatMessages(data || []);
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select(`
+        *,
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+      `)
+      .eq('session_id', sessionUUID)
+      .order('created_at', { ascending: true });
+      
+    if (error) throw error;
+    
+    console.log('🔵 Fetched messages:', data);  // ✅ DEBUG LOG
+    setChatMessages(data || []);
   } catch (err) {
-      console.error("Error fetching chat messages:", err);
+    console.error("Error fetching chat messages:", err);
   }
 }
 
@@ -612,16 +614,21 @@ const openChatWithClient = async (item: any) => {
     // 1. CARI session yang sudah ada di database
     const { data: existingSession, error: fetchError } = await supabase
       .from('chat_sessions')
-      .select('id')
+      .select('*')  // ✅ AMBIL SEMUA DATA termasuk session_name
       .eq('request_id', requestId)
       .single();
+      
     if (fetchError && fetchError.code !== 'PGRST116') {
       throw fetchError;
     }
+    
     let sessionId;
+    let sessionData;
+    
     if (existingSession) {
       // 2. Jika session sudah ada, gunakan ID tersebut
       sessionId = existingSession.id;
+      sessionData = existingSession;  // ✅ SIMPAN DATA SESSION
       console.log("✅ Menggunakan session yang sudah ada:", sessionId);
     } else {
       // 3. Jika belum ada, buat session baru
@@ -634,17 +641,26 @@ const openChatWithClient = async (item: any) => {
           session_name: `RFQ-${requestId}`,
           status: 'active'
         })
-        .select('id')
+        .select('*')  // ✅ AMBIL SEMUA DATA
         .single();
+        
       if (insertError) throw insertError;
       sessionId = newSession.id;
+      sessionData = newSession;  // ✅ SIMPAN DATA SESSION
       console.log("✅ Session baru dibuat:", sessionId);
     }
+    
     // 4. Set active session dengan ID yang benar
     setActiveSession(sessionId);
-    setSelectedClient(item);
-    // 5. Load messages ✅ FIX: Gunakan sessionId, bukan requestId
+    // ✅ SIMPAN SESSION DATA (untuk ditampilkan di header)
+    setSelectedClient({
+      ...item,
+      session_name: sessionData?.session_name || `RFQ-${requestId}`
+    });
+    
+    // 5. Load messages
     await fetchChatMessages(sessionId);
+    
     // 6. Setup realtime subscription
     setupChatRealtimeSubscription(sessionId);
   } catch (error: any) {
@@ -2978,7 +2994,7 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   </DialogTitle>
                   <DialogDescription className="text-sm text-slate-400">
                     {/* ✅ GANTI SUBTITLE HANYA ID RFQ (TANPA "RFQ: " DI DEPAN) */}
-                    {activeSession?.toUpperCase()} 
+                    {selectedClient?.session_name || activeSession?.slice(0, 8) + '...'}
                   </DialogDescription>
                 </div>
               </div>
@@ -3011,15 +3027,17 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                 const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type
                 
                 // Tentukan nama pengirim
+                {/* ✅ RENDER MESSAGES YANG BENAR */}
                 {chatMessages.map((msg: any, index: number) => {
                   const isAdmin = msg.sender_type === 'admin';
+                  const isUser = msg.sender_type === 'user';
                   const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type;
                   
-                  // ✅ SOLUSI FINAL: Inline conditional dengan fallback aman
-                  const senderName = isAdmin 
+                  // ✅ TENTUKAN NAMA PENGIRIM
+                  const senderName = isAdmin
                     ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
                     : (msg.sender_profile?.full_name || 'User');
-                
+                    
                   return (
                     <div
                       key={msg.id || index}
@@ -3045,10 +3063,12 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                           </p>
                         )}
                         
+                        {/* Isi Pesan */}
                         <p className="text-sm leading-relaxed whitespace-pre-wrap">
                           {msg.message}
                         </p>
                         
+                        {/* Waktu */}
                         <p className="text-xs text-right mt-2 opacity-60">
                           {new Date(msg.created_at).toLocaleTimeString('id-ID', {
                             hour: '2-digit',
