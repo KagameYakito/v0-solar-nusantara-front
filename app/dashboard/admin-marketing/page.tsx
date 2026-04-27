@@ -561,10 +561,14 @@ const fetchChatMessages = async (sessionUUID: string) => {
   try {
     console.log('🔵 [FETCH MSG] Memulai fetch untuk session:', sessionUUID);
     
-    // ✅ QUERY SEDERHANA - TANPA JOIN DULU
+    // ✅ PERBAIKAN: Gunakan sender_id untuk kedua profile
     const { data, error } = await supabase
       .from('chat_messages')
-      .select('*')  // Ambil semua kolom dulu
+      .select(`
+        *,
+        user_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!sender_id(admin_name)
+      `)
       .eq('session_id', sessionUUID)
       .order('created_at', { ascending: true });
       
@@ -577,14 +581,7 @@ const fetchChatMessages = async (sessionUUID: string) => {
     }
     
     console.log(`🟢 [SUCCESS] Berhasil fetch ${data?.length || 0} pesan`);
-    
-    // Update state
-    console.log('🔵 [SET STATE] Setting chatMessages dengan', data?.length || 0, 'pesan');
     setChatMessages(data || []);
-    
-    // Verify state updated
-    console.log('🔵 [AFTER FETCH] chatMessages state seharusnya sudah terisi');
-    
   } catch (err) {
     console.error('🔴 [CATCH ERROR] Error di fetchChatMessages:', err);
   }

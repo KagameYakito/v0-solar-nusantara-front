@@ -716,13 +716,13 @@ const loadMessages = useCallback(async (sessionId: string) => {
 
     console.log('🔵 [MESSAGES] Fetching messages from database...')
     
-    // ✅ PERBAIKAN: Gunakan admin_id bukan sender_id untuk admin_marketing_profiles
+    // ✅ PERBAIKAN: Gunakan sender_id untuk kedua profile (user & admin)
     const { data, error } = await supabase
       .from('chat_messages')
       .select(`
         *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        user_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!sender_id(admin_name)
       `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
@@ -744,7 +744,7 @@ const loadMessages = useCallback(async (sessionId: string) => {
       }
     }
     
-    // Mark as read
+    // Mark as read - hanya untuk pesan dari admin
     const unreadMessages = data?.filter(m =>
       m.sender_type === 'admin' && !m.read_by_user
     ) || []
@@ -2775,12 +2775,13 @@ const confirmSubmitRequest = async () => {
                           </div>
                         ) : (
                           messages.map((msg, index) => {
-                            console.log(`🔵 [RENDER] Rendering message ${index}:`, msg)
                             const isUser = msg.sender_type === 'user'
                             const isAdmin = msg.sender_type === 'admin'
                             
-                            // Tentukan nama pengirim
-                            const senderName = isUser ? 'Anda' : (msg.admin_profile?.admin_name || 'Admin')
+                            // ✅ PERBAIKAN: Ambil nama berdasarkan sender_type
+                            const senderName = isUser 
+                              ? (msg.user_profile?.full_name || 'Anda')
+                              : (msg.admin_profile?.admin_name || 'Admin')
                             
                             // Status read icons
                             const isRead = msg.is_read === true
