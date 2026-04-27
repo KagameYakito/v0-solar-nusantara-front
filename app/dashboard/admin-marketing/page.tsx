@@ -672,19 +672,18 @@ const openChatWithClient = async (item: any) => {
     await fetchChatMessages(sessionId);
     
     // ✅ FIX READ RECEIPTS: Tandai pesan dari USER sebagai terbaca oleh ADMIN
-    // Kita perlu fetch dulu ID pesan user yang belum dibaca
     const { data: unreadMessages } = await supabase
       .from('chat_messages')
       .select('id')
       .eq('session_id', sessionId)
       .eq('sender_type', 'user')
       .eq('is_read', false);
-      
     if (unreadMessages && unreadMessages.length > 0) {
       await supabase
         .from('chat_messages')
         .update({ is_read: true })
         .in('id', unreadMessages.map(m => m.id));
+      console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
     }
     
     // 6. Setup realtime subscription

@@ -280,30 +280,19 @@ export default function UserDashboard() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeSession) return
-    
     try {
       setSendingMessage(true)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-  
-      // ✅ TAMBAHKAN PESAN KE STATE LOKAL SEBELUM KIRIM
-      const optimisticMessage = {
-        id: Date.now(), // Temporary ID
-        session_id: activeSession,
-        sender_id: session.user.id,
-        sender_type: 'user',
-        message: newMessage.trim(),
-        created_at: new Date().toISOString(),
-        read_by_user: true
-      }
       
-      setMessages(prev => [...prev, optimisticMessage])
+      console.log('🔵 [SEND] Sending message:', newMessage)
+      console.log('🔵 [SEND] Session:', activeSession)
       
       // Clear input immediately
       const messageToSend = newMessage.trim()
       setNewMessage('')
-  
-      // Kirim ke database
+      
+      // Kirim ke database menggunakan RPC
       const { error } = await supabase.rpc('send_chat_message', {
         p_session_id: activeSession,
         p_sender_id: session.user.id,
@@ -311,13 +300,18 @@ export default function UserDashboard() {
         p_sender_type: 'user'
       })
       
-      if (error) throw error
+      if (error) {
+        console.error('🔴 [SEND] RPC Error:', error)
+        throw error
+      }
       
-      // Refresh messages dari database untuk dapat ID yang benar
+      console.log('🟢 [SEND] Message sent successfully')
+      
+      // ✅ PERBAIKAN: Refresh messages dari database (jangan pakai optimistic update)
       await loadMessages(activeSession)
       
     } catch (err: any) {
-      console.error("Failed to send message:", err)
+      console.error("🔴 [SEND] Failed to send message:", err)
       alert("❌ Gagal mengirim pesan: " + err.message)
       // Reload messages untuk rollback jika gagal
       if (activeSession) {
@@ -574,9 +568,14 @@ useEffect(() => {
   return () => clearInterval(interval)
 }, [bidHistory])
 
-// ✅ REALTIME CHAT SUBSCRIPTION
+// ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
 useEffect(() => {
-  if (!activeSession) return
+  if (!activeSession) {
+    console.log('🔵 [REALTIME] No active session, skipping subscription')
+    return
+  }
+  
+  console.log('🔵 [REALTIME] Setting up subscription for session:', activeSession)
   
   const channel = supabase
     .channel(`chat:${activeSession}`)
@@ -588,9 +587,38 @@ useEffect(() => {
         table: 'chat_messages',
         filter: `session_id=eq.${activeSession}`
       },
-      (payload) => {
-        setMessages(prev => [...prev, payload.new])
+      async (payload) => {
+        console.log('🔵 [REALTIME] New message received:', payload.new)
+        
+        // ✅ PERBAIKAN: Fetch admin name jika pesan dari admin
+        let newMessage = payload.new
+        if (newMessage.sender_type === 'admin') {
+          const { data: adminData } = await supabase
+            .from('admin_marketing_profiles')
+            .select('admin_name')
+            .eq('admin_id', newMessage.sender_id)
+            .single()
+          
+          newMessage = {
+            ...newMessage,
+            admin_name: adminData?.admin_name || 'Admin'
+          }
+        }
+        
+        setMessages(prev => {
+          // Cek apakah pesan sudah ada (untuk menghindari duplikasi)
+          const exists = prev.some(m => m.id === newMessage.id)
+          if (exists) {
+            console.log(' [REALTIME] Message already exists, skipping')
+            return prev
+          }
+          const newMessages = [...prev, newMessage]
+          console.log('🔵 [REALTIME] Updated messages:', newMessages)
+          return newMessages
+        })
+        
         countUnreadMessages()
+        
         // Auto-scroll ke pesan terbaru
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -606,15 +634,19 @@ useEffect(() => {
         filter: `session_id=eq.${activeSession}`
       },
       (payload) => {
+        console.log('🔵 [REALTIME] Message updated:', payload.new)
         // Update pesan yang sudah ada (misal: status read berubah)
-        setMessages(prev => 
+        setMessages(prev =>
           prev.map(msg => msg.id === payload.new.id ? payload.new : msg)
         )
       }
     )
-    .subscribe()
-    
+    .subscribe((status) => {
+      console.log('🔵 [REALTIME] Subscription status:', status)
+    })
+  
   return () => {
+    console.log('🔵 [REALTIME] Cleaning up subscription')
     supabase.removeChannel(channel)
   }
 }, [activeSession, countUnreadMessages])
@@ -716,28 +748,47 @@ const loadMessages = useCallback(async (sessionId: string) => {
     }
     console.log('🔵 [MESSAGES] Fetching messages from database...')
     
-    // ✅ PERBAIKAN: Join ke admin_marketing_profiles untuk dapat nama admin
-    const { data, error } = await supabase
+    // ✅ PERBAIKAN: Query pesan dulu tanpa JOIN admin
+    const { data: messagesData, error } = await supabase
       .from('chat_messages')
       .select(`
         *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!sender_id(admin_name)
+        sender_profile:profiles!sender_id(full_name)
       `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
       
     if (error) throw error
     
-    const messagesCount = data?.length || 0
+    const messagesCount = messagesData?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
     
-    if (data && data.length > 0) {
-      setMessages(data)
-      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(data))
+    // ✅ PERBAIKAN: Fetch admin name terpisah untuk setiap pesan admin
+    const messagesWithAdminName = await Promise.all(
+      (messagesData || []).map(async (msg) => {
+        if (msg.sender_type === 'admin') {
+          // Query nama admin dari admin_marketing_profiles
+          const { data: adminData } = await supabase
+            .from('admin_marketing_profiles')
+            .select('admin_name')
+            .eq('admin_id', msg.sender_id)
+            .single()
+          
+          return {
+            ...msg,
+            admin_name: adminData?.admin_name || 'Admin'
+          }
+        }
+        return msg
+      })
+    )
+    
+    if (messagesWithAdminName && messagesWithAdminName.length > 0) {
+      setMessages(messagesWithAdminName)
+      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(messagesWithAdminName))
       
-      // ✅ FIX READ RECEIPTS: Tandai pesan dari ADMIN sebagai terbaca oleh USER
-      const unreadAdminMessages = data.filter(m => 
+      // ✅ Mark as read - hanya untuk pesan dari admin
+      const unreadAdminMessages = messagesWithAdminName.filter(m =>
         m.sender_type === 'admin' && !m.is_read
       )
       
@@ -770,12 +821,20 @@ const loadMessages = useCallback(async (sessionId: string) => {
 const getAdminDisplayName = (messages: any[]) => {
   console.log('🔵 [ADMIN] getAdminDisplayName called, messages:', messages)
   
-  const adminMessage = messages.find(m => m.admin_id !== null)
-  console.log('🔵 [ADMIN] Admin message:', adminMessage)
+  // Cari pesan dari admin yang punya admin_name
+  const adminMessage = messages.find(m => 
+    m.sender_type === 'admin' && m.admin_name
+  )
   
-  if (adminMessage?.admin_profile?.admin_name) {
-    console.log('🟢 [ADMIN] Found admin name:', adminMessage.admin_profile.admin_name)
-    return adminMessage.admin_profile.admin_name
+  if (adminMessage?.admin_name) {
+    console.log('🟢 [ADMIN] Found admin name:', adminMessage.admin_name)
+    return adminMessage.admin_name
+  }
+  
+  // Fallback: cari dari pesan admin mana saja
+  const anyAdminMessage = messages.find(m => m.sender_type === 'admin')
+  if (anyAdminMessage?.admin_name) {
+    return anyAdminMessage.admin_name
   }
   
   console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
