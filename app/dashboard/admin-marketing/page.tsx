@@ -600,17 +600,14 @@ const sendChatMessage = async (sessionUUID: string, message: string) => {
   }
 }
 
-// Perbaiki fungsi openChatWithClient
 // GANTI fungsi openChatWithClient yang lama dengan ini
 const openChatWithClient = async (item: any) => {
   console.log("Opening chat for item:", item);
   const requestId = item.request_id;
-  
   if (!requestId) {
     alert("❌ Item ini tidak memiliki request_id");
     return;
   }
-  
   try {
     // 1. CARI session yang sudah ada di database
     const { data: existingSession, error: fetchError } = await supabase
@@ -618,13 +615,10 @@ const openChatWithClient = async (item: any) => {
       .select('id')
       .eq('request_id', requestId)
       .single();
-    
     if (fetchError && fetchError.code !== 'PGRST116') {
       throw fetchError;
     }
-    
     let sessionId;
-    
     if (existingSession) {
       // 2. Jika session sudah ada, gunakan ID tersebut
       sessionId = existingSession.id;
@@ -642,22 +636,17 @@ const openChatWithClient = async (item: any) => {
         })
         .select('id')
         .single();
-      
       if (insertError) throw insertError;
       sessionId = newSession.id;
       console.log("✅ Session baru dibuat:", sessionId);
     }
-    
     // 4. Set active session dengan ID yang benar
     setActiveSession(sessionId);
     setSelectedClient(item);
-    
-    // 5. Load messages
-    await fetchChatMessages(requestId);
-    
+    // 5. Load messages ✅ FIX: Gunakan sessionId, bukan requestId
+    await fetchChatMessages(sessionId);
     // 6. Setup realtime subscription
     setupChatRealtimeSubscription(sessionId);
-    
   } catch (error: any) {
     console.error("❌ Gagal membuka sesi chat:", error);
     alert("❌ Gagal membuka sesi chat: " + error.message);
