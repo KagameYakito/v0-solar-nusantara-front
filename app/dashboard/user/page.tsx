@@ -280,17 +280,13 @@ export default function UserDashboard() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeSession) return
-  
+    
     try {
       setSendingMessage(true)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
   
-      console.log('🔵 [SEND] Sending message:', newMessage)
-      console.log('🔵 [SEND] Session:', activeSession)
-      console.log('🔵 [SEND] User ID:', session.user.id)
-  
-      // ✅ TAMBAHKAN PESAN KE STATE LOKAL SEBELUM KIRIM (optimistic update)
+      // ✅ TAMBAHKAN PESAN KE STATE LOKAL SEBELUM KIRIM
       const optimisticMessage = {
         id: Date.now(), // Temporary ID
         session_id: activeSession,
@@ -307,25 +303,21 @@ export default function UserDashboard() {
       const messageToSend = newMessage.trim()
       setNewMessage('')
   
-      // Kirim ke database menggunakan RPC
+      // Kirim ke database
       const { error } = await supabase.rpc('send_chat_message', {
         p_session_id: activeSession,
         p_sender_id: session.user.id,
         p_message: messageToSend,
         p_sender_type: 'user'
       })
-  
-      if (error) {
-        console.error('🔴 [SEND] RPC Error:', error)
-        throw error
-      }
-  
-      console.log('🟢 [SEND] Message sent successfully')
+      
+      if (error) throw error
       
       // Refresh messages dari database untuk dapat ID yang benar
       await loadMessages(activeSession)
+      
     } catch (err: any) {
-      console.error("🔴 [SEND] Failed to send message:", err)
+      console.error("Failed to send message:", err)
       alert("❌ Gagal mengirim pesan: " + err.message)
       // Reload messages untuk rollback jika gagal
       if (activeSession) {
@@ -628,25 +620,25 @@ useEffect(() => {
 }, [activeSession, countUnreadMessages])
 
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
-// ✅ PERBAIKI FUNGSI fetchChatSessions
 const fetchChatSessions = useCallback(async () => {
   console.log('🔵 [SESSIONS] fetchChatSessions called')
+  
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       console.log('🔵 [SESSIONS] No session found')
       return
     }
-
+    
     console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
     
-    // ✅ HAPUS JOIN YANG TIDAK PERLU - ambil data langsung dari chat_sessions
+    // Simplified query - remove complex joins first
     const { data, error } = await supabase
       .from('chat_sessions')
-      .select('*')
+      .select('*')  // Start simple
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
-
+    
     console.log('🔵 [SESSIONS] Raw data:', data)
     console.log('🔵 [SESSIONS] Error:', error)
     
@@ -654,15 +646,14 @@ const fetchChatSessions = useCallback(async () => {
       console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
       throw error
     }
-
+    
     const sessionsCount = data?.length || 0
     console.log(`🟢 [SESSIONS] Fetched ${sessionsCount} chat sessions`)
-    console.log('🔵 [SESSIONS] Sessions:', data)
+    console.log(' [SESSIONS] Sessions:', data)
     
     setChatSessions(data || [])
   } catch (err) {
     console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
-    alert("❌ Gagal memuat chat: " + err.message)
   }
 }, [])
 
@@ -714,7 +705,6 @@ useEffect(() => {
 }, [messages, activeSession])
 
 // ✅ LOAD dari localStorage jika fetch dari DB gagal
-// ✅ PERBAIKI FUNGSI loadMessages
 const loadMessages = useCallback(async (sessionId: string) => {
   try {
     setChatLoading(true)
@@ -725,9 +715,8 @@ const loadMessages = useCallback(async (sessionId: string) => {
     }
 
     console.log('🔵 [MESSAGES] Fetching messages from database...')
-    console.log('🔵 [MESSAGES] Session ID:', sessionId)
     
-    // ✅ PERBAIKI: Gunakan profiles dan admin_marketing_profiles dengan benar
+    // ✅ PERBAIKAN: Gunakan admin_id bukan sender_id untuk admin_marketing_profiles
     const { data, error } = await supabase
       .from('chat_messages')
       .select(`
@@ -737,31 +726,25 @@ const loadMessages = useCallback(async (sessionId: string) => {
       `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error('🔴 [MESSAGES] Error fetching:', error)
-      throw error
-    }
-
+      
+    if (error) throw error
+    
     const messagesCount = data?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
-
-    // Jika ada data dari DB, simpan ke localStorage
+    
     if (data && data.length > 0) {
       setMessages(data)
       localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(data))
     } else {
-      // Jika DB kosong, coba load dari localStorage
       const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
       if (savedMessages) {
-        console.log('🟡 [MESSAGES] Loading from localStorage backup')
         setMessages(JSON.parse(savedMessages))
       } else {
         setMessages([])
       }
     }
-
-    // Mark as read - hanya untuk pesan dari admin
+    
+    // Mark as read
     const unreadMessages = data?.filter(m =>
       m.sender_type === 'admin' && !m.read_by_user
     ) || []
@@ -772,9 +755,8 @@ const loadMessages = useCallback(async (sessionId: string) => {
         .update({ read_by_user: true })
         .in('id', unreadMessages.map(m => m.id))
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('🔴 [MESSAGES] Failed to load messages:', err)
-    // Fallback ke localStorage
     const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
     if (savedMessages) {
       setMessages(JSON.parse(savedMessages))
