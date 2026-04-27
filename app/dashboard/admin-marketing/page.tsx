@@ -3014,115 +3014,71 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
 
           {/* CHAT MESSAGES - SCROLLABLE AREA */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-950">
-            {chatMessages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
-                <p className="text-lg font-medium">Belum ada pesan</p>
-                <p className="text-sm">Mulai percakapan dengan client</p>
-              </div>
-            ) : (
-              chatMessages.map((msg: any, index: number) => {
-                const isAdmin = msg.sender_type === 'admin'
-                const isUser = msg.sender_type === 'user'
-                const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type
-                
-                // Tentukan nama pengirim
-                {/* ✅ RENDER MESSAGES YANG BENAR */}
-                {chatMessages.map((msg: any, index: number) => {
-                  const isAdmin = msg.sender_type === 'admin';
-                  const isUser = msg.sender_type === 'user';
-                  const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type;
-                  
-                  // ✅ TENTUKAN NAMA PENGIRIM
-                  const senderName = isAdmin
-                    ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
-                    : (msg.sender_profile?.full_name || 'User');
-                    
-                  return (
-                    <div
-                      key={msg.id || index}
-                      className={`flex ${isAdmin ? 'justify-start' : 'justify-end'} ${
-                        isSameSender ? 'mt-1' : 'mt-4'
-                      }`}
-                    >
-                      <div
-                        className={`max-w-[70%] ${
-                          isAdmin
-                            ? 'bg-slate-800 border border-slate-700 text-slate-100'
-                            : 'bg-blue-600 text-white'
-                        } rounded-2xl px-4 py-3 shadow-sm ${
-                          isAdmin ? 'rounded-tl-none' : 'rounded-tr-none'
-                        }`}
-                      >
-                        {/* ✅ TAMPILKAN NAMA HANYA JIKA PENGIRIM BERGANTI */}
-                        {!isSameSender && (
-                          <p className={`text-xs font-semibold mb-1 ${
-                            isAdmin ? 'text-blue-400' : 'text-blue-200'
-                          }`}>
-                            {senderName}
-                          </p>
-                        )}
-                        
-                        {/* Isi Pesan */}
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                          {msg.message}
-                        </p>
-                        
-                        {/* Waktu */}
-                        <p className="text-xs text-right mt-2 opacity-60">
-                          {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+          {chatMessages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+              <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
+              <p className="text-lg font-medium">Belum ada pesan</p>
+              <p className="text-sm">Mulai percakapan dengan client</p>
+            </div>
+          ) : (
+            // ✅ HANYA 1 MAP - TANPA NESTED!
+            chatMessages.map((msg: any, index: number) => {
+              const isAdmin = msg.sender_type === 'admin'
+              const isUser = msg.sender_type === 'user'
+              const isSameSender = index > 0 && chatMessages[index - 1]?.sender_type === msg.sender_type
               
-                return (
+              // ✅ TENTUKAN NAMA PENGIRIM
+              const senderName = isAdmin
+                ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
+                : (msg.sender_profile?.full_name || 'User')
+              
+              // ✅ RETURN JSX LANGSUNG
+              return (
+                <div
+                  key={msg.id || index}
+                  className={`flex ${isAdmin ? 'justify-start' : 'justify-end'} ${
+                    isSameSender ? 'mt-1' : 'mt-4'
+                  }`}
+                >
                   <div
-                    key={msg.id || index}
-                    className={`flex ${isAdmin ? 'justify-start' : 'justify-end'} ${
-                      isSameSender ? 'mt-1' : 'mt-4'
+                    className={`max-w-[70%] ${
+                      isAdmin
+                        ? 'bg-slate-800 border border-slate-700 text-slate-100'
+                        : 'bg-blue-600 text-white'
+                    } rounded-2xl px-4 py-3 shadow-sm ${
+                      isAdmin ? 'rounded-tl-none' : 'rounded-tr-none'
                     }`}
                   >
-                    <div
-                      className={`max-w-[70%] ${
-                        isAdmin
-                          ? 'bg-slate-800 border border-slate-700 text-slate-100'
-                          : 'bg-blue-600 text-white'
-                      } rounded-2xl px-4 py-3 shadow-sm ${
-                        isAdmin ? 'rounded-tl-none' : 'rounded-tr-none'
-                      }`}
-                    >
-                      {/* Tampilkan Nama Pengirim jika berganti */}
-                      {!isSameSender && (
-                        <p className={`text-xs font-semibold mb-1 ${isAdmin ? 'text-blue-400' : 'text-blue-200'}`}>
-                          {isAdmin 
-                            ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
-                            : (msg.sender_profile?.full_name || 'User')}
-                        </p>
-                      )}
-                      
-                      {/* Isi Pesan */}
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.message}</p>
-                      
-                      {/* Footer: Waktu */}
-                      <p className="text-xs text-right mt-2 opacity-60">
-                        {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                    {/* Tampilkan Nama Pengirim jika berganti */}
+                    {!isSameSender && (
+                      <p className={`text-xs font-semibold mb-1 ${
+                        isAdmin ? 'text-blue-400' : 'text-blue-200'
+                      }`}>
+                        {senderName}
                       </p>
-                    </div>
+                    )}
+                    
+                    {/* Isi Pesan */}
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                      {msg.message}
+                    </p>
+                    
+                    {/* Footer: Waktu */}
+                    <p className="text-xs text-right mt-2 opacity-60">
+                      {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
                   </div>
-                )
-              })
-            )}
-            {/* Dummy div untuk auto-scroll */}
-            <div ref={adminMessagesEndRef} />
-          </div>
+                </div>
+              )
+            })
+          )}
+          
+          {/* Dummy div untuk auto-scroll */}
+          <div ref={adminMessagesEndRef} />
+        </div>
 
           {/* CHAT INPUT - FIXED AT BOTTOM */}
           <div className="border-t border-slate-700 bg-slate-800/50 p-4">
