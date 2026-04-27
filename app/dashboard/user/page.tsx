@@ -737,7 +737,6 @@ useEffect(() => {
 }, [messages, activeSession])
 
 // ✅ LOAD dari localStorage jika fetch dari DB gagal
-// ✅ LOAD dari localStorage jika fetch dari DB gagal
 const loadMessages = useCallback(async (sessionId: string) => {
   try {
     setChatLoading(true)
@@ -747,31 +746,35 @@ const loadMessages = useCallback(async (sessionId: string) => {
       return
     }
     console.log('🔵 [MESSAGES] Fetching messages from database...')
+    console.log('🔵 [MESSAGES] Session ID:', sessionId)
     
-    // ✅ PERBAIKAN: Query pesan dulu tanpa JOIN admin
-    const { data: messagesData, error } = await supabase
+    // ✅ PERBAIKAN: Query TANPA JOIN yang kompleks (karena tidak ada admin_id di chat_messages)
+    const { data, error } = await supabase
       .from('chat_messages')
-      .select(`
-        *,
-        sender_profile:profiles!sender_id(full_name)
-      `)
+      .select('*')  // Ambil semua data dulu tanpa JOIN
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-      
-    if (error) throw error
     
-    const messagesCount = messagesData?.length || 0
+    console.log('🔵 [MESSAGES] Raw data:', data)
+    console.log('🔵 [MESSAGES] Error:', error)
+    
+    if (error) {
+      console.error('🔴 [MESSAGES] Query error:', error)
+      throw error
+    }
+    
+    const messagesCount = data?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
     
-    // ✅ PERBAIKAN: Fetch admin name terpisah untuk setiap pesan admin
+    // ✅ PERBAIKAN: Fetch admin name terpisah HANYA untuk pesan admin
     const messagesWithAdminName = await Promise.all(
-      (messagesData || []).map(async (msg) => {
+      (data || []).map(async (msg) => {
         if (msg.sender_type === 'admin') {
-          // Query nama admin dari admin_marketing_profiles
+          // Query nama admin dari admin_marketing_profiles menggunakan sender_id
           const { data: adminData } = await supabase
             .from('admin_marketing_profiles')
             .select('admin_name')
-            .eq('admin_id', msg.sender_id)
+            .eq('admin_id', msg.sender_id)  // sender_id admin = admin_id di admin_marketing_profiles
             .single()
           
           return {
@@ -806,8 +809,10 @@ const loadMessages = useCallback(async (sessionId: string) => {
         setMessages([])
       }
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('🔴 [MESSAGES] Failed to load messages:', err)
+    console.error('🔴 [MESSAGES] Error details:', err.message)
+    // Fallback ke localStorage
     const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
     if (savedMessages) {
       setMessages(JSON.parse(savedMessages))
@@ -822,7 +827,7 @@ const getAdminDisplayName = (messages: any[]) => {
   console.log('🔵 [ADMIN] getAdminDisplayName called, messages:', messages)
   
   // Cari pesan dari admin yang punya admin_name
-  const adminMessage = messages.find(m => 
+  const adminMessage = messages.find(m =>
     m.sender_type === 'admin' && m.admin_name
   )
   
@@ -2848,9 +2853,9 @@ const confirmSubmitRequest = async () => {
                             const isAdmin = msg.sender_type === 'admin'
                             
                             // ✅ PERBAIKAN: Tentukan nama berdasarkan sender_type
-                            const senderName = isUser 
-                              ? 'Anda' 
-                              : (msg.admin_name || 'Admin')  // Gunakan admin_name langsung dari data
+                            const senderName = isUser
+                              ? 'Anda'
+                              : (msg.admin_name || 'Admin')  // Gunakan admin_name dari data yang sudah di-fetch
                             
                             // Status read icons
                             const isRead = msg.is_read === true
@@ -2894,9 +2899,9 @@ const confirmSubmitRequest = async () => {
                                     {isUser && (
                                       <span className="text-xs">
                                         {msg.is_read ? (
-                                          <CircleDot size={12} className="text-blue-400 fill-blue-400" /> // Terisi jika sudah dibaca admin
+                                          <CircleDot size={12} className="text-blue-400 fill-blue-400" />
                                         ) : (
-                                          <Circle size={12} className="text-blue-300" /> // Kosong jika belum
+                                          <Circle size={12} className="text-blue-300" />
                                         )}
                                       </span>
                                     )}
