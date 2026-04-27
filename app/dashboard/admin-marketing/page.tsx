@@ -558,39 +558,35 @@ const openEditProfileModal = () => {
 
 // Ganti fungsi fetchChatMessages yang lama dengan ini:
 const fetchChatMessages = async (sessionUUID: string) => {
-  console.log("🔵 [FETCH MSG] Memulai fetch untuk session:", sessionUUID);
-  
   try {
+    console.log('🔵 [FETCH MSG] Memulai fetch untuk session:', sessionUUID);
+    
+    // ✅ QUERY SEDERHANA - TANPA JOIN DULU
     const { data, error } = await supabase
       .from('chat_messages')
-      .select(`
-        *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
-      `)
+      .select('*')  // Ambil semua kolom dulu
       .eq('session_id', sessionUUID)
       .order('created_at', { ascending: true });
       
-    console.log("🔵 [RAW DATA] Data mentah dari Supabase:", data);
-    console.log("🔵 [ERROR] Error dari Supabase:", error);
+    console.log('🔵 [RAW DATA] Data mentah dari Supabase:', data);
+    console.log('🔵 [ERROR] Error dari Supabase:', error);
     
     if (error) {
-      console.error("❌ [QUERY ERROR] Error detail:", error);
+      console.error('🔴 [QUERY ERROR] Error detail:', error);
       throw error;
     }
     
-    const messagesCount = data?.length || 0;
-    console.log(`🟢 [SUCCESS] Berhasil fetch ${messagesCount} pesan`);
+    console.log(`🟢 [SUCCESS] Berhasil fetch ${data?.length || 0} pesan`);
     
     // Update state
-    console.log("🔵 [SET STATE] Setting chatMessages dengan", messagesCount, "pesan");
+    console.log('🔵 [SET STATE] Setting chatMessages dengan', data?.length || 0, 'pesan');
     setChatMessages(data || []);
     
     // Verify state updated
-    console.log("🔵 [VERIFY] chatMessages setelah di-set:", data);
+    console.log('🔵 [AFTER FETCH] chatMessages state seharusnya sudah terisi');
     
   } catch (err) {
-    console.error("❌ [CATCH ERROR] Error di fetchChatMessages:", err);
+    console.error('🔴 [CATCH ERROR] Error di fetchChatMessages:', err);
   }
 }
 
