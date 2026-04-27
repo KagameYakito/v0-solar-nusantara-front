@@ -618,59 +618,77 @@ const sendChatMessage = async (sessionUUID: string, message: string) => {
 const openChatWithClient = async (item: any) => {
   console.log("🔵 [OPEN CHAT] Opening chat for item:", item);
   const requestId = item.request_id;
-  
   if (!requestId) {
     alert("❌ Item ini tidak memiliki request_id");
     return;
   }
-  
   try {
     // 1. CARI session yang sudah ada di database
     console.log("🔵 [SEARCH] Looking for session with request_id:", requestId);
-    
     const { data: existingSession, error: fetchError } = await supabase
       .from('chat_sessions')
       .select('*')
       .eq('request_id', requestId)
       .single();
-      
     console.log("🔵 [RESULT] Existing session:", existingSession);
     console.log("🔵 [ERROR] Fetch error:", fetchError);
-    
     if (fetchError && fetchError.code !== 'PGRST116') {
       throw fetchError;
     }
-    
     let sessionId;
     let sessionData;
-    
     if (existingSession) {
       sessionId = existingSession.id;
       sessionData = existingSession;
       console.log("✅ [FOUND] Menggunakan session yang sudah ada:", sessionId);
     } else {
       console.log("⚠️ [NEW] Tidak ada session, membuat baru...");
-      // ... code untuk buat session baru
+      const { data: newSession, error: insertError } = await supabase
+        .from('chat_sessions')
+        .insert({
+          request_id: requestId,
+          user_id: item.user_id,
+          admin_id: adminProfile?.admin_id,
+          session_name: `RFQ-${requestId}`,
+          status: 'active'
+        })
+        .select('*')
+        .single();
+      if (insertError) throw insertError;
+      sessionId = newSession.id;
+      sessionData = newSession;
+      console.log("✅ Session baru dibuat:", sessionId);
     }
-    
     // 4. Set active session
     console.log("🔵 [SET STATE] Setting activeSession to:", sessionId);
     setActiveSession(sessionId);
-    
     // ✅ SIMPAN SESSION DATA
     setSelectedClient({
       ...item,
       session_name: sessionData?.session_name || `RFQ-${requestId}`
     });
-    
-    // 5. Load messages - INI YANG PENTING!
+    // 5. Load messages
     console.log("🔵 [FETCH] Memanggil fetchChatMessages dengan sessionId:", sessionId);
     await fetchChatMessages(sessionId);
-    console.log("🔵 [AFTER FETCH] chatMessages state seharusnya sudah terisi");
+    
+    // ✅ FIX READ RECEIPTS: Tandai pesan dari USER sebagai terbaca oleh ADMIN
+    // Kita perlu fetch dulu ID pesan user yang belum dibaca
+    const { data: unreadMessages } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('sender_type', 'user')
+      .eq('is_read', false);
+      
+    if (unreadMessages && unreadMessages.length > 0) {
+      await supabase
+        .from('chat_messages')
+        .update({ is_read: true })
+        .in('id', unreadMessages.map(m => m.id));
+    }
     
     // 6. Setup realtime subscription
     setupChatRealtimeSubscription(sessionId);
-    
   } catch (error: any) {
     console.error("❌ [ERROR] Gagal membuka sesi chat:", error);
     alert("❌ Gagal membuka sesi chat: " + error.message);
@@ -3069,13 +3087,25 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                         {msg.message}
                       </p>
                       
-                      {/* Footer: Waktu */}
-                      <p className="text-xs text-right mt-2 opacity-60">
-                        {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                      {/* Footer: Waktu & Status */}
+                      <div className="flex items-center justify-end gap-1 mt-2">
+                        <span className="text-[10px] text-blue-200">
+                          {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                        {/* ✅ INDIKATOR READ (Hanya untuk pesan Admin) */}
+                        {isAdmin && (
+                          <span className="text-xs">
+                            {msg.is_read ? (
+                              <CircleDot size={12} className="text-blue-400 fill-blue-400" />
+                            ) : (
+                              <Circle size={12} className="text-slate-400" />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )

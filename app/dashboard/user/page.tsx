@@ -705,6 +705,7 @@ useEffect(() => {
 }, [messages, activeSession])
 
 // ✅ LOAD dari localStorage jika fetch dari DB gagal
+// ✅ LOAD dari localStorage jika fetch dari DB gagal
 const loadMessages = useCallback(async (sessionId: string) => {
   try {
     setChatLoading(true)
@@ -714,56 +715,48 @@ const loadMessages = useCallback(async (sessionId: string) => {
       return
     }
     console.log('🔵 [MESSAGES] Fetching messages from database...')
-    console.log('🔵 [MESSAGES] Session ID:', sessionId)
     
-    // ✅ PERBAIKAN: Query sederhana TANPA JOIN kompleks
+    // ✅ PERBAIKAN: Join ke admin_marketing_profiles untuk dapat nama admin
     const { data, error } = await supabase
       .from('chat_messages')
-      .select('*')  // Ambil semua data dulu tanpa JOIN
+      .select(`
+        *,
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!sender_id(admin_name)
+      `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    
-    console.log('🔵 [MESSAGES] Raw data:', data)
-    console.log('🔵 [MESSAGES] Error:', error)
-    
-    if (error) {
-      console.error('🔴 [MESSAGES] Query error:', error)
-      throw error
-    }
+      
+    if (error) throw error
     
     const messagesCount = data?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
     
-    // Jika ada data dari DB, simpan ke localStorage
     if (data && data.length > 0) {
       setMessages(data)
       localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(data))
+      
+      // ✅ FIX READ RECEIPTS: Tandai pesan dari ADMIN sebagai terbaca oleh USER
+      const unreadAdminMessages = data.filter(m => 
+        m.sender_type === 'admin' && !m.is_read
+      )
+      
+      if (unreadAdminMessages.length > 0) {
+        await supabase
+          .from('chat_messages')
+          .update({ is_read: true })
+          .in('id', unreadAdminMessages.map(m => m.id))
+      }
     } else {
-      // Jika DB kosong, coba load dari localStorage
       const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
       if (savedMessages) {
-        console.log('🟡 [MESSAGES] Loading from localStorage backup')
         setMessages(JSON.parse(savedMessages))
       } else {
         setMessages([])
       }
     }
-    
-    // Mark as read - hanya untuk pesan dari admin
-    const unreadMessages = data?.filter(m =>
-      m.sender_type === 'admin' && !m.read_by_user
-    ) || []
-    
-    if (unreadMessages.length > 0) {
-      await supabase
-        .from('chat_messages')
-        .update({ read_by_user: true })
-        .in('id', unreadMessages.map(m => m.id))
-    }
-  } catch (err: any) {
+  } catch (err) {
     console.error('🔴 [MESSAGES] Failed to load messages:', err)
-    console.error('🔴 [MESSAGES] Error details:', err.message)
-    // Fallback ke localStorage
     const savedMessages = localStorage.getItem(`chat_messages_${sessionId}`)
     if (savedMessages) {
       setMessages(JSON.parse(savedMessages))
@@ -2745,10 +2738,19 @@ const confirmSubmitRequest = async () => {
                       {/* CHAT HEADER */}
                       <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                            <MessageSquare className="h-5 w-5 text-white" />
+                          {/* ✅ AVATAR ADMIN DINAMIS (Inisial Nama) */}
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg"
+                              style={{ 
+                                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' // Warna Orange sesuai profil
+                              }}>
+                            {/* Ambil inisial dari nama admin */}
+                            {(() => {
+                              const adminName = getAdminDisplayName(messages);
+                              return adminName ? adminName.charAt(0).toUpperCase() : 'A';
+                            })()}
                           </div>
                           <div>
+                            {/* ✅ NAMA ADMIN DINAMIS */}
                             <p className="text-white font-medium">
                               {getAdminDisplayName(messages)}
                             </p>
@@ -2829,10 +2831,14 @@ const confirmSubmitRequest = async () => {
                                         minute: '2-digit'
                                       })}
                                     </span>
-                                    {/* Icon Status (Hanya untuk pesan User) */}
+                                    {/* ✅ INDIKATOR READ (Hanya untuk pesan User) */}
                                     {isUser && (
                                       <span className="text-xs">
-                                        {readIcon}
+                                        {msg.is_read ? (
+                                          <CircleDot size={12} className="text-blue-400 fill-blue-400" /> // Terisi jika sudah dibaca admin
+                                        ) : (
+                                          <Circle size={12} className="text-blue-300" /> // Kosong jika belum
+                                        )}
                                       </span>
                                     )}
                                   </div>
