@@ -732,11 +732,11 @@ const openInvoiceModal = async () => {
     return
   }
   try {
-    // Step 1: fetch wishlist items for this request (avoid relational embed
-    // syntax which requires an explicit FK in the PostgREST schema cache)
+    // Step 1: fetch wishlist items for this request using select('*') to avoid
+    // PostgREST treating the product_id FK column as an embedded resource
     const { data: wishlistData, error: wishlistError } = await supabase
       .from('wishlists')
-      .select('id, product_id, quantity, price, product_name')
+      .select('*')
       .eq('request_id', requestId)
       .neq('status', 'wishlist')
     if (wishlistError) throw wishlistError

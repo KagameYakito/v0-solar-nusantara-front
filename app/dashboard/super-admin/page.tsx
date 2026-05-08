@@ -135,29 +135,21 @@ export default function SuperAdminDashboard() {
     setRoleChangeResult(null)
 
     try {
-      // Attempt 1: Use SECURITY DEFINER RPC (requires fix_super_admin_role_update.sql migration)
-      const { error: rpcError } = await supabase.rpc('update_user_role', {
-        target_user_id: userId,
-        new_role: newRole,
+      // Use the server-side API route which bypasses RLS via service role key
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.')
+
+      const response = await fetch('/api/admin/update-role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId, newRole }),
       })
 
-      if (rpcError) {
-        // RPC not available — fallback to server-side API route (requires SUPABASE_SERVICE_ROLE_KEY)
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.')
-
-        const response = await fetch('/api/admin/update-role', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ userId, newRole }),
-        })
-
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || `Gagal mengubah role via API (status: ${response.status})`)
-      }
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || `Gagal mengubah role via API (status: ${response.status})`)
 
       setRoleChangeResult({ id: userId, success: true })
       
