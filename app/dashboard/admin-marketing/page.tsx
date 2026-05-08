@@ -743,7 +743,7 @@ const openInvoiceModal = async () => {
 
     // Step 2: fetch matching product details separately
     const productIds = (wishlistData || []).map(w => w.product_id).filter(Boolean)
-    let productsMap: Record<string, { nama_produk: string; sku: string }> = {}
+    const productsMap: Record<string, { nama_produk: string; sku: string }> = {}
     if (productIds.length > 0) {
       const { data: productsData } = await supabase
         .from('products')

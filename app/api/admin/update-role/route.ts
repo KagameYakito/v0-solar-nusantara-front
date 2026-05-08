@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Roles that can be assigned via this API. 'super_admin' is intentionally
+// excluded — promoting to super_admin must be done directly in the database.
 const ALLOWED_ROLES = ['user', 'admin_logistik', 'admin_marketing', 'admin_data', 'admin_keuangan']
 
 export async function POST(request: NextRequest) {
