@@ -2878,6 +2878,7 @@ const confirmSubmitRequest = async () => {
                                 .replace(/</g, '&lt;')
                                 .replace(/>/g, '&gt;')
                                 .replace(/"/g, '&quot;')
+                                .replace(/'/g, '&#39;')
 
                               const handleDownloadInvoice = () => {
                                 if (!invoiceData) return
@@ -2919,8 +2920,16 @@ const confirmSubmitRequest = async () => {
                                   </body></html>`
                                 const blob = new Blob([printContent], { type: 'text/html' })
                                 const url = URL.createObjectURL(blob)
+                                // Schedule cleanup after a reasonable delay to handle popup blockers
+                                setTimeout(() => URL.revokeObjectURL(url), 60000)
                                 const w = window.open(url, '_blank')
-                                if (w) { w.addEventListener('load', () => { w.print(); URL.revokeObjectURL(url) }) }
+                                if (w) {
+                                  w.addEventListener('load', () => {
+                                    w.print()
+                                    // Clear the timeout and revoke immediately after print dialog
+                                    URL.revokeObjectURL(url)
+                                  })
+                                }
                               }
                               
                               return (
