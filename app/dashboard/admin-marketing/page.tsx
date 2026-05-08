@@ -780,10 +780,29 @@ const sendInvoice = async () => {
         sender_id: session.user.id,
         sender_type: 'admin',
         message: invoicePayload,
+        // Use 'invoice' if the DB constraint allows it (after running migration),
+        // fallback to 'text' so the message still goes through on older DB schemas.
         message_type: 'invoice',
         is_read: false
       })
-    if (error) throw error
+    if (error) {
+      // If the error is a check constraint violation (old DB schema), retry with 'text'
+      if (error.code === '23514') {
+        const { error: fallbackError } = await supabase
+          .from('chat_messages')
+          .insert({
+            session_id: activeSession,
+            sender_id: session.user.id,
+            sender_type: 'admin',
+            message: invoicePayload,
+            message_type: 'text',
+            is_read: false
+          })
+        if (fallbackError) throw fallbackError
+      } else {
+        throw error
+      }
+    }
 
     await supabase
       .from('chat_sessions')

@@ -140,6 +140,9 @@ export default function UserDashboard() {
 
   const [showQRModal, setShowQRModal] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [merchantName, setMerchantName] = useState<string | null>(null)
 
   // Ref so fetchAuctionParticipation always reads the latest profile without needing
   // to be recreated (avoids tearing down realtime subscriptions on profile changes).
@@ -2869,7 +2872,15 @@ const confirmSubmitRequest = async () => {
                             )
                             
                             // Handle invoice message from admin
-                            if (msg.message_type === 'invoice') {
+                            // Detect by message_type OR by JSON content (fallback for older DB schema)
+                            const isInvoiceMsg = msg.message_type === 'invoice' ||
+                              (msg.sender_type === 'admin' && msg.message_type === 'text' && (() => {
+                                try {
+                                  const p = JSON.parse(msg.message)
+                                  return p && p.rfq_id !== undefined && Array.isArray(p.items)
+                                } catch { return false }
+                              })())
+                            if (isInvoiceMsg) {
                               let invoiceData: any = null
                               try { invoiceData = JSON.parse(msg.message) } catch {}
                               
@@ -2962,7 +2973,34 @@ const confirmSubmitRequest = async () => {
                                     <div className="flex gap-2 mt-3">
                                       <Button
                                         size="sm"
-                                        onClick={() => { setSelectedInvoice(invoiceData); setShowQRModal(true) }}
+                                        onClick={async () => {
+                                          setSelectedInvoice(invoiceData)
+                                          setQrImageUrl(null)
+                                          setQrLoading(true)
+                                          setShowQRModal(true)
+                                          // Generate real QRIS
+                                          try {
+                                            const { data: settings } = await supabase
+                                              .from('payment_settings')
+                                              .select('static_qris, merchant_name')
+                                              .eq('setting_type', 'qris')
+                                              .eq('is_active', true)
+                                              .limit(1)
+                                              .maybeSingle()
+                                            if (settings?.static_qris) {
+                                              const { generateDynamicQris } = await import('@/lib/qris')
+                                              const dynamicQris = generateDynamicQris(settings.static_qris, invoiceData.total_amount)
+                                              const QRCode = (await import('qrcode')).default
+                                              const url = await QRCode.toDataURL(dynamicQris, { width: 280, margin: 1 })
+                                              setQrImageUrl(url)
+                                              setMerchantName(settings.merchant_name || null)
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to generate QRIS:', err)
+                                          } finally {
+                                            setQrLoading(false)
+                                          }
+                                        }}
                                         className="bg-green-600 hover:bg-green-700 text-xs flex-1"
                                       >
                                         <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -3517,75 +3555,33 @@ const confirmSubmitRequest = async () => {
                 </p>
               </div>
             )}
-            {/* Dummy QR Code */}
+            {/* QRIS from database */}
             <div className="flex justify-center">
-              <div className="bg-white p-4 rounded-xl">
-                <svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
-                  <rect width="160" height="160" fill="white"/>
-                  {/* Top-left finder pattern */}
-                  <rect x="10" y="10" width="40" height="40" fill="black" rx="2"/>
-                  <rect x="16" y="16" width="28" height="28" fill="white" rx="1"/>
-                  <rect x="22" y="22" width="16" height="16" fill="black" rx="1"/>
-                  {/* Top-right finder pattern */}
-                  <rect x="110" y="10" width="40" height="40" fill="black" rx="2"/>
-                  <rect x="116" y="16" width="28" height="28" fill="white" rx="1"/>
-                  <rect x="122" y="22" width="16" height="16" fill="black" rx="1"/>
-                  {/* Bottom-left finder pattern */}
-                  <rect x="10" y="110" width="40" height="40" fill="black" rx="2"/>
-                  <rect x="16" y="116" width="28" height="28" fill="white" rx="1"/>
-                  <rect x="22" y="122" width="16" height="16" fill="black" rx="1"/>
-                  {/* Data modules */}
-                  <rect x="60" y="10" width="6" height="6" fill="black"/>
-                  <rect x="72" y="10" width="6" height="6" fill="black"/>
-                  <rect x="84" y="10" width="6" height="6" fill="black"/>
-                  <rect x="96" y="10" width="6" height="6" fill="black"/>
-                  <rect x="60" y="22" width="6" height="6" fill="black"/>
-                  <rect x="84" y="22" width="6" height="6" fill="black"/>
-                  <rect x="60" y="34" width="6" height="6" fill="black"/>
-                  <rect x="72" y="34" width="6" height="6" fill="black"/>
-                  <rect x="96" y="34" width="6" height="6" fill="black"/>
-                  <rect x="10" y="60" width="6" height="6" fill="black"/>
-                  <rect x="22" y="60" width="6" height="6" fill="black"/>
-                  <rect x="34" y="60" width="6" height="6" fill="black"/>
-                  <rect x="46" y="60" width="6" height="6" fill="black"/>
-                  <rect x="60" y="60" width="6" height="6" fill="black"/>
-                  <rect x="72" y="60" width="6" height="6" fill="black"/>
-                  <rect x="84" y="60" width="6" height="6" fill="black"/>
-                  <rect x="10" y="72" width="6" height="6" fill="black"/>
-                  <rect x="46" y="72" width="6" height="6" fill="black"/>
-                  <rect x="72" y="72" width="6" height="6" fill="black"/>
-                  <rect x="96" y="72" width="6" height="6" fill="black"/>
-                  <rect x="108" y="72" width="6" height="6" fill="black"/>
-                  <rect x="22" y="84" width="6" height="6" fill="black"/>
-                  <rect x="34" y="84" width="6" height="6" fill="black"/>
-                  <rect x="60" y="84" width="6" height="6" fill="black"/>
-                  <rect x="84" y="84" width="6" height="6" fill="black"/>
-                  <rect x="108" y="84" width="6" height="6" fill="black"/>
-                  <rect x="120" y="84" width="6" height="6" fill="black"/>
-                  <rect x="60" y="96" width="6" height="6" fill="black"/>
-                  <rect x="72" y="96" width="6" height="6" fill="black"/>
-                  <rect x="96" y="96" width="6" height="6" fill="black"/>
-                  <rect x="120" y="96" width="6" height="6" fill="black"/>
-                  <rect x="60" y="108" width="6" height="6" fill="black"/>
-                  <rect x="84" y="108" width="6" height="6" fill="black"/>
-                  <rect x="108" y="108" width="6" height="6" fill="black"/>
-                  <rect x="132" y="108" width="6" height="6" fill="black"/>
-                  <rect x="72" y="120" width="6" height="6" fill="black"/>
-                  <rect x="96" y="120" width="6" height="6" fill="black"/>
-                  <rect x="120" y="120" width="6" height="6" fill="black"/>
-                  <rect x="60" y="132" width="6" height="6" fill="black"/>
-                  <rect x="84" y="132" width="6" height="6" fill="black"/>
-                  <rect x="108" y="132" width="6" height="6" fill="black"/>
-                  <rect x="132" y="132" width="6" height="6" fill="black"/>
-                  <rect x="144" y="60" width="6" height="6" fill="black"/>
-                  <rect x="132" y="72" width="6" height="6" fill="black"/>
-                  <rect x="144" y="72" width="6" height="6" fill="black"/>
-                  <rect x="132" y="60" width="6" height="6" fill="black"/>
-                </svg>
-              </div>
+              {qrLoading ? (
+                <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="text-sm">Memuat QRIS pembayaran...</span>
+                </div>
+              ) : qrImageUrl ? (
+                <div className="bg-white p-4 rounded-xl">
+                  <img src={qrImageUrl} alt="QRIS Pembayaran" className="w-48 h-48 object-contain" />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-6 text-slate-500 text-sm">
+                  <span>QRIS belum dikonfigurasi.</span>
+                  <span className="text-xs">Hubungi Admin Keuangan untuk mengaktifkan pembayaran QRIS.</span>
+                </div>
+              )}
             </div>
-            <p className="text-slate-400 text-sm">Scan QR code ini dengan aplikasi pembayaran Anda</p>
-            <p className="text-xs text-slate-500 italic">(QR Code dummy — integrasi pembayaran akan segera hadir)</p>
+            {merchantName && qrImageUrl && (
+              <p className="text-slate-300 text-sm font-medium">{merchantName}</p>
+            )}
+            {qrImageUrl && (
+              <>
+                <p className="text-slate-400 text-sm">Scan QR code ini dengan aplikasi pembayaran Anda</p>
+                <p className="text-xs text-slate-500">Nominal sudah ter-embed di dalam QRIS secara otomatis</p>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button onClick={() => setShowQRModal(false)} className="w-full bg-green-600 hover:bg-green-700">
