@@ -138,6 +138,9 @@ export default function UserDashboard() {
   const [newMessage, setNewMessage] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
 
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
+
   // Ref so fetchAuctionParticipation always reads the latest profile without needing
   // to be recreated (avoids tearing down realtime subscriptions on profile changes).
   const profileRef = useRef<Profile | null>(null)
@@ -2865,6 +2868,107 @@ const confirmSubmitRequest = async () => {
                               <Circle size={12} className="text-blue-300" />
                             )
                             
+                            // Handle invoice message from admin
+                            if (msg.message_type === 'invoice') {
+                              let invoiceData: any = null
+                              try { invoiceData = JSON.parse(msg.message) } catch {}
+                              
+                              const handleDownloadInvoice = () => {
+                                if (!invoiceData) return
+                                const printContent = `
+                                  <html><head><title>Invoice ${invoiceData.rfq_code}</title>
+                                  <style>
+                                    body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+                                    h1 { color: #1e40af; }
+                                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                                    th { background: #1e3a5f; color: white; padding: 10px; text-align: left; }
+                                    td { padding: 8px; border-bottom: 1px solid #ddd; }
+                                    .total { font-weight: bold; font-size: 1.1em; color: #1e40af; }
+                                    .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+                                    .company { font-size: 0.9em; color: #666; }
+                                  </style></head><body>
+                                  <div class="header">
+                                    <div><h1>INVOICE</h1><p class="company">Solar Nusantara</p></div>
+                                    <div style="text-align:right"><p><strong>${invoiceData.rfq_code}</strong></p>
+                                    <p>${new Date(invoiceData.created_at).toLocaleDateString('id-ID')}</p></div>
+                                  </div>
+                                  <p><strong>Kepada:</strong> ${invoiceData.user_name}</p>
+                                  <p><strong>Perusahaan:</strong> ${invoiceData.company_name}</p>
+                                  <table>
+                                    <thead><tr><th>Produk</th><th>SKU</th><th>Qty</th><th>Harga Satuan</th><th>Subtotal</th></tr></thead>
+                                    <tbody>
+                                    ${invoiceData.items?.map((it: any) => `
+                                      <tr>
+                                        <td>${it.product_name}</td>
+                                        <td>${it.sku}</td>
+                                        <td>${it.quantity}</td>
+                                        <td>Rp ${Number(it.unit_price).toLocaleString('id-ID')}</td>
+                                        <td>Rp ${Number(it.subtotal).toLocaleString('id-ID')}</td>
+                                      </tr>`).join('')}
+                                    </tbody>
+                                    <tfoot><tr><td colspan="4" style="text-align:right;font-weight:bold">Total</td>
+                                    <td class="total">Rp ${Number(invoiceData.total_amount).toLocaleString('id-ID')}</td></tr></tfoot>
+                                  </table>
+                                  ${invoiceData.notes ? `<p style="margin-top:20px"><strong>Catatan:</strong> ${invoiceData.notes}</p>` : ''}
+                                  </body></html>`
+                                const w = window.open('', '_blank')
+                                if (w) { w.document.write(printContent); w.document.close(); w.print() }
+                              }
+                              
+                              return (
+                                <div key={msg.id} className="flex justify-start mt-4">
+                                  <div className="max-w-[80%] bg-emerald-900/20 border border-emerald-600/40 rounded-2xl rounded-bl-none px-4 py-3">
+                                    <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1">
+                                      <FileText className="h-3 w-3" />
+                                      INVOICE DARI ADMIN
+                                    </p>
+                                    {invoiceData && (
+                                      <div className="space-y-1 text-xs text-slate-300 mb-3">
+                                        <p className="font-mono font-bold text-white">{invoiceData.rfq_code}</p>
+                                        <div className="border-t border-emerald-700/30 my-2" />
+                                        {invoiceData.items?.slice(0, 3).map((it: any, i: number) => (
+                                          <div key={i} className="flex justify-between">
+                                            <span>{it.product_name} × {it.quantity}</span>
+                                            <span className="font-mono">Rp {Number(it.subtotal).toLocaleString('id-ID')}</span>
+                                          </div>
+                                        ))}
+                                        {(invoiceData.items?.length || 0) > 3 && (
+                                          <p className="text-slate-500">+{invoiceData.items.length - 3} produk lainnya</p>
+                                        )}
+                                        <div className="border-t border-emerald-700/30 my-2" />
+                                        <div className="flex justify-between font-bold text-orange-400">
+                                          <span>Total</span>
+                                          <span className="font-mono">Rp {Number(invoiceData.total_amount).toLocaleString('id-ID')}</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="flex gap-2 mt-3">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => { setSelectedInvoice(invoiceData); setShowQRModal(true) }}
+                                        className="bg-green-600 hover:bg-green-700 text-xs flex-1"
+                                      >
+                                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                                        Deal
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={handleDownloadInvoice}
+                                        className="border-slate-600 text-xs flex-1"
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Unduh PDF
+                                      </Button>
+                                    </div>
+                                    <p className="text-[10px] text-emerald-300 mt-2 text-right">
+                                      {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            }
+
                             return (
                               <div
                                 key={msg.id}
@@ -3370,6 +3474,106 @@ const confirmSubmitRequest = async () => {
           <DialogFooter>
             <Button onClick={() => setShowStatusModal(false)} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600">
               Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* QR CODE PAYMENT MODAL */}
+      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-400">
+              <CheckCircle className="h-5 w-5" />
+              Konfirmasi Deal & Pembayaran
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Scan QR code di bawah untuk melakukan pembayaran
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4 text-center">
+            {selectedInvoice && (
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 mb-4 text-left text-sm">
+                <p className="text-white font-bold">{selectedInvoice.rfq_code}</p>
+                <p className="text-slate-400 text-xs mt-1">Total Pembayaran</p>
+                <p className="text-orange-400 font-mono font-bold text-lg">
+                  Rp {Number(selectedInvoice.total_amount).toLocaleString('id-ID')}
+                </p>
+              </div>
+            )}
+            {/* Dummy QR Code */}
+            <div className="flex justify-center">
+              <div className="bg-white p-4 rounded-xl">
+                <svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="160" height="160" fill="white"/>
+                  {/* Top-left finder pattern */}
+                  <rect x="10" y="10" width="40" height="40" fill="black" rx="2"/>
+                  <rect x="16" y="16" width="28" height="28" fill="white" rx="1"/>
+                  <rect x="22" y="22" width="16" height="16" fill="black" rx="1"/>
+                  {/* Top-right finder pattern */}
+                  <rect x="110" y="10" width="40" height="40" fill="black" rx="2"/>
+                  <rect x="116" y="16" width="28" height="28" fill="white" rx="1"/>
+                  <rect x="122" y="22" width="16" height="16" fill="black" rx="1"/>
+                  {/* Bottom-left finder pattern */}
+                  <rect x="10" y="110" width="40" height="40" fill="black" rx="2"/>
+                  <rect x="16" y="116" width="28" height="28" fill="white" rx="1"/>
+                  <rect x="22" y="122" width="16" height="16" fill="black" rx="1"/>
+                  {/* Data modules */}
+                  <rect x="60" y="10" width="6" height="6" fill="black"/>
+                  <rect x="72" y="10" width="6" height="6" fill="black"/>
+                  <rect x="84" y="10" width="6" height="6" fill="black"/>
+                  <rect x="96" y="10" width="6" height="6" fill="black"/>
+                  <rect x="60" y="22" width="6" height="6" fill="black"/>
+                  <rect x="84" y="22" width="6" height="6" fill="black"/>
+                  <rect x="60" y="34" width="6" height="6" fill="black"/>
+                  <rect x="72" y="34" width="6" height="6" fill="black"/>
+                  <rect x="96" y="34" width="6" height="6" fill="black"/>
+                  <rect x="10" y="60" width="6" height="6" fill="black"/>
+                  <rect x="22" y="60" width="6" height="6" fill="black"/>
+                  <rect x="34" y="60" width="6" height="6" fill="black"/>
+                  <rect x="46" y="60" width="6" height="6" fill="black"/>
+                  <rect x="60" y="60" width="6" height="6" fill="black"/>
+                  <rect x="72" y="60" width="6" height="6" fill="black"/>
+                  <rect x="84" y="60" width="6" height="6" fill="black"/>
+                  <rect x="10" y="72" width="6" height="6" fill="black"/>
+                  <rect x="46" y="72" width="6" height="6" fill="black"/>
+                  <rect x="72" y="72" width="6" height="6" fill="black"/>
+                  <rect x="96" y="72" width="6" height="6" fill="black"/>
+                  <rect x="108" y="72" width="6" height="6" fill="black"/>
+                  <rect x="22" y="84" width="6" height="6" fill="black"/>
+                  <rect x="34" y="84" width="6" height="6" fill="black"/>
+                  <rect x="60" y="84" width="6" height="6" fill="black"/>
+                  <rect x="84" y="84" width="6" height="6" fill="black"/>
+                  <rect x="108" y="84" width="6" height="6" fill="black"/>
+                  <rect x="120" y="84" width="6" height="6" fill="black"/>
+                  <rect x="60" y="96" width="6" height="6" fill="black"/>
+                  <rect x="72" y="96" width="6" height="6" fill="black"/>
+                  <rect x="96" y="96" width="6" height="6" fill="black"/>
+                  <rect x="120" y="96" width="6" height="6" fill="black"/>
+                  <rect x="60" y="108" width="6" height="6" fill="black"/>
+                  <rect x="84" y="108" width="6" height="6" fill="black"/>
+                  <rect x="108" y="108" width="6" height="6" fill="black"/>
+                  <rect x="132" y="108" width="6" height="6" fill="black"/>
+                  <rect x="72" y="120" width="6" height="6" fill="black"/>
+                  <rect x="96" y="120" width="6" height="6" fill="black"/>
+                  <rect x="120" y="120" width="6" height="6" fill="black"/>
+                  <rect x="60" y="132" width="6" height="6" fill="black"/>
+                  <rect x="84" y="132" width="6" height="6" fill="black"/>
+                  <rect x="108" y="132" width="6" height="6" fill="black"/>
+                  <rect x="132" y="132" width="6" height="6" fill="black"/>
+                  <rect x="144" y="60" width="6" height="6" fill="black"/>
+                  <rect x="132" y="72" width="6" height="6" fill="black"/>
+                  <rect x="144" y="72" width="6" height="6" fill="black"/>
+                  <rect x="132" y="60" width="6" height="6" fill="black"/>
+                </svg>
+              </div>
+            </div>
+            <p className="text-slate-400 text-sm">Scan QR code ini dengan aplikasi pembayaran Anda</p>
+            <p className="text-xs text-slate-500 italic">(QR Code dummy — integrasi pembayaran akan segera hadir)</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowQRModal(false)} className="w-full bg-green-600 hover:bg-green-700">
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Selesai
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -27,6 +27,7 @@ const ROLE_OPTIONS = [
   { value: 'admin_logistik', label: 'Admin Logistik', color: 'bg-orange-600' },
   { value: 'admin_marketing', label: 'Admin Marketing', color: 'bg-green-600' },
   { value: 'admin_data', label: 'Admin Data', color: 'bg-purple-600' },
+  { value: 'admin_keuangan', label: 'Admin Keuangan', color: 'bg-yellow-600' },
   { value: 'super_admin', label: 'Super Admin', color: 'bg-blue-600' },
 ]
 

@@ -183,6 +183,11 @@ export default function AdminMarketingDashboard() {
   const [selectedAdminForTakeover, setSelectedAdminForTakeover] = useState('');
   const [chatInput, setChatInput] = useState('')
 
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [invoiceItems, setInvoiceItems] = useState<any[]>([])
+  const [invoiceNotes, setInvoiceNotes] = useState('')
+  const [sendingInvoice, setSendingInvoice] = useState(false)
+
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
     'pending': 2,
@@ -709,6 +714,9 @@ const setupChatRealtimeSubscription = (sessionId: string) => {
       (payload) => {
         console.log('🔵 New message received:', payload.new);
         setChatMessages((prev: any) => [...prev, payload.new]);
+        setTimeout(() => {
+          adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
       }
     )
     .subscribe();
@@ -716,6 +724,85 @@ const setupChatRealtimeSubscription = (sessionId: string) => {
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+const openInvoiceModal = async () => {
+  if (!selectedClient || !activeSession) return
+  const requestId = selectedClient.request_id
+  if (!requestId) {
+    alert("❌ Tidak ada request_id untuk RFQ ini")
+    return
+  }
+  try {
+    const { data, error } = await supabase
+      .from('wishlists')
+      .select('*, products:product_id(nama_produk, sku, gambar_url)')
+      .eq('request_id', requestId)
+      .neq('status', 'wishlist')
+    if (error) throw error
+    const items = (data || []).map(item => ({
+      id: item.id,
+      product_name: item.products?.nama_produk || item.product_name || 'Produk',
+      sku: item.products?.sku || item.product_id || '-',
+      quantity: item.quantity || 1,
+      unit_price: item.price || 0,
+      subtotal: (item.quantity || 1) * (item.price || 0)
+    }))
+    setInvoiceItems(items)
+    setInvoiceNotes('')
+    setShowInvoiceModal(true)
+  } catch (err: any) {
+    alert("❌ Gagal memuat data produk: " + err.message)
+  }
+}
+
+const sendInvoice = async () => {
+  if (!activeSession || !selectedClient || invoiceItems.length === 0) return
+  setSendingInvoice(true)
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const totalAmount = invoiceItems.reduce((sum, item) => sum + item.subtotal, 0)
+    const invoicePayload = JSON.stringify({
+      rfq_id: selectedClient.request_id,
+      rfq_code: selectedClient.session_name || `RFQ-${selectedClient.request_id}`,
+      user_name: selectedClient.user_name,
+      company_name: selectedClient.company_name,
+      items: invoiceItems,
+      total_amount: totalAmount,
+      notes: invoiceNotes,
+      created_at: new Date().toISOString()
+    })
+
+    const { error } = await supabase
+      .from('chat_messages')
+      .insert({
+        session_id: activeSession,
+        sender_id: session.user.id,
+        sender_type: 'admin',
+        message: invoicePayload,
+        message_type: 'invoice',
+        is_read: false
+      })
+    if (error) throw error
+
+    await supabase
+      .from('chat_sessions')
+      .update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', activeSession)
+
+    setShowInvoiceModal(false)
+    await fetchChatMessages(activeSession)
+    setTimeout(() => {
+      adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 200)
+    alert("✅ Invoice berhasil dikirim!")
+  } catch (err: any) {
+    alert("❌ Gagal mengirim invoice: " + err.message)
+  } finally {
+    setSendingInvoice(false)
+  }
 }
 
   const getStatusConfig = (status: string) => {
@@ -3023,17 +3110,27 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   </DialogDescription>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setActiveSession(null);
-                  setChatMessages([]);
-                }}
-                className="text-slate-400 hover:text-white hover:bg-slate-700"
-              >
-                <X className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={openInvoiceModal}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-xs"
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Buat Invoice
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setActiveSession(null);
+                    setChatMessages([]);
+                  }}
+                  className="text-slate-400 hover:text-white hover:bg-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
           </DialogHeader>
 
@@ -3057,6 +3154,43 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
                   : (msg.sender_profile?.full_name || 'User')
                 
+                // Handle invoice messages
+                if (msg.message_type === 'invoice') {
+                  let invoiceData: any = null
+                  try { invoiceData = JSON.parse(msg.message) } catch {}
+                  
+                  return (
+                    <div key={msg.id || index} className="flex justify-end mt-4">
+                      <div className="max-w-[80%] bg-emerald-900/30 border border-emerald-600/50 rounded-2xl rounded-tr-none px-4 py-3 shadow-sm">
+                        <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1">
+                          <FileText className="h-3 w-3" />
+                          INVOICE DIKIRIM
+                        </p>
+                        {invoiceData && (
+                          <div className="space-y-1 text-xs text-slate-300">
+                            <p className="font-mono font-bold text-white">{invoiceData.rfq_code}</p>
+                            <p>{invoiceData.user_name} — {invoiceData.company_name}</p>
+                            <div className="border-t border-emerald-700/50 my-2" />
+                            {invoiceData.items?.slice(0, 3).map((it: any, i: number) => (
+                              <p key={i}>{it.product_name} × {it.quantity}</p>
+                            ))}
+                            {(invoiceData.items?.length || 0) > 3 && (
+                              <p className="text-slate-500">+{invoiceData.items.length - 3} produk lainnya</p>
+                            )}
+                            <div className="border-t border-emerald-700/50 my-2" />
+                            <p className="text-orange-400 font-mono font-bold">
+                              Total: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(invoiceData.total_amount || 0)}
+                            </p>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-emerald-300 mt-2 text-right">
+                          {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                }
+
                 // ✅ RETURN JSX - POSISI YANG BENAR
                 return (
                   <div
@@ -3475,6 +3609,116 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
           </DialogContent>
         </Dialog>
       )}
+      {/* INVOICE MODAL */}
+      <Dialog open={showInvoiceModal} onOpenChange={setShowInvoiceModal}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b border-slate-700 bg-slate-800/50">
+            <DialogTitle className="flex items-center gap-2 text-emerald-400">
+              <FileText className="h-5 w-5" />
+              Buat Invoice
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {selectedClient?.session_name} — {selectedClient?.user_name} ({selectedClient?.company_name})
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Invoice Items Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-slate-300">
+                <thead className="bg-slate-800 text-xs uppercase">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Produk</th>
+                    <th className="px-3 py-2 text-center w-20">Qty</th>
+                    <th className="px-3 py-2 text-right w-40">Harga Satuan</th>
+                    <th className="px-3 py-2 text-right w-40">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {invoiceItems.map((item, index) => (
+                    <tr key={index} className="hover:bg-slate-800/50">
+                      <td className="px-3 py-3">
+                        <p className="text-white font-medium">{item.product_name}</p>
+                        <p className="text-xs text-slate-500 font-mono">{item.sku}</p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const qty = Math.max(1, parseInt(e.target.value) || 1)
+                            setInvoiceItems(prev => prev.map((it, i) =>
+                              i === index ? { ...it, quantity: qty, subtotal: qty * it.unit_price } : it
+                            ))
+                          }}
+                          className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-center text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.unit_price}
+                          onChange={(e) => {
+                            const price = Math.max(0, parseFloat(e.target.value) || 0)
+                            setInvoiceItems(prev => prev.map((it, i) =>
+                              i === index ? { ...it, unit_price: price, subtotal: it.quantity * price } : it
+                            ))
+                          }}
+                          className="w-36 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-right text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-orange-400">
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(item.subtotal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 border-slate-600">
+                  <tr>
+                    <td colSpan={3} className="px-3 py-3 text-right font-bold text-white">Total</td>
+                    <td className="px-3 py-3 text-right font-mono font-bold text-orange-400 text-base">
+                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(
+                        invoiceItems.reduce((s, it) => s + it.subtotal, 0)
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-sm text-slate-400 mb-1 block">Catatan Invoice (Opsional)</label>
+              <textarea
+                value={invoiceNotes}
+                onChange={(e) => setInvoiceNotes(e.target.value)}
+                rows={3}
+                className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 resize-none"
+                placeholder="Contoh: Harga sudah termasuk ongkos kirim ke lokasi..."
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-700 p-4 flex gap-3 flex-shrink-0 bg-slate-800/50">
+            <Button variant="outline" onClick={() => setShowInvoiceModal(false)} className="border-slate-600 flex-1" disabled={sendingInvoice}>
+              Batal
+            </Button>
+            <Button
+              onClick={sendInvoice}
+              disabled={sendingInvoice || invoiceItems.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 flex-1"
+            >
+              {sendingInvoice ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Mengirim...</>
+              ) : (
+                <><Check className="h-4 w-4 mr-2" />Simpan & Kirim Invoice</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
