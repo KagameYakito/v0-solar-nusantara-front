@@ -20,7 +20,7 @@ interface PaymentRecord {
   rfq_code: string
   user_name: string
   company_name: string
-  payment_date: string
+  transaction_date: string
   total_payment: number
   status: 'lunas' | 'menunggu'
 }
@@ -69,18 +69,19 @@ export default function AdminKeuanganDashboard() {
 
         if (!groupedMap.has(key)) {
           groupedMap.set(key, {
-            rfq_code: `RFQ-${item.request_id}`,
+            rfq_code: `RFQ-${String(item.request_id).padStart(8, '0')}`,
             user_name: profile?.full_name || 'Unknown',
             company_name: profile?.company_name || '-',
-            payment_date: item.created_at,
+            transaction_date: item.created_at,
             total_payment: itemTotal,
+            // 'deal' means completed/paid; once lunas it cannot be downgraded
             status: item.status === 'deal' ? 'lunas' : 'menunggu',
           })
         } else {
           const existing = groupedMap.get(key)!
           existing.total_payment += itemTotal
-          // If any item is still 'accepted', mark group as menunggu
-          if (item.status === 'accepted') existing.status = 'menunggu'
+          // A group is lunas only when a deal item is found; never downgrade lunas → menunggu
+          if (item.status === 'deal') existing.status = 'lunas'
         }
       })
 
@@ -286,7 +287,7 @@ export default function AdminKeuanganDashboard() {
                   <th className="px-4 py-3 rounded-tl-lg">Kode RFQ</th>
                   <th className="px-4 py-3">Nama User</th>
                   <th className="px-4 py-3">Nama Perusahaan</th>
-                  <th className="px-4 py-3">Tanggal</th>
+                  <th className="px-4 py-3">Tanggal Transaksi</th>
                   <th className="px-4 py-3 text-right">Total Pembayaran</th>
                   <th className="px-4 py-3 rounded-tr-lg text-center">Status</th>
                 </tr>
@@ -302,7 +303,7 @@ export default function AdminKeuanganDashboard() {
                     <td className="px-4 py-3 text-white font-medium">{payment.user_name}</td>
                     <td className="px-4 py-3 text-slate-400">{payment.company_name}</td>
                     <td className="px-4 py-3 text-slate-400">
-                      {new Date(payment.payment_date).toLocaleDateString('id-ID', {
+                      {new Date(payment.transaction_date).toLocaleDateString('id-ID', {
                         day: 'numeric',
                         month: 'long',
                         year: 'numeric'
