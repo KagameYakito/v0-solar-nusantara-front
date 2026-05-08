@@ -334,8 +334,8 @@ export default function UserDashboard() {
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
         .eq('session_id', activeSession)
-        .eq('read_by_user', false)
-        .not('admin_id', 'is', null)
+        .eq('is_read', false)
+        .eq('sender_type', 'admin')
       
       if (error) throw error
       setUnreadCount(count || 0)

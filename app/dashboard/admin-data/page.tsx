@@ -27,6 +27,8 @@ interface Product {
   gambar_url: string | null
   stok: number | null
   spesifikasi: any
+  category_id: number | null
+  sub_category_id: number | null
   created_at: string
   updated_at: string | null
 }
@@ -467,7 +469,7 @@ export default function AdminDataDashboard() {
                                 className="w-16 h-16 object-cover rounded-lg border border-slate-700"
                               />
                               <button
-                                onClick={() => window.open(product.gambar_url, '_blank')}
+                                onClick={() => window.open(product.gambar_url ?? undefined, '_blank')}
                                 className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg"
                               >
                                 <Eye className="h-5 w-5 text-white" />

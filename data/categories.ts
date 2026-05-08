@@ -3,7 +3,7 @@ export interface Product {
   name: string
   description?: string
   image: string
-  price: number
+  price?: number
   discountedPrice?: number
   specifications?: Record<string, string>
 }

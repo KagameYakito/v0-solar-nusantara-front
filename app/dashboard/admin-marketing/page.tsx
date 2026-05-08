@@ -332,8 +332,7 @@ export default function AdminMarketingDashboard() {
         .from('chat_messages')
         .select(`
         *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        sender_profile:profiles!sender_id(full_name)
         `)
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true })
@@ -440,8 +439,7 @@ const handleOpenChatForRequest = (request: any) => {
         .from('chat_messages')
         .select(`
           *,
-          sender_profile:profiles!sender_id(full_name),
-          admin_profile:admin_marketing_profiles!admin_id(admin_name)
+          sender_profile:profiles!sender_id(full_name)
         `)
         .eq('session_id', sessionId)  // ✅ Gunakan UUID, bukan request_id
         .order('created_at', { ascending: true });

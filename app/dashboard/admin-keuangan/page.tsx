@@ -5,90 +5,93 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { 
   ArrowLeft, AlertCircle, Loader2, Banknote, CheckCircle, Clock, 
-  DollarSign, TrendingUp, XCircle
+  DollarSign, TrendingUp, RefreshCw
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const DUMMY_PAYMENTS = [
-  {
-    rfq_code: 'RFQ-60000001',
-    user_name: 'Budi Santoso',
-    company_name: 'PT Surya Energi',
-    payment_date: '2025-05-01',
-    total_payment: 125000000,
-    status: 'lunas'
-  },
-  {
-    rfq_code: 'RFQ-60000003',
-    user_name: 'Siti Rahayu',
-    company_name: 'CV Maju Makmur',
-    payment_date: '2025-05-03',
-    total_payment: 87500000,
-    status: 'lunas'
-  },
-  {
-    rfq_code: 'RFQ-60000005',
-    user_name: 'Andi Wijaya',
-    company_name: 'PT Hijau Lestari',
-    payment_date: '2025-05-05',
-    total_payment: 210000000,
-    status: 'menunggu'
-  },
-  {
-    rfq_code: 'RFQ-60000007',
-    user_name: 'Dewi Kusuma',
-    company_name: 'PT Solar Prima',
-    payment_date: '2025-05-06',
-    total_payment: 63000000,
-    status: 'lunas'
-  },
-  {
-    rfq_code: 'RFQ-60000009',
-    user_name: 'Hendra Gunawan',
-    company_name: 'UD Terang Benderang',
-    payment_date: '2025-05-07',
-    total_payment: 145000000,
-    status: 'menunggu'
-  },
-  {
-    rfq_code: 'RFQ-60000011',
-    user_name: 'Rina Fitriani',
-    company_name: 'PT Cahaya Nusantara',
-    payment_date: '2025-05-08',
-    total_payment: 98500000,
-    status: 'lunas'
-  },
-  {
-    rfq_code: 'RFQ-60000012',
-    user_name: 'Yusuf Permana',
-    company_name: 'CV Sinar Abadi',
-    payment_date: '2025-05-08',
-    total_payment: 320000000,
-    status: 'menunggu'
-  },
-  {
-    rfq_code: 'RFQ-60000014',
-    user_name: 'Maria Lestari',
-    company_name: 'PT Energi Bersih',
-    payment_date: '2025-05-09',
-    total_payment: 175000000,
-    status: 'lunas'
-  },
-]
+interface PaymentRecord {
+  rfq_code: string
+  user_name: string
+  company_name: string
+  payment_date: string
+  total_payment: number
+  status: 'lunas' | 'menunggu'
+}
 
 const formatRupiah = (amount: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount)
 
 export default function AdminKeuanganDashboard() {
   const [loading, setLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isAuthorized, setIsAuthorized] = useState(false)
+  const [payments, setPayments] = useState<PaymentRecord[]>([])
+
+  const fetchPayments = useCallback(async () => {
+    try {
+      setDataLoading(true)
+
+      // Fetch wishlists with deal (lunas) or accepted (menunggu bayar) status
+      const { data: wishlistData, error: wishlistError } = await supabase
+        .from('wishlists')
+        .select('user_id, request_id, price, quantity, status, created_at')
+        .in('status', ['deal', 'accepted'])
+        .not('request_id', 'is', null)
+        .order('created_at', { ascending: false })
+
+      if (wishlistError) throw wishlistError
+      if (!wishlistData || wishlistData.length === 0) {
+        setPayments([])
+        return
+      }
+
+      // Fetch user profiles
+      const userIds = [...new Set(wishlistData.map((w: any) => w.user_id))]
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name, company_name')
+        .in('id', userIds)
+
+      // Group by request_id — sum totals per RFQ
+      const groupedMap = new Map<number, PaymentRecord>()
+      wishlistData.forEach((item: any) => {
+        const profile = profilesData?.find((p: any) => p.id === item.user_id)
+        const key: number = item.request_id
+        const itemTotal = (item.price || 0) * (item.quantity || 1)
+
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, {
+            rfq_code: `RFQ-${item.request_id}`,
+            user_name: profile?.full_name || 'Unknown',
+            company_name: profile?.company_name || '-',
+            payment_date: item.created_at,
+            total_payment: itemTotal,
+            status: item.status === 'deal' ? 'lunas' : 'menunggu',
+          })
+        } else {
+          const existing = groupedMap.get(key)!
+          existing.total_payment += itemTotal
+          // If any item is still 'accepted', mark group as menunggu
+          if (item.status === 'accepted') existing.status = 'menunggu'
+        }
+      })
+
+      setPayments(Array.from(groupedMap.values()))
+    } catch (err: any) {
+      console.error('Failed to fetch payments:', err)
+      setError('Gagal memuat data pembayaran: ' + err.message)
+    } finally {
+      setDataLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -120,6 +123,7 @@ export default function AdminKeuanganDashboard() {
         }
 
         setIsAuthorized(true)
+        await fetchPayments()
       } catch (err: any) {
         if (isMounted) setError(err.message)
       } finally {
@@ -129,12 +133,12 @@ export default function AdminKeuanganDashboard() {
 
     checkAuth()
     return () => { isMounted = false }
-  }, [])
+  }, [fetchPayments])
 
-  const totalLunas = DUMMY_PAYMENTS.filter(p => p.status === 'lunas').reduce((s, p) => s + p.total_payment, 0)
-  const totalMenunggu = DUMMY_PAYMENTS.filter(p => p.status === 'menunggu').reduce((s, p) => s + p.total_payment, 0)
-  const countLunas = DUMMY_PAYMENTS.filter(p => p.status === 'lunas').length
-  const countMenunggu = DUMMY_PAYMENTS.filter(p => p.status === 'menunggu').length
+  const totalLunas = payments.filter(p => p.status === 'lunas').reduce((s, p) => s + p.total_payment, 0)
+  const totalMenunggu = payments.filter(p => p.status === 'menunggu').reduce((s, p) => s + p.total_payment, 0)
+  const countLunas = payments.filter(p => p.status === 'lunas').length
+  const countMenunggu = payments.filter(p => p.status === 'menunggu').length
 
   if (loading) {
     return (
@@ -201,7 +205,7 @@ export default function AdminKeuanganDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-400">Total Transaksi</p>
-                <p className="text-2xl font-bold text-white">{DUMMY_PAYMENTS.length}</p>
+                <p className="text-2xl font-bold text-white">{payments.length}</p>
               </div>
               <div className="bg-blue-500/20 p-3 rounded-xl">
                 <TrendingUp className="h-6 w-6 text-blue-400" />
@@ -242,15 +246,39 @@ export default function AdminKeuanganDashboard() {
       {/* PAYMENT TABLE */}
       <Card className="bg-slate-900 border-slate-800">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <DollarSign className="h-5 w-5 text-yellow-400" />
-            Daftar Pembayaran Aktif
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Data pembayaran berdasarkan RFQ yang telah di-deal. (Data dummy — belum terhubung ke database)
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <DollarSign className="h-5 w-5 text-yellow-400" />
+                Daftar Pembayaran Aktif
+              </CardTitle>
+              <CardDescription className="text-slate-400 mt-1">
+                Data pembayaran berdasarkan RFQ yang telah di-deal atau menunggu konfirmasi.
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={fetchPayments}
+              disabled={dataLoading}
+              className="border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${dataLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {dataLoading ? (
+            <div className="flex items-center justify-center py-8 text-slate-400">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              Memuat data pembayaran...
+            </div>
+          ) : payments.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              Belum ada transaksi yang di-deal atau menunggu pembayaran.
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-300">
               <thead className="bg-slate-800 uppercase text-xs font-medium">
@@ -258,13 +286,13 @@ export default function AdminKeuanganDashboard() {
                   <th className="px-4 py-3 rounded-tl-lg">Kode RFQ</th>
                   <th className="px-4 py-3">Nama User</th>
                   <th className="px-4 py-3">Nama Perusahaan</th>
-                  <th className="px-4 py-3">Tanggal Pembayaran</th>
+                  <th className="px-4 py-3">Tanggal</th>
                   <th className="px-4 py-3 text-right">Total Pembayaran</th>
                   <th className="px-4 py-3 rounded-tr-lg text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {DUMMY_PAYMENTS.map((payment, index) => (
+                {payments.map((payment, index) => (
                   <tr key={index} className="hover:bg-slate-800/50 transition-colors">
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="font-mono text-blue-400 border-blue-700 bg-blue-900/20">
@@ -301,6 +329,7 @@ export default function AdminKeuanganDashboard() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>
