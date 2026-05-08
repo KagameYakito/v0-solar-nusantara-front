@@ -732,20 +732,39 @@ const openInvoiceModal = async () => {
     return
   }
   try {
-    const { data, error } = await supabase
+    // Step 1: fetch wishlist items for this request (avoid relational embed
+    // syntax which requires an explicit FK in the PostgREST schema cache)
+    const { data: wishlistData, error: wishlistError } = await supabase
       .from('wishlists')
-      .select('*, products:product_id(nama_produk, sku, gambar_url)')
+      .select('id, product_id, quantity, price, product_name')
       .eq('request_id', requestId)
       .neq('status', 'wishlist')
-    if (error) throw error
-    const items = (data || []).map(item => ({
-      id: item.id,
-      product_name: item.products?.nama_produk || item.product_name || 'Produk',
-      sku: item.products?.sku || item.product_id || '-',
-      quantity: item.quantity || 1,
-      unit_price: item.price || 0,
-      subtotal: (item.quantity || 1) * (item.price || 0)
-    }))
+    if (wishlistError) throw wishlistError
+
+    // Step 2: fetch matching product details separately
+    const productIds = (wishlistData || []).map(w => w.product_id).filter(Boolean)
+    const productsMap: Record<string, { nama_produk: string; sku: string }> = {}
+    if (productIds.length > 0) {
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('id, nama_produk, sku')
+        .in('id', productIds)
+      ;(productsData || []).forEach(p => {
+        productsMap[p.id] = { nama_produk: p.nama_produk || '', sku: p.sku || '' }
+      })
+    }
+
+    const items = (wishlistData || []).map(item => {
+      const prod = productsMap[item.product_id]
+      return {
+        id: item.id,
+        product_name: prod?.nama_produk || item.product_name || 'Produk',
+        sku: prod?.sku || item.product_id || '-',
+        quantity: item.quantity || 1,
+        unit_price: item.price || 0,
+        subtotal: (item.quantity || 1) * (item.price || 0)
+      }
+    })
     setInvoiceItems(items)
     setInvoiceNotes('')
     setShowInvoiceModal(true)
