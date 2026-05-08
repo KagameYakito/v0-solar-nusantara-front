@@ -2873,10 +2873,16 @@ const confirmSubmitRequest = async () => {
                               let invoiceData: any = null
                               try { invoiceData = JSON.parse(msg.message) } catch {}
                               
+                              const escHtml = (s: any) => String(s ?? '')
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;')
+                                .replace(/"/g, '&quot;')
+
                               const handleDownloadInvoice = () => {
                                 if (!invoiceData) return
                                 const printContent = `
-                                  <html><head><title>Invoice ${invoiceData.rfq_code}</title>
+                                  <html><head><title>Invoice ${escHtml(invoiceData.rfq_code)}</title>
                                   <style>
                                     body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
                                     h1 { color: #1e40af; }
@@ -2889,19 +2895,19 @@ const confirmSubmitRequest = async () => {
                                   </style></head><body>
                                   <div class="header">
                                     <div><h1>INVOICE</h1><p class="company">Solar Nusantara</p></div>
-                                    <div style="text-align:right"><p><strong>${invoiceData.rfq_code}</strong></p>
-                                    <p>${new Date(invoiceData.created_at).toLocaleDateString('id-ID')}</p></div>
+                                    <div style="text-align:right"><p><strong>${escHtml(invoiceData.rfq_code)}</strong></p>
+                                    <p>${escHtml(new Date(invoiceData.created_at).toLocaleDateString('id-ID'))}</p></div>
                                   </div>
-                                  <p><strong>Kepada:</strong> ${invoiceData.user_name}</p>
-                                  <p><strong>Perusahaan:</strong> ${invoiceData.company_name}</p>
+                                  <p><strong>Kepada:</strong> ${escHtml(invoiceData.user_name)}</p>
+                                  <p><strong>Perusahaan:</strong> ${escHtml(invoiceData.company_name)}</p>
                                   <table>
                                     <thead><tr><th>Produk</th><th>SKU</th><th>Qty</th><th>Harga Satuan</th><th>Subtotal</th></tr></thead>
                                     <tbody>
                                     ${invoiceData.items?.map((it: any) => `
                                       <tr>
-                                        <td>${it.product_name}</td>
-                                        <td>${it.sku}</td>
-                                        <td>${it.quantity}</td>
+                                        <td>${escHtml(it.product_name)}</td>
+                                        <td>${escHtml(it.sku)}</td>
+                                        <td>${escHtml(it.quantity)}</td>
                                         <td>Rp ${Number(it.unit_price).toLocaleString('id-ID')}</td>
                                         <td>Rp ${Number(it.subtotal).toLocaleString('id-ID')}</td>
                                       </tr>`).join('')}
@@ -2909,10 +2915,12 @@ const confirmSubmitRequest = async () => {
                                     <tfoot><tr><td colspan="4" style="text-align:right;font-weight:bold">Total</td>
                                     <td class="total">Rp ${Number(invoiceData.total_amount).toLocaleString('id-ID')}</td></tr></tfoot>
                                   </table>
-                                  ${invoiceData.notes ? `<p style="margin-top:20px"><strong>Catatan:</strong> ${invoiceData.notes}</p>` : ''}
+                                  ${invoiceData.notes ? `<p style="margin-top:20px"><strong>Catatan:</strong> ${escHtml(invoiceData.notes)}</p>` : ''}
                                   </body></html>`
-                                const w = window.open('', '_blank')
-                                if (w) { w.document.write(printContent); w.document.close(); w.print() }
+                                const blob = new Blob([printContent], { type: 'text/html' })
+                                const url = URL.createObjectURL(blob)
+                                const w = window.open(url, '_blank')
+                                if (w) { w.addEventListener('load', () => { w.print(); URL.revokeObjectURL(url) }) }
                               }
                               
                               return (
