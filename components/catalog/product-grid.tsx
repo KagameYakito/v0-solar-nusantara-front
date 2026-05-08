@@ -13,6 +13,7 @@ interface Product {
   price: number;
   stock: number;
   category_id: number | null;
+  sub_category_id: number | null;
   specifications: Record<string, any>;
   image_url: string | null;
 }

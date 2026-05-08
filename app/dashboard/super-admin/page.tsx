@@ -122,7 +122,7 @@ export default function SuperAdminDashboard() {
     }
   }, [fetchUsers])
 
-  // ✅ FUNGSI GANTI ROLE - LEBIH ROBUST
+  // ✅ FUNGSI GANTI ROLE - menggunakan RPC update_user_role (SECURITY DEFINER)
   const handleRoleChange = async (userId: string, newRole: string) => {
     const user = users.find(u => u.id === userId)
     if (!confirm(`Yakin ingin mengubah role ${user?.email || 'user ini'} dari "${user?.role}" menjadi "${newRole}"?`)) {
@@ -135,15 +135,13 @@ export default function SuperAdminDashboard() {
     setRoleChangeResult(null)
 
     try {
-      const response = await supabase
-        .from('profiles')
-        .update({ 
-          role: newRole,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId)
+      // Use SECURITY DEFINER RPC so super_admin can update other users' roles
+      const { error } = await supabase.rpc('update_user_role', {
+        target_user_id: userId,
+        new_role: newRole,
+      })
 
-      if (response.error) throw response.error
+      if (error) throw error
 
       setRoleChangeResult({ id: userId, success: true })
       

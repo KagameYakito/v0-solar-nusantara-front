@@ -332,8 +332,7 @@ export default function AdminMarketingDashboard() {
         .from('chat_messages')
         .select(`
         *,
-        sender_profile:profiles!sender_id(full_name),
-        admin_profile:admin_marketing_profiles!admin_id(admin_name)
+        sender_profile:profiles!sender_id(full_name)
         `)
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true })
@@ -440,8 +439,7 @@ const handleOpenChatForRequest = (request: any) => {
         .from('chat_messages')
         .select(`
           *,
-          sender_profile:profiles!sender_id(full_name),
-          admin_profile:admin_marketing_profiles!admin_id(admin_name)
+          sender_profile:profiles!sender_id(full_name)
         `)
         .eq('session_id', sessionId)  // ✅ Gunakan UUID, bukan request_id
         .order('created_at', { ascending: true });
@@ -782,10 +780,29 @@ const sendInvoice = async () => {
         sender_id: session.user.id,
         sender_type: 'admin',
         message: invoicePayload,
+        // Use 'invoice' if the DB constraint allows it (after running migration),
+        // fallback to 'text' so the message still goes through on older DB schemas.
         message_type: 'invoice',
         is_read: false
       })
-    if (error) throw error
+    if (error) {
+      // If the error is a check constraint violation (old DB schema), retry with 'text'
+      if (error.code === '23514') {
+        const { error: fallbackError } = await supabase
+          .from('chat_messages')
+          .insert({
+            session_id: activeSession,
+            sender_id: session.user.id,
+            sender_type: 'admin',
+            message: invoicePayload,
+            message_type: 'text',
+            is_read: false
+          })
+        if (fallbackError) throw fallbackError
+      } else {
+        throw error
+      }
+    }
 
     await supabase
       .from('chat_sessions')
