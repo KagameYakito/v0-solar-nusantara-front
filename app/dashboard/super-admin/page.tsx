@@ -122,7 +122,7 @@ export default function SuperAdminDashboard() {
     }
   }, [fetchUsers])
 
-  // ✅ FUNGSI GANTI ROLE - menggunakan RPC update_user_role (SECURITY DEFINER)
+  // ✅ FUNGSI GANTI ROLE - coba RPC dulu, fallback ke API route jika RPC belum tersedia
   const handleRoleChange = async (userId: string, newRole: string) => {
     const user = users.find(u => u.id === userId)
     if (!confirm(`Yakin ingin mengubah role ${user?.email || 'user ini'} dari "${user?.role}" menjadi "${newRole}"?`)) {
@@ -135,13 +135,29 @@ export default function SuperAdminDashboard() {
     setRoleChangeResult(null)
 
     try {
-      // Use SECURITY DEFINER RPC so super_admin can update other users' roles
-      const { error } = await supabase.rpc('update_user_role', {
+      // Attempt 1: Use SECURITY DEFINER RPC (requires fix_super_admin_role_update.sql migration)
+      const { error: rpcError } = await supabase.rpc('update_user_role', {
         target_user_id: userId,
         new_role: newRole,
       })
 
-      if (error) throw error
+      if (rpcError) {
+        // RPC not available — fallback to server-side API route (requires SUPABASE_SERVICE_ROLE_KEY)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.')
+
+        const response = await fetch('/api/admin/update-role', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ userId, newRole }),
+        })
+
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Gagal mengubah role via API')
+      }
 
       setRoleChangeResult({ id: userId, success: true })
       
