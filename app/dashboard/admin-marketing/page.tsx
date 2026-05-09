@@ -183,6 +183,12 @@ export default function AdminMarketingDashboard() {
   const [selectedAdminForTakeover, setSelectedAdminForTakeover] = useState('');
   const [chatInput, setChatInput] = useState('')
 
+  // ✅ CHAT NOTIFICATION & OWNERSHIP STATES
+  const [sessionUnreadCounts, setSessionUnreadCounts] = useState<Record<string, number>>({})
+  const [isReadOnlySession, setIsReadOnlySession] = useState(false)
+  const [sessionOwnerName, setSessionOwnerName] = useState<string | null>(null)
+  const [totalAdminUnread, setTotalAdminUnread] = useState(0)
+
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const [invoiceItems, setInvoiceItems] = useState<any[]>([])
   const [invoiceNotes, setInvoiceNotes] = useState('')
@@ -303,6 +309,7 @@ export default function AdminMarketingDashboard() {
   useEffect(() => {
     if (isAuthorized) {
       fetchWishlistItems()
+      fetchSessionUnreadCounts()
     }
   }, [isAuthorized, wishlistFilter])
 
@@ -322,6 +329,55 @@ export default function AdminMarketingDashboard() {
         console.error("Error fetching admins:", err);
     }
   };
+
+  // ✅ FETCH UNREAD MESSAGE COUNTS PER SESSION (unread user messages for admin)
+  const fetchSessionUnreadCounts = useCallback(async () => {
+    try {
+      // Fetch all chat sessions with their request_ids
+      const { data: sessions } = await supabase
+        .from('chat_sessions')
+        .select('id, request_id')
+
+      if (!sessions || sessions.length === 0) {
+        setSessionUnreadCounts({})
+        setTotalAdminUnread(0)
+        return
+      }
+
+      const sessionIds = sessions.map((s: any) => s.id)
+
+      // Fetch unread user messages across all sessions
+      const { data: unreadMsgs } = await supabase
+        .from('chat_messages')
+        .select('session_id')
+        .in('session_id', sessionIds)
+        .eq('sender_type', 'user')
+        .eq('is_read', false)
+
+      const countsBySession: Record<string, number> = {}
+      ;(unreadMsgs || []).forEach((msg: any) => {
+        countsBySession[msg.session_id] = (countsBySession[msg.session_id] || 0) + 1
+      })
+
+      // Build counts keyed by request_id for wishlist table lookup
+      const countsByRequest: Record<string, number> = {}
+      let total = 0
+      sessions.forEach((s: any) => {
+        const cnt = countsBySession[s.id] || 0
+        if (cnt > 0) {
+          if (s.request_id) {
+            countsByRequest[String(s.request_id)] = (countsByRequest[String(s.request_id)] || 0) + cnt
+          }
+          total += cnt
+        }
+      })
+
+      setSessionUnreadCounts(countsByRequest)
+      setTotalAdminUnread(total)
+    } catch (err) {
+      console.error('Error fetching session unread counts:', err)
+    }
+  }, [])
 
   const loadMessagesForAdmin = async (sessionId: string) => {
     try {
@@ -404,12 +460,12 @@ const handleOpenChatForRequest = (request: any) => {
     }
 };
 
-  // ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
+  // ✅ REALTIME CHAT SUBSCRIPTION FOR ADMIN - handles INSERT (new messages) and UPDATE (read receipts)
   useEffect(() => {
     if (!activeSession) return
-    
+
     const channel = supabase
-      .channel(`chat:${activeSession}`)
+      .channel(`admin_chat:${activeSession}`)
       .on(
         'postgres_changes',
         {
@@ -419,15 +475,39 @@ const handleOpenChatForRequest = (request: any) => {
           filter: `session_id=eq.${activeSession}`
         },
         (payload) => {
-          setChatMessages((prev: any) => [...prev, payload.new])
+          setChatMessages((prev: any) => {
+            const exists = prev.some((m: any) => m.id === payload.new.id)
+            if (exists) return prev
+            return [...prev, payload.new]
+          })
+          // Refresh unread counts when a new user message arrives
+          fetchSessionUnreadCounts()
+          setTimeout(() => {
+            adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+          }, 100)
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `session_id=eq.${activeSession}`
+        },
+        (payload) => {
+          // Update read status when user reads admin messages
+          setChatMessages((prev: any) =>
+            prev.map((m: any) => m.id === payload.new.id ? { ...m, ...payload.new } : m)
+          )
         }
       )
       .subscribe()
-    
+
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [activeSession])
+  }, [activeSession, fetchSessionUnreadCounts])
   
   // Load chat messages untuk admin
   const loadAdminChatMessages = async (sessionId: string) => {
@@ -596,19 +676,33 @@ const fetchChatMessages = async (sessionUUID: string) => {
 // Ganti fungsi sendChatMessage yang lama dengan ini:
 const sendChatMessage = async (sessionUUID: string, message: string) => {
   if (!message.trim()) return;
+  // Don't allow sending if this is a read-only session
+  if (isReadOnlySession) return;
   try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      
+
       const { error } = await supabase.rpc('send_chat_message', {
-          p_session_id: sessionUUID, // ✅ KIRIM UUID YANG BENAR
+          p_session_id: sessionUUID,
           p_sender_id: session.user.id,
           p_message: message.trim(),
           p_sender_type: 'admin'
       });
-      
+
       if (error) throw error;
-      
+
+      // ✅ Ensure admin_id and admin_name are set on the session (from admin marketing profile)
+      if (adminProfile) {
+        await supabase
+          .from('chat_sessions')
+          .update({
+            admin_id: session.user.id,
+            admin_name: adminProfile.admin_name
+          })
+          .eq('id', sessionUUID)
+          .is('admin_id', null);
+      }
+
       setChatInput('');
       await fetchChatMessages(sessionUUID);
   } catch (err) {
@@ -626,6 +720,11 @@ const openChatWithClient = async (item: any) => {
     return;
   }
   try {
+    // Get current admin session
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (!authSession) return;
+    const currentAdminId = authSession.user.id;
+
     // 1. CARI session yang sudah ada di database
     console.log("🔵 [SEARCH] Looking for session with request_id:", requestId);
     const { data: existingSession, error: fetchError } = await supabase
@@ -634,16 +733,41 @@ const openChatWithClient = async (item: any) => {
       .eq('request_id', requestId)
       .single();
     console.log("🔵 [RESULT] Existing session:", existingSession);
-    console.log("🔵 [ERROR] Fetch error:", fetchError);
     if (fetchError && fetchError.code !== 'PGRST116') {
       throw fetchError;
     }
     let sessionId;
     let sessionData;
+    let localReadOnly = false;
+    let localOwnerName: string | null = null;
+
     if (existingSession) {
       sessionId = existingSession.id;
       sessionData = existingSession;
       console.log("✅ [FOUND] Menggunakan session yang sudah ada:", sessionId);
+
+      // ✅ CHECK ADMIN OWNERSHIP
+      if (existingSession.admin_id && existingSession.admin_id !== currentAdminId) {
+        // Another admin already claimed this session → read-only for current admin
+        localReadOnly = true;
+        const { data: ownerData } = await supabase
+          .from('admin_marketing_profiles')
+          .select('admin_name')
+          .eq('admin_id', existingSession.admin_id)
+          .single();
+        localOwnerName = ownerData?.admin_name || 'Admin lain';
+        console.log(`🔵 [READONLY] Session dimiliki oleh: ${localOwnerName}`);
+      } else if (!existingSession.admin_id) {
+        // No admin claimed yet → claim it
+        await supabase
+          .from('chat_sessions')
+          .update({
+            admin_id: currentAdminId,
+            admin_name: adminProfile?.admin_name || null
+          })
+          .eq('id', sessionId);
+        console.log("✅ [CLAIM] Session diklaim oleh admin saat ini");
+      }
     } else {
       console.log("⚠️ [NEW] Tidak ada session, membuat baru...");
       const { data: newSession, error: insertError } = await supabase
@@ -651,7 +775,8 @@ const openChatWithClient = async (item: any) => {
         .insert({
           request_id: requestId,
           user_id: item.user_id,
-          admin_id: adminProfile?.admin_id,
+          admin_id: currentAdminId,
+          admin_name: adminProfile?.admin_name || null,
           session_name: `RFQ-${requestId}`,
           status: 'active'
         })
@@ -662,7 +787,12 @@ const openChatWithClient = async (item: any) => {
       sessionData = newSession;
       console.log("✅ Session baru dibuat:", sessionId);
     }
-    // 4. Set active session
+
+    // Set read-only state BEFORE loading messages
+    setIsReadOnlySession(localReadOnly);
+    setSessionOwnerName(localOwnerName);
+
+    // Set active session
     console.log("🔵 [SET STATE] Setting activeSession to:", sessionId);
     setActiveSession(sessionId);
     // ✅ SIMPAN SESSION DATA
@@ -670,58 +800,32 @@ const openChatWithClient = async (item: any) => {
       ...item,
       session_name: sessionData?.session_name || `RFQ-${requestId}`
     });
-    // 5. Load messages
+    // Load messages
     console.log("🔵 [FETCH] Memanggil fetchChatMessages dengan sessionId:", sessionId);
     await fetchChatMessages(sessionId);
-    
-    // ✅ FIX READ RECEIPTS: Tandai pesan dari USER sebagai terbaca oleh ADMIN
-    const { data: unreadMessages } = await supabase
-      .from('chat_messages')
-      .select('id')
-      .eq('session_id', sessionId)
-      .eq('sender_type', 'user')
-      .eq('is_read', false);
-    if (unreadMessages && unreadMessages.length > 0) {
-      await supabase
+
+    // ✅ Mark user messages as read ONLY if this admin owns the session (not ghost read)
+    if (!localReadOnly) {
+      const { data: unreadMessages } = await supabase
         .from('chat_messages')
-        .update({ is_read: true })
-        .in('id', unreadMessages.map(m => m.id));
-      console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('sender_type', 'user')
+        .eq('is_read', false);
+      if (unreadMessages && unreadMessages.length > 0) {
+        await supabase
+          .from('chat_messages')
+          .update({ is_read: true })
+          .in('id', unreadMessages.map((m: any) => m.id));
+        console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
+        // Refresh unread counts after marking as read
+        fetchSessionUnreadCounts();
+      }
     }
-    
-    // 6. Setup realtime subscription
-    setupChatRealtimeSubscription(sessionId);
   } catch (error: any) {
     console.error("❌ [ERROR] Gagal membuka sesi chat:", error);
     alert("❌ Gagal membuka sesi chat: " + error.message);
   }
-}
-
-// Tambahkan fungsi realtime subscription
-const setupChatRealtimeSubscription = (sessionId: string) => {
-  const channel = supabase
-    .channel(`chat:${sessionId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_messages',
-        filter: `session_id=eq.${sessionId}`  // ✅ Filter by session_id
-      },
-      (payload) => {
-        console.log('🔵 New message received:', payload.new);
-        setChatMessages((prev: any) => [...prev, payload.new]);
-        setTimeout(() => {
-          adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }, 100)
-      }
-    )
-    .subscribe();
-    
-  return () => {
-    supabase.removeChannel(channel);
-  };
 }
 
 const openInvoiceModal = async () => {
@@ -1238,6 +1342,45 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
       if (historyChannel) supabase.removeChannel(historyChannel)
     }
   }, [isAuthorized, fetchProducts, fetchAuctionHistory])
+
+  // ✅ REALTIME SUBSCRIPTION FOR GLOBAL UNREAD COUNTS (user messages → notify admin)
+  useEffect(() => {
+    if (!isAuthorized) return
+
+    const chatNotifChannel = supabase
+      .channel('admin-chat-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages'
+        },
+        (payload: any) => {
+          // Only trigger for user messages (admin needs to be notified)
+          if (payload.new?.sender_type === 'user') {
+            fetchSessionUnreadCounts()
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_messages'
+        },
+        () => {
+          // Refresh when is_read changes (messages marked as read)
+          fetchSessionUnreadCounts()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(chatNotifChannel)
+    }
+  }, [isAuthorized, fetchSessionUnreadCounts])
 
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
@@ -1995,10 +2138,15 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   setCurrentPage(1)
                 }
               }}
-              className={filterView === 'wishlist' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}
+              className={`relative ${filterView === 'wishlist' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}`}
             >
               <Bookmark className="h-4 w-4 mr-2" />
               Wishlist Analytics ({wishlistTotal})
+              {totalAdminUnread > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
+                  {totalAdminUnread > 9 ? '9+' : totalAdminUnread}
+                </span>
+              )}
             </Button>
             <Button
               variant={filterView === 'request' ? 'default' : 'outline'}
@@ -2192,10 +2340,15 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                             {/* ✅ Tombol Chat - Sekarang bisa diklik */}
                             <button
                               onClick={() => openChatWithClient(item)}
-                              className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                              className="relative h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
                               title="Chat dengan User"
                             >
                               <MessageSquare className="h-4 w-4" />
+                              {item.request_id && (sessionUnreadCounts[String(item.request_id)] || 0) > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none">
+                                  {(sessionUnreadCounts[String(item.request_id)] || 0) > 9 ? '9+' : sessionUnreadCounts[String(item.request_id)]}
+                                </span>
+                              )}
                             </button>
                           </div>
                         </td>
@@ -3124,7 +3277,9 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
         if (!open) {
           setActiveSession(null);
           setChatMessages([]);
-          setSelectedClient(null); // ✅ TAMBAHKAN INI: Bersihkan data user saat tutup
+          setSelectedClient(null);
+          setIsReadOnlySession(false);
+          setSessionOwnerName(null);
         }
       }}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl w-[90vw] h-[85vh] flex flex-col p-0 gap-0">
@@ -3136,12 +3291,16 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   <MessageSquare className="h-5 w-5 text-blue-400" />
                 </div>
                 <div>
-                  <DialogTitle className="text-lg font-bold text-white">
-                    {/* ✅ GANTI JUDUL MENJADI NAMA USER */}
+                  <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
                     {selectedClient?.user_name || 'Client'}
+                    {isReadOnlySession && (
+                      <span className="text-xs font-normal text-amber-400 bg-amber-400/10 border border-amber-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        Read Only
+                      </span>
+                    )}
                   </DialogTitle>
                   <DialogDescription className="text-sm text-slate-400">
-                    {/* ✅ GANTI SUBTITLE HANYA ID RFQ (TANPA "RFQ: " DI DEPAN) */}
                     {selectedClient?.session_name || activeSession?.slice(0, 8) + '...'}
                   </DialogDescription>
                 </div>
@@ -3161,6 +3320,8 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   onClick={() => {
                     setActiveSession(null);
                     setChatMessages([]);
+                    setIsReadOnlySession(false);
+                    setSessionOwnerName(null);
                   }}
                   className="text-slate-400 hover:text-white hover:bg-slate-700"
                 >
@@ -3287,32 +3448,43 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
 
           {/* CHAT INPUT - FIXED AT BOTTOM */}
           <div className="border-t border-slate-700 bg-slate-800/50 p-4">
-            <div className="flex gap-3">
-              <input
-                type="text"
-                placeholder="Ketik pesan..."
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && chatInput.trim() && activeSession) {
-                    sendChatMessage(activeSession, chatInput);
-                  }
-                }}
-              />
-              <Button
-                onClick={() => {
-                  if (chatInput.trim() && activeSession) {  // ✅ Tambah check activeSession
-                    sendChatMessage(activeSession, chatInput);
-                  }
-                }}
-                disabled={!chatInput.trim() || !activeSession}  // ✅ Disable jika activeSession null
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed"
-              >
-                Kirim
-                <MessageSquare className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
+            {isReadOnlySession ? (
+              <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-800 border border-slate-700">
+                <Lock className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                <span className="text-sm text-slate-400">
+                  Session ini ditangani oleh{' '}
+                  <span className="text-amber-400 font-medium">{sessionOwnerName || 'Admin lain'}</span>
+                  . Kamu hanya bisa membaca.
+                </span>
+              </div>
+            ) : (
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Ketik pesan..."
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && chatInput.trim() && activeSession) {
+                      sendChatMessage(activeSession, chatInput);
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    if (chatInput.trim() && activeSession) {
+                      sendChatMessage(activeSession, chatInput);
+                    }
+                  }}
+                  disabled={!chatInput.trim() || !activeSession}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed"
+                >
+                  Kirim
+                  <MessageSquare className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
