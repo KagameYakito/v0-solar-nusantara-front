@@ -734,6 +734,48 @@ const fetchChatSessions = useCallback(async () => {
   }
 }, [])
 
+// ✅ GLOBAL SUBSCRIPTION: receive badge updates even when no session is actively open.
+// - Admin sends to any session → unread badge increments without needing to switch tabs.
+// - Admin claims/renames a session → sidebar admin_name label refreshes immediately.
+useEffect(() => {
+  const globalChannel = supabase
+    .channel('user-chat-global-notifications')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages'
+      },
+      (payload: any) => {
+        // Refresh unread badge and session list whenever any admin message arrives.
+        // The session-specific subscription handles updating the open chat's message list;
+        // calling these is safe and idempotent.
+        if (payload.new?.sender_type === 'admin') {
+          countUnreadMessages()
+          fetchChatSessions()
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_sessions'
+      },
+      () => {
+        // Refresh session list so the admin_name label in the sidebar is always current.
+        fetchChatSessions()
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(globalChannel)
+  }
+}, [countUnreadMessages, fetchChatSessions])
+
 // Load chat sessions saat component mount
 useEffect(() => {
   console.log('🔵 [EFFECT] Component mounted, fetching chat sessions')
