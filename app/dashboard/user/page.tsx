@@ -2750,6 +2750,8 @@ const confirmSubmitRequest = async () => {
                               // Refresh sidebar to clear unread badges after reading
                               fetchChatSessions()
                               countUnreadMessages()
+                            }).catch((err) => {
+                              console.error('🔴 [CLICK] Failed to load messages:', err)
                             })
                           }}
                           className={`w-full p-3 rounded-lg text-left transition-colors ${
