@@ -332,20 +332,32 @@ export default function UserDashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      
+
+      // Count all unread admin messages across ALL sessions for this user (for tab badge)
+      const { data: userSessions } = await supabase
+        .from('chat_sessions')
+        .select('id')
+        .eq('user_id', session.user.id)
+
+      if (!userSessions || userSessions.length === 0) {
+        setUnreadCount(0)
+        return
+      }
+
+      const sessionIds = userSessions.map((s: any) => s.id)
       const { count, error } = await supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
-        .eq('session_id', activeSession)
+        .in('session_id', sessionIds)
         .eq('is_read', false)
         .eq('sender_type', 'admin')
-      
+
       if (error) throw error
       setUnreadCount(count || 0)
     } catch (err) {
       console.error("Failed to count unread:", err)
     }
-  }, [activeSession])
+  }, [])
 
   const handlePlaceBidFromHistory = (product: BidHistory) => {
     // Redirect ke halaman auctions dengan parameter highlight
@@ -574,17 +586,17 @@ useEffect(() => {
   return () => clearInterval(interval)
 }, [bidHistory])
 
-// ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
+// ✅ REALTIME CHAT SUBSCRIPTION
 useEffect(() => {
   if (!activeSession) {
     console.log('🔵 [REALTIME] No active session, skipping subscription')
     return
   }
-  
+
   console.log('🔵 [REALTIME] Setting up subscription for session:', activeSession)
-  
+
   const channel = supabase
-    .channel(`chat:${activeSession}`)
+    .channel(`user_chat:${activeSession}`)
     .on(
       'postgres_changes',
       {
@@ -595,8 +607,8 @@ useEffect(() => {
       },
       async (payload) => {
         console.log('🔵 [REALTIME] New message received:', payload.new)
-        
-        // ✅ PERBAIKAN: Fetch admin name jika pesan dari admin
+
+        // ✅ Fetch admin name if message is from admin
         let newMessage = payload.new
         if (newMessage.sender_type === 'admin') {
           const { data: adminData } = await supabase
@@ -604,28 +616,38 @@ useEffect(() => {
             .select('admin_name')
             .eq('admin_id', newMessage.sender_id)
             .single()
-          
+
           newMessage = {
             ...newMessage,
             admin_name: adminData?.admin_name || 'Admin'
           }
+
+          // ✅ Auto-mark as read since user has the session open
+          await supabase
+            .from('chat_messages')
+            .update({ is_read: true })
+            .eq('id', newMessage.id)
+
+          newMessage = { ...newMessage, is_read: true }
         }
-        
+
         setMessages(prev => {
-          // Cek apakah pesan sudah ada (untuk menghindari duplikasi)
           const exists = prev.some(m => m.id === newMessage.id)
           if (exists) {
-            console.log(' [REALTIME] Message already exists, skipping')
+            console.log('🔵 [REALTIME] Message already exists, skipping')
             return prev
           }
-          const newMessages = [...prev, newMessage]
-          console.log('🔵 [REALTIME] Updated messages:', newMessages)
-          return newMessages
+          return [...prev, newMessage]
         })
-        
+
+        // Refresh tab badge count
         countUnreadMessages()
-        
-        // Auto-scroll ke pesan terbaru
+        // Update sidebar unread count for this session directly (since we marked it read)
+        setChatSessions(prev => prev.map((s: any) =>
+          s.id === activeSession ? { ...s, unread_count: 0 } : s
+        ))
+
+        // Auto-scroll to latest message
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }, 100)
@@ -641,7 +663,7 @@ useEffect(() => {
       },
       (payload) => {
         console.log('🔵 [REALTIME] Message updated:', payload.new)
-        // Update pesan yang sudah ada (misal: status read berubah)
+        // Update existing message (e.g. read status changed)
         setMessages(prev =>
           prev.map(msg => msg.id === payload.new.id ? payload.new : msg)
         )
@@ -660,36 +682,53 @@ useEffect(() => {
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
 const fetchChatSessions = useCallback(async () => {
   console.log('🔵 [SESSIONS] fetchChatSessions called')
-  
+
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       console.log('🔵 [SESSIONS] No session found')
       return
     }
-    
+
     console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
-    
-    // Simplified query - remove complex joins first
+
     const { data, error } = await supabase
       .from('chat_sessions')
-      .select('*')  // Start simple
+      .select('*')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
-    
-    console.log('🔵 [SESSIONS] Raw data:', data)
-    console.log('🔵 [SESSIONS] Error:', error)
-    
+
     if (error) {
       console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
       throw error
     }
-    
-    const sessionsCount = data?.length || 0
-    console.log(`🟢 [SESSIONS] Fetched ${sessionsCount} chat sessions`)
-    console.log(' [SESSIONS] Sessions:', data)
-    
-    setChatSessions(data || [])
+
+    if (!data || data.length === 0) {
+      setChatSessions([])
+      return
+    }
+
+    // ✅ Fetch per-session unread counts for sidebar badges
+    const sessionIds = data.map((s: any) => s.id)
+    const { data: unreadData } = await supabase
+      .from('chat_messages')
+      .select('session_id')
+      .in('session_id', sessionIds)
+      .eq('sender_type', 'admin')
+      .eq('is_read', false)
+
+    const unreadCounts: Record<string, number> = {}
+    ;(unreadData || []).forEach((msg: any) => {
+      unreadCounts[msg.session_id] = (unreadCounts[msg.session_id] || 0) + 1
+    })
+
+    const sessionsWithUnread = data.map((s: any) => ({
+      ...s,
+      unread_count: unreadCounts[s.id] || 0
+    }))
+
+    console.log(`🟢 [SESSIONS] Fetched ${data.length} chat sessions`)
+    setChatSessions(sessionsWithUnread)
   } catch (err) {
     console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
   }
@@ -707,8 +746,9 @@ useEffect(() => {
   if (activeTab === 'chat') {
     console.log('🔵 [EFFECT] Chat tab is active, fetching sessions')
     fetchChatSessions()
+    countUnreadMessages()
   }
-}, [activeTab, fetchChatSessions])
+}, [activeTab, fetchChatSessions, countUnreadMessages])
 
 // ✅ TAMBAHKAN useEffect INI untuk restore chat session setelah refresh
 useEffect(() => {
@@ -851,59 +891,6 @@ const getAdminDisplayName = (messages: any[]) => {
   console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
   return 'Admin'
 }
-
-// Load chat sessions saat tab chat aktif
-useEffect(() => {
-  if (activeTab === 'chat') {
-    fetchChatSessions()
-  }
-}, [activeTab, fetchChatSessions])
-
-// Realtime subscription untuk chat
-useEffect(() => {
-  if (!activeSession) {
-    console.log('🔵 [REALTIME] No active session, skipping subscription')
-    return
-  }
-  
-  console.log('🔵 [REALTIME] Setting up subscription for session:', activeSession)
-  
-  const channel = supabase
-    .channel(`chat:${activeSession}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_messages',
-        filter: `session_id=eq.${activeSession}`
-      },
-      (payload) => {
-        console.log('🔵 [REALTIME] New message received:', payload.new)
-        setMessages(prev => {
-          const newMessages = [...prev, payload.new]
-          console.log('🔵 [REALTIME] Updated messages:', newMessages)
-          return newMessages
-        })
-        countUnreadMessages()
-      }
-    )
-    .subscribe((status) => {
-      console.log('🔵 [REALTIME] Subscription status:', status)
-    })
-  
-  return () => {
-    console.log('🔵 [REALTIME] Cleaning up subscription')
-    supabase.removeChannel(channel)
-  }
-}, [activeSession, countUnreadMessages])
-
-// ✅ LOAD CHAT SESSIONS SAAT COMPONENT MOUNT
-useEffect(() => {
-  if (activeTab === 'chat') {
-    fetchChatSessions()
-  }
-}, [activeTab, fetchChatSessions])
 
 // ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
 const getStatusBadgeColor = (status: string) => {
@@ -2759,7 +2746,11 @@ const confirmSubmitRequest = async () => {
                           onClick={() => {
                             console.log('🔵 [CLICK] Session clicked:', sessionItem.id)
                             setActiveSession(sessionItem.id)
-                            loadMessages(sessionItem.id)
+                            loadMessages(sessionItem.id).then(() => {
+                              // Refresh sidebar to clear unread badges after reading
+                              fetchChatSessions()
+                              countUnreadMessages()
+                            })
                           }}
                           className={`w-full p-3 rounded-lg text-left transition-colors ${
                             activeSession === sessionItem.id
@@ -2783,9 +2774,16 @@ const confirmSubmitRequest = async () => {
                                 })}
                               </p>
                             </div>
-                            {activeSession === sessionItem.id && (
-                              <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
-                            )}
+                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                              {activeSession === sessionItem.id && (
+                                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                              )}
+                              {(sessionItem.unread_count || 0) > 0 && activeSession !== sessionItem.id && (
+                                <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
+                                  {(sessionItem.unread_count || 0) > 9 ? '9+' : sessionItem.unread_count}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </button>
                       )
