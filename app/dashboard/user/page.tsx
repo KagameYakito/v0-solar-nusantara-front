@@ -131,6 +131,9 @@ export default function UserDashboard() {
   const [adminInfo, setAdminInfo] = useState<{ name: string; phone?: string } | null>(null)
   const [activeRfqSession, setActiveRfqSession] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // Cached set of the current user's chat session IDs — used to filter realtime events
+  // so the global subscription only reacts to messages/updates for this user's sessions.
+  const userSessionIdsRef = useRef<Set<string>>(new Set())
 
   const [chatSessions, setChatSessions] = useState<any[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
@@ -748,10 +751,12 @@ useEffect(() => {
         table: 'chat_messages'
       },
       (payload: any) => {
-        // Refresh unread badge and session list whenever any admin message arrives.
-        // The session-specific subscription handles updating the open chat's message list;
-        // calling these is safe and idempotent.
-        if (payload.new?.sender_type === 'admin') {
+        // Only react to admin messages belonging to one of this user's sessions.
+        // userSessionIdsRef is kept in sync with chatSessions so no extra DB call is needed.
+        if (
+          payload.new?.sender_type === 'admin' &&
+          userSessionIdsRef.current.has(payload.new.session_id)
+        ) {
           countUnreadMessages()
           fetchChatSessions()
         }
@@ -764,9 +769,11 @@ useEffect(() => {
         schema: 'public',
         table: 'chat_sessions'
       },
-      () => {
-        // Refresh session list so the admin_name label in the sidebar is always current.
-        fetchChatSessions()
+      (payload: any) => {
+        // Only refresh when a session belonging to this user changes (e.g. admin_name set).
+        if (userSessionIdsRef.current.has(payload.new?.id)) {
+          fetchChatSessions()
+        }
       }
     )
     .subscribe()
@@ -781,6 +788,12 @@ useEffect(() => {
   console.log('🔵 [EFFECT] Component mounted, fetching chat sessions')
   fetchChatSessions()
 }, [fetchChatSessions])
+
+// Keep userSessionIdsRef in sync whenever the session list changes.
+// This ref is used by the global subscription to scope events to this user's sessions.
+useEffect(() => {
+  userSessionIdsRef.current = new Set(chatSessions.map((s: any) => s.id))
+}, [chatSessions])
 
 // Load chat sessions saat tab chat aktif
 useEffect(() => {
