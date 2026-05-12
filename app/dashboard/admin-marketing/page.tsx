@@ -451,17 +451,20 @@ console.error("Error loading messages:", err);
 }
 }
 
+// Fungsi untuk mendapatkan nama admin (GANTI SELURUH FUNGSI INI)
 const getAdminDisplayName = (session: any) => {
-// ✅ GUNAKAN chatMessages, BUKAN messages
-// Pastikan kamu punya state: const [chatMessages, setChatMessages] = useState([])
-const adminHasReplied = chatMessages?.some(
-(msg: any) => msg.sender_type === 'admin'
-)
-
-if (adminHasReplied && session.admin_name) {
-return session.admin_name 
-}
-return 'Admin' 
+  // ✅ GUNAKAN chatMessages (state yang ada di Admin Dashboard)
+  const adminHasReplied = chatMessages?.some(
+    (msg: any) => msg.sender_type === 'admin'
+  )
+  
+  if (adminHasReplied && session.admin_name) {
+    console.log('🟢 [ADMIN] Found name from session:', session.admin_name)
+    return session.admin_name
+  }
+  
+  console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
+  return 'Admin'
 }
 
 const fetchAuctionHistory = useCallback(async () => {

@@ -682,7 +682,6 @@ supabase.removeChannel(channel)
 }
 }, [activeSession, countUnreadMessages])
 
-// ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS (GANTI SELURUH FUNGSI INI)
 const fetchChatSessions = useCallback(async () => {
   console.log('🔵 [SESSIONS] fetchChatSessions called')
@@ -695,30 +694,49 @@ const fetchChatSessions = useCallback(async () => {
 
     console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
     
-    // ✅ PERBAIKAN: JOIN dengan admin_marketing_profiles untuk mendapatkan nama admin
-    const { data, error } = await supabase
+    // 1. Fetch Sessions
+    const { data: sessions, error } = await supabase
       .from('chat_sessions')
-      .select(`
-        *,
-        admin_info:admin_marketing_profiles!admin_id (
-          admin_name
-        )
-      `)
+      .select('*')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
-      throw error
-    }
-
-    if (!data || data.length === 0) {
+    if (error || !sessions) {
+      console.error('🔴 [SESSIONS] Error fetching sessions:', error)
       setChatSessions([])
       return
     }
 
-    // ✅ Fetch per-session unread counts for sidebar badges
-    const sessionIds = data.map((s: any) => s.id)
+    // 2. Extract unique admin IDs dari semua session
+    const adminIds = [...new Set(sessions.map(s => s.admin_id).filter(Boolean))]
+    let adminMap: Record<string, any> = {}
+
+    // 3. Fetch Data Admin (Nama & HP) secara Batch
+    if (adminIds.length > 0) {
+      console.log('🔵 [SESSIONS] Fetching admin profiles for IDs:', adminIds)
+      const { data: admins } = await supabase
+        .from('admin_marketing_profiles')
+        .select('admin_id, admin_name, admin_phone')
+        .in('admin_id', adminIds)
+      
+      if (admins) {
+        admins.forEach(admin => {
+          adminMap[admin.admin_id] = admin
+        })
+      }
+    }
+
+    // 4. Gabungkan data admin ke session
+    const enrichedSessions = sessions.map(s => ({
+      ...s,
+      admin_name: adminMap[s.admin_id]?.admin_name || 'Admin',
+      admin_phone: adminMap[s.admin_id]?.admin_phone || ''
+    }))
+
+    console.log(`🟢 [SESSIONS] Fetched ${enrichedSessions.length} sessions with admin names`)
+
+    // 5. Hitung Unread Count (Logika yang sudah ada)
+    const sessionIds = enrichedSessions.map((s: any) => s.id)
     const { data: unreadData } = await supabase
       .from('chat_messages')
       .select('session_id')
@@ -731,15 +749,13 @@ const fetchChatSessions = useCallback(async () => {
       unreadCounts[msg.session_id] = (unreadCounts[msg.session_id] || 0) + 1
     })
 
-    // ✅ Transform data: Gabungkan info admin dan unread count
-    const sessionsWithInfo = data.map((s: any) => ({
+    const finalSessions = enrichedSessions.map((s: any) => ({
       ...s,
-      admin_name: s.admin_info?.admin_name || 'Admin', // Ambil nama dari hasil JOIN
       unread_count: unreadCounts[s.id] || 0
     }))
 
-    console.log(`🟢 [SESSIONS] Fetched ${data.length} chat sessions with admin names`)
-    setChatSessions(sessionsWithInfo)
+    setChatSessions(finalSessions)
+
   } catch (err) {
     console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
   }
