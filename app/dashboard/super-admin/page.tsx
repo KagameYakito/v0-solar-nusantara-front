@@ -27,6 +27,7 @@ const ROLE_OPTIONS = [
   { value: 'admin_logistik', label: 'Admin Logistik', color: 'bg-orange-600' },
   { value: 'admin_marketing', label: 'Admin Marketing', color: 'bg-green-600' },
   { value: 'admin_data', label: 'Admin Data', color: 'bg-purple-600' },
+  { value: 'admin_keuangan', label: 'Admin Keuangan', color: 'bg-yellow-600' },
   { value: 'super_admin', label: 'Super Admin', color: 'bg-blue-600' },
 ]
 
@@ -121,7 +122,7 @@ export default function SuperAdminDashboard() {
     }
   }, [fetchUsers])
 
-  // ✅ FUNGSI GANTI ROLE - LEBIH ROBUST
+  // ✅ FUNGSI GANTI ROLE - coba RPC dulu, fallback ke API route jika RPC belum tersedia
   const handleRoleChange = async (userId: string, newRole: string) => {
     const user = users.find(u => u.id === userId)
     if (!confirm(`Yakin ingin mengubah role ${user?.email || 'user ini'} dari "${user?.role}" menjadi "${newRole}"?`)) {
@@ -134,15 +135,21 @@ export default function SuperAdminDashboard() {
     setRoleChangeResult(null)
 
     try {
-      const response = await supabase
-        .from('profiles')
-        .update({ 
-          role: newRole,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId)
+      // Use the server-side API route which bypasses RLS via service role key
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.')
 
-      if (response.error) throw response.error
+      const response = await fetch('/api/admin/update-role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId, newRole }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || `Gagal mengubah role via API (status: ${response.status})`)
 
       setRoleChangeResult({ id: userId, success: true })
       

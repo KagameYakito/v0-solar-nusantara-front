@@ -347,6 +347,9 @@ export function Navbar() {
         case 'admin_data':
           window.location.href = '/dashboard/admin-data'
           break
+        case 'admin_keuangan':
+          window.location.href = '/dashboard/admin-keuangan'
+          break
         default:
           window.location.href = '/dashboard/user'
           break
