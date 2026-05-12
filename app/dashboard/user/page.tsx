@@ -684,54 +684,33 @@ useEffect(() => {
 
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
 const fetchChatSessions = useCallback(async () => {
-  console.log('🔵 [SESSIONS] fetchChatSessions called')
-
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      console.log('🔵 [SESSIONS] No session found')
-      return
-    }
+    if (!session) return
 
-    console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
-
+    // ✅ QUERY DENGAN JOIN ke admin_marketing_profiles
     const { data, error } = await supabase
       .from('chat_sessions')
-      .select('*')
+      .select(`
+        *,
+        admin_profile:admin_marketing_profiles!admin_id (
+          admin_name,
+          admin_phone
+        )
+      `)
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
-      throw error
-    }
+    if (error) throw error
+    
+    // Transform data untuk menampilkan nama admin
+    const sessionsWithAdminName = data?.map(sessionItem => ({
+      ...sessionItem,
+      admin_name: sessionItem.admin_profile?.admin_name || 'Admin',
+      admin_phone: sessionItem.admin_profile?.admin_phone
+    })) || []
 
-    if (!data || data.length === 0) {
-      setChatSessions([])
-      return
-    }
-
-    // ✅ Fetch per-session unread counts for sidebar badges
-    const sessionIds = data.map((s: any) => s.id)
-    const { data: unreadData } = await supabase
-      .from('chat_messages')
-      .select('session_id')
-      .in('session_id', sessionIds)
-      .eq('sender_type', 'admin')
-      .eq('is_read', false)
-
-    const unreadCounts: Record<string, number> = {}
-    ;(unreadData || []).forEach((msg: any) => {
-      unreadCounts[msg.session_id] = (unreadCounts[msg.session_id] || 0) + 1
-    })
-
-    const sessionsWithUnread = data.map((s: any) => ({
-      ...s,
-      unread_count: unreadCounts[s.id] || 0
-    }))
-
-    console.log(`🟢 [SESSIONS] Fetched ${data.length} chat sessions`)
-    setChatSessions(sessionsWithUnread)
+    setChatSessions(sessionsWithAdminName)
   } catch (err) {
     console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
   }
@@ -2853,39 +2832,34 @@ const confirmSubmitRequest = async () => {
                   ) : (
                     <>
                       {/* CHAT HEADER */}
-                      <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {/* ✅ AVATAR ADMIN DINAMIS (Inisial Nama) */}
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg"
-                              style={{ 
-                                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' // Warna Orange sesuai profil
-                              }}>
-                            {/* Ambil inisial dari nama admin */}
-                            {(() => {
-                              const adminName = getAdminDisplayName(messages);
-                              return adminName ? adminName.charAt(0).toUpperCase() : 'A';
-                            })()}
+                        <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {/* ✅ AVATAR DENGAN INISIAL NAMA ADMIN */}
+                            <div 
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                              style={{
+                                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
+                              }}
+                            >
+                              {(() => {
+                                const adminName = chatSessions.find(s => s.id === activeSession)?.admin_name || 'Admin';
+                                return adminName.charAt(0).toUpperCase();
+                              })()}
+                            </div>
+                            
+                            <div>
+                              {/* ✅ NAMA ADMIN DINAMIS */}
+                              <p className="text-white font-medium">
+                                {chatSessions.find(s => s.id === activeSession)?.admin_name || 'Admin'}
+                              </p>
+                              <p className="text-xs text-green-400">Online</p>
+                            </div>
                           </div>
-                          <div>
-                            {/* ✅ NAMA ADMIN DINAMIS */}
-                            <p className="text-white font-medium">
-                              {getAdminDisplayName(messages)}
-                            </p>
-                            <p className="text-xs text-green-400">Online</p>
-                          </div>
+                          
+                          <Button size="sm" variant="outline" onClick={() => setActiveSession(null)}>
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            console.log('🔵 [CLICK] Close chat button clicked')
-                            setActiveSession(null)
-                          }}
-                          className="border-slate-600 hover:bg-slate-700"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
 
                       {/* MESSAGES AREA */}
                       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-900/50">

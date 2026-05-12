@@ -183,17 +183,6 @@ export default function AdminMarketingDashboard() {
   const [selectedAdminForTakeover, setSelectedAdminForTakeover] = useState('');
   const [chatInput, setChatInput] = useState('')
 
-  // ✅ CHAT NOTIFICATION & OWNERSHIP STATES
-  const [sessionUnreadCounts, setSessionUnreadCounts] = useState<Record<string, number>>({})
-  const [isReadOnlySession, setIsReadOnlySession] = useState(false)
-  const [sessionOwnerName, setSessionOwnerName] = useState<string | null>(null)
-  const [totalAdminUnread, setTotalAdminUnread] = useState(0)
-
-  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
-  const [invoiceItems, setInvoiceItems] = useState<any[]>([])
-  const [invoiceNotes, setInvoiceNotes] = useState('')
-  const [sendingInvoice, setSendingInvoice] = useState(false)
-
   const STATUS_PRIORITY: Record<string, number> = {
     'deal': 1,
     'pending': 2,
@@ -309,7 +298,6 @@ export default function AdminMarketingDashboard() {
   useEffect(() => {
     if (isAuthorized) {
       fetchWishlistItems()
-      fetchSessionUnreadCounts()
     }
   }, [isAuthorized, wishlistFilter])
 
@@ -330,55 +318,6 @@ export default function AdminMarketingDashboard() {
     }
   };
 
-  // ✅ FETCH UNREAD MESSAGE COUNTS PER SESSION (unread user messages for admin)
-  const fetchSessionUnreadCounts = useCallback(async () => {
-    try {
-      // Fetch all chat sessions with their request_ids
-      const { data: sessions } = await supabase
-        .from('chat_sessions')
-        .select('id, request_id')
-
-      if (!sessions || sessions.length === 0) {
-        setSessionUnreadCounts({})
-        setTotalAdminUnread(0)
-        return
-      }
-
-      const sessionIds = sessions.map((s: any) => s.id)
-
-      // Fetch unread user messages across all sessions
-      const { data: unreadMsgs } = await supabase
-        .from('chat_messages')
-        .select('session_id')
-        .in('session_id', sessionIds)
-        .eq('sender_type', 'user')
-        .eq('is_read', false)
-
-      const countsBySession: Record<string, number> = {}
-      ;(unreadMsgs || []).forEach((msg: any) => {
-        countsBySession[msg.session_id] = (countsBySession[msg.session_id] || 0) + 1
-      })
-
-      // Build counts keyed by request_id for wishlist table lookup
-      const countsByRequest: Record<string, number> = {}
-      let total = 0
-      sessions.forEach((s: any) => {
-        const cnt = countsBySession[s.id] || 0
-        if (cnt > 0) {
-          if (s.request_id) {
-            countsByRequest[String(s.request_id)] = (countsByRequest[String(s.request_id)] || 0) + cnt
-          }
-          total += cnt
-        }
-      })
-
-      setSessionUnreadCounts(countsByRequest)
-      setTotalAdminUnread(total)
-    } catch (err) {
-      console.error('Error fetching session unread counts:', err)
-    }
-  }, [])
-
   const loadMessagesForAdmin = async (sessionId: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -388,7 +327,8 @@ export default function AdminMarketingDashboard() {
         .from('chat_messages')
         .select(`
         *,
-        sender_profile:profiles!sender_id(full_name)
+        sender_profile:profiles!sender_id(full_name),
+        admin_profile:admin_marketing_profiles!admin_id(admin_name)
         `)
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true })
@@ -460,12 +400,12 @@ const handleOpenChatForRequest = (request: any) => {
     }
 };
 
-  // ✅ REALTIME CHAT SUBSCRIPTION FOR ADMIN - handles INSERT (new messages) and UPDATE (read receipts)
+  // ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
   useEffect(() => {
     if (!activeSession) return
-
+    
     const channel = supabase
-      .channel(`admin_chat:${activeSession}`)
+      .channel(`chat:${activeSession}`)
       .on(
         'postgres_changes',
         {
@@ -475,39 +415,15 @@ const handleOpenChatForRequest = (request: any) => {
           filter: `session_id=eq.${activeSession}`
         },
         (payload) => {
-          setChatMessages((prev: any) => {
-            const exists = prev.some((m: any) => m.id === payload.new.id)
-            if (exists) return prev
-            return [...prev, payload.new]
-          })
-          // Refresh unread counts when a new user message arrives
-          fetchSessionUnreadCounts()
-          setTimeout(() => {
-            adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-          }, 100)
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `session_id=eq.${activeSession}`
-        },
-        (payload) => {
-          // Update read status when user reads admin messages
-          setChatMessages((prev: any) =>
-            prev.map((m: any) => m.id === payload.new.id ? { ...m, ...payload.new } : m)
-          )
+          setChatMessages((prev: any) => [...prev, payload.new])
         }
       )
       .subscribe()
-
+    
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [activeSession, fetchSessionUnreadCounts])
+  }, [activeSession])
   
   // Load chat messages untuk admin
   const loadAdminChatMessages = async (sessionId: string) => {
@@ -519,7 +435,8 @@ const handleOpenChatForRequest = (request: any) => {
         .from('chat_messages')
         .select(`
           *,
-          sender_profile:profiles!sender_id(full_name)
+          sender_profile:profiles!sender_id(full_name),
+          admin_profile:admin_marketing_profiles!admin_id(admin_name)
         `)
         .eq('session_id', sessionId)  // ✅ Gunakan UUID, bukan request_id
         .order('created_at', { ascending: true });
@@ -531,17 +448,21 @@ const handleOpenChatForRequest = (request: any) => {
     }
   }
 
-  const getAdminDisplayName = (session: any) => {
-    // ✅ GUNAKAN chatMessages, BUKAN messages
-    // Pastikan kamu punya state: const [chatMessages, setChatMessages] = useState([])
-    const adminHasReplied = chatMessages?.some(
-      (msg: any) => msg.sender_type === 'admin'
+  const getAdminDisplayName = (messages: any[]) => {
+    console.log('🔵 [ADMIN] getAdminDisplayName called, messages:', messages)
+    
+    // Cari pesan dari admin yang punya admin_name
+    const adminMessage = messages.find(m =>
+      m.sender_type === 'admin' && m.admin_name
     )
     
-    if (adminHasReplied && session.admin_name) {
-      return session.admin_name 
+    if (adminMessage?.admin_name) {
+      console.log('🟢 [ADMIN] Found admin name:', adminMessage.admin_name)
+      return adminMessage.admin_name
     }
-    return 'Admin' 
+    
+    console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
+    return 'Admin'
   }
 
   const fetchAuctionHistory = useCallback(async () => {
@@ -676,38 +597,33 @@ const fetchChatMessages = async (sessionUUID: string) => {
 // Ganti fungsi sendChatMessage yang lama dengan ini:
 const sendChatMessage = async (sessionUUID: string, message: string) => {
   if (!message.trim()) return;
-  // Don't allow sending if this is a read-only session
-  if (isReadOnlySession) return;
   try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
 
-      const { error } = await supabase.rpc('send_chat_message', {
-          p_session_id: sessionUUID,
-          p_sender_id: session.user.id,
-          p_message: message.trim(),
-          p_sender_type: 'admin'
-      });
+    // ✅ UPDATE admin_id di chat_sessions
+    await supabase
+      .from('chat_sessions')
+      .update({ 
+        admin_id: session.user.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionUUID);
 
-      if (error) throw error;
+    // Kirim pesan
+    const { error } = await supabase.rpc('send_chat_message', {
+      p_session_id: sessionUUID,
+      p_sender_id: session.user.id,
+      p_message: message.trim(),
+      p_sender_type: 'admin'
+    });
 
-      // ✅ Ensure admin_id and admin_name are set on the session (from admin marketing profile)
-      if (adminProfile) {
-        await supabase
-          .from('chat_sessions')
-          .update({
-            admin_id: session.user.id,
-            admin_name: adminProfile.admin_name
-          })
-          .eq('id', sessionUUID)
-          .is('admin_id', null);
-      }
-
-      setChatInput('');
-      await fetchChatMessages(sessionUUID);
+    if (error) throw error;
+    setChatInput('');
+    await fetchChatMessages(sessionUUID);
   } catch (err) {
-      console.error("Error sending message:", err);
-      alert("Gagal mengirim pesan");
+    console.error("Error sending message:", err);
+    alert("Gagal mengirim pesan");
   }
 }
 
@@ -720,11 +636,6 @@ const openChatWithClient = async (item: any) => {
     return;
   }
   try {
-    // Get current admin session
-    const { data: { session: authSession } } = await supabase.auth.getSession();
-    if (!authSession) return;
-    const currentAdminId = authSession.user.id;
-
     // 1. CARI session yang sudah ada di database
     console.log("🔵 [SEARCH] Looking for session with request_id:", requestId);
     const { data: existingSession, error: fetchError } = await supabase
@@ -733,41 +644,16 @@ const openChatWithClient = async (item: any) => {
       .eq('request_id', requestId)
       .single();
     console.log("🔵 [RESULT] Existing session:", existingSession);
+    console.log("🔵 [ERROR] Fetch error:", fetchError);
     if (fetchError && fetchError.code !== 'PGRST116') {
       throw fetchError;
     }
     let sessionId;
     let sessionData;
-    let localReadOnly = false;
-    let localOwnerName: string | null = null;
-
     if (existingSession) {
       sessionId = existingSession.id;
       sessionData = existingSession;
       console.log("✅ [FOUND] Menggunakan session yang sudah ada:", sessionId);
-
-      // ✅ CHECK ADMIN OWNERSHIP
-      if (existingSession.admin_id && existingSession.admin_id !== currentAdminId) {
-        // Another admin already claimed this session → read-only for current admin
-        localReadOnly = true;
-        const { data: ownerData } = await supabase
-          .from('admin_marketing_profiles')
-          .select('admin_name')
-          .eq('admin_id', existingSession.admin_id)
-          .single();
-        localOwnerName = ownerData?.admin_name || 'Admin lain';
-        console.log(`🔵 [READONLY] Session dimiliki oleh: ${localOwnerName}`);
-      } else if (!existingSession.admin_id) {
-        // No admin claimed yet → claim it
-        await supabase
-          .from('chat_sessions')
-          .update({
-            admin_id: currentAdminId,
-            admin_name: adminProfile?.admin_name || null
-          })
-          .eq('id', sessionId);
-        console.log("✅ [CLAIM] Session diklaim oleh admin saat ini");
-      }
     } else {
       console.log("⚠️ [NEW] Tidak ada session, membuat baru...");
       const { data: newSession, error: insertError } = await supabase
@@ -775,8 +661,7 @@ const openChatWithClient = async (item: any) => {
         .insert({
           request_id: requestId,
           user_id: item.user_id,
-          admin_id: currentAdminId,
-          admin_name: adminProfile?.admin_name || null,
+          admin_id: adminProfile?.admin_id,
           session_name: `RFQ-${requestId}`,
           status: 'active'
         })
@@ -787,12 +672,7 @@ const openChatWithClient = async (item: any) => {
       sessionData = newSession;
       console.log("✅ Session baru dibuat:", sessionId);
     }
-
-    // Set read-only state BEFORE loading messages
-    setIsReadOnlySession(localReadOnly);
-    setSessionOwnerName(localOwnerName);
-
-    // Set active session
+    // 4. Set active session
     console.log("🔵 [SET STATE] Setting activeSession to:", sessionId);
     setActiveSession(sessionId);
     // ✅ SIMPAN SESSION DATA
@@ -800,149 +680,55 @@ const openChatWithClient = async (item: any) => {
       ...item,
       session_name: sessionData?.session_name || `RFQ-${requestId}`
     });
-    // Load messages
+    // 5. Load messages
     console.log("🔵 [FETCH] Memanggil fetchChatMessages dengan sessionId:", sessionId);
     await fetchChatMessages(sessionId);
-
-    // ✅ Mark user messages as read ONLY if this admin owns the session (not ghost read)
-    if (!localReadOnly) {
-      const { data: unreadMessages } = await supabase
+    
+    // ✅ FIX READ RECEIPTS: Tandai pesan dari USER sebagai terbaca oleh ADMIN
+    const { data: unreadMessages } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('sender_type', 'user')
+      .eq('is_read', false);
+    if (unreadMessages && unreadMessages.length > 0) {
+      await supabase
         .from('chat_messages')
-        .select('id')
-        .eq('session_id', sessionId)
-        .eq('sender_type', 'user')
-        .eq('is_read', false);
-      if (unreadMessages && unreadMessages.length > 0) {
-        await supabase
-          .from('chat_messages')
-          .update({ is_read: true })
-          .in('id', unreadMessages.map((m: any) => m.id));
-        console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
-        // Refresh unread counts after marking as read
-        fetchSessionUnreadCounts();
-      }
+        .update({ is_read: true })
+        .in('id', unreadMessages.map(m => m.id));
+      console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
     }
+    
+    // 6. Setup realtime subscription
+    setupChatRealtimeSubscription(sessionId);
   } catch (error: any) {
     console.error("❌ [ERROR] Gagal membuka sesi chat:", error);
     alert("❌ Gagal membuka sesi chat: " + error.message);
   }
 }
 
-const openInvoiceModal = async () => {
-  if (!selectedClient || !activeSession) return
-  const requestId = selectedClient.request_id
-  if (!requestId) {
-    alert("❌ Tidak ada request_id untuk RFQ ini")
-    return
-  }
-  try {
-    // Step 1: fetch wishlist items for this request using select('*') to avoid
-    // PostgREST treating the product_id FK column as an embedded resource
-    const { data: wishlistData, error: wishlistError } = await supabase
-      .from('wishlists')
-      .select('*')
-      .eq('request_id', requestId)
-      .neq('status', 'wishlist')
-    if (wishlistError) throw wishlistError
-
-    // Step 2: fetch matching product details separately
-    const productIds = (wishlistData || []).map(w => w.product_id).filter(Boolean)
-    const productsMap: Record<string, { nama_produk: string; sku: string }> = {}
-    if (productIds.length > 0) {
-      const { data: productsData } = await supabase
-        .from('products')
-        .select('id, nama_produk, sku')
-        .in('id', productIds)
-      ;(productsData || []).forEach(p => {
-        productsMap[p.id] = { nama_produk: p.nama_produk || '', sku: p.sku || '' }
-      })
-    }
-
-    const items = (wishlistData || []).map(item => {
-      const prod = productsMap[item.product_id]
-      return {
-        id: item.id,
-        product_name: prod?.nama_produk || item.product_name || 'Produk',
-        sku: prod?.sku || item.product_id || '-',
-        quantity: item.quantity || 1,
-        unit_price: item.price || 0,
-        subtotal: (item.quantity || 1) * (item.price || 0)
+// Tambahkan fungsi realtime subscription
+const setupChatRealtimeSubscription = (sessionId: string) => {
+  const channel = supabase
+    .channel(`chat:${sessionId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_id=eq.${sessionId}`  // ✅ Filter by session_id
+      },
+      (payload) => {
+        console.log('🔵 New message received:', payload.new);
+        setChatMessages((prev: any) => [...prev, payload.new]);
       }
-    })
-    setInvoiceItems(items)
-    setInvoiceNotes('')
-    setShowInvoiceModal(true)
-  } catch (err: any) {
-    alert("❌ Gagal memuat data produk: " + err.message)
-  }
-}
-
-const sendInvoice = async () => {
-  if (!activeSession || !selectedClient || invoiceItems.length === 0) return
-  setSendingInvoice(true)
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-
-    const totalAmount = invoiceItems.reduce((sum, item) => sum + item.subtotal, 0)
-    const invoicePayload = JSON.stringify({
-      rfq_id: selectedClient.request_id,
-      rfq_code: selectedClient.session_name || `RFQ-${selectedClient.request_id}`,
-      user_name: selectedClient.user_name,
-      company_name: selectedClient.company_name,
-      items: invoiceItems,
-      total_amount: totalAmount,
-      notes: invoiceNotes,
-      created_at: new Date().toISOString()
-    })
-
-    const { error } = await supabase
-      .from('chat_messages')
-      .insert({
-        session_id: activeSession,
-        sender_id: session.user.id,
-        sender_type: 'admin',
-        message: invoicePayload,
-        // Use 'invoice' if the DB constraint allows it (after running migration),
-        // fallback to 'text' so the message still goes through on older DB schemas.
-        message_type: 'invoice',
-        is_read: false
-      })
-    if (error) {
-      // If the error is a check constraint violation (old DB schema), retry with 'text'
-      if (error.code === '23514') {
-        const { error: fallbackError } = await supabase
-          .from('chat_messages')
-          .insert({
-            session_id: activeSession,
-            sender_id: session.user.id,
-            sender_type: 'admin',
-            message: invoicePayload,
-            message_type: 'text',
-            is_read: false
-          })
-        if (fallbackError) throw fallbackError
-      } else {
-        throw error
-      }
-    }
-
-    await supabase
-      .from('chat_sessions')
-      .update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', activeSession)
-
-    setShowInvoiceModal(false)
-    await fetchChatMessages(activeSession)
-    setTimeout(() => {
-      adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, 200)
-    alert("✅ Invoice berhasil dikirim!")
-  } catch (err: any) {
-    alert("❌ Gagal mengirim invoice: " + err.message)
-  } finally {
-    setSendingInvoice(false)
-  }
+    )
+    .subscribe();
+    
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
   const getStatusConfig = (status: string) => {
@@ -1342,45 +1128,6 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
       if (historyChannel) supabase.removeChannel(historyChannel)
     }
   }, [isAuthorized, fetchProducts, fetchAuctionHistory])
-
-  // ✅ REALTIME SUBSCRIPTION FOR GLOBAL UNREAD COUNTS (user messages → notify admin)
-  useEffect(() => {
-    if (!isAuthorized) return
-
-    const chatNotifChannel = supabase
-      .channel('admin-chat-notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages'
-        },
-        (payload: any) => {
-          // Only trigger for user messages (admin needs to be notified)
-          if (payload.new?.sender_type === 'user') {
-            fetchSessionUnreadCounts()
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'chat_messages'
-        },
-        () => {
-          // Refresh when is_read changes (messages marked as read)
-          fetchSessionUnreadCounts()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(chatNotifChannel)
-    }
-  }, [isAuthorized, fetchSessionUnreadCounts])
 
   const openEditPriceModal = (productId: string, currentPrice: number | null) => {
     setEditingProductId(productId)
@@ -2138,15 +1885,10 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   setCurrentPage(1)
                 }
               }}
-              className={`relative ${filterView === 'wishlist' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}`}
+              className={filterView === 'wishlist' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-700'}
             >
               <Bookmark className="h-4 w-4 mr-2" />
               Wishlist Analytics ({wishlistTotal})
-              {totalAdminUnread > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
-                  {totalAdminUnread > 9 ? '9+' : totalAdminUnread}
-                </span>
-              )}
             </Button>
             <Button
               variant={filterView === 'request' ? 'default' : 'outline'}
@@ -2340,15 +2082,10 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                             {/* ✅ Tombol Chat - Sekarang bisa diklik */}
                             <button
                               onClick={() => openChatWithClient(item)}
-                              className="relative h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
+                              className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center transition-colors"
                               title="Chat dengan User"
                             >
                               <MessageSquare className="h-4 w-4" />
-                              {item.request_id && (sessionUnreadCounts[String(item.request_id)] || 0) > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none">
-                                  {(sessionUnreadCounts[String(item.request_id)] || 0) > 9 ? '9+' : sessionUnreadCounts[String(item.request_id)]}
-                                </span>
-                              )}
                             </button>
                           </div>
                         </td>
@@ -3277,9 +3014,7 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
         if (!open) {
           setActiveSession(null);
           setChatMessages([]);
-          setSelectedClient(null);
-          setIsReadOnlySession(false);
-          setSessionOwnerName(null);
+          setSelectedClient(null); // ✅ TAMBAHKAN INI: Bersihkan data user saat tutup
         }
       }}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-4xl w-[90vw] h-[85vh] flex flex-col p-0 gap-0">
@@ -3291,43 +3026,27 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   <MessageSquare className="h-5 w-5 text-blue-400" />
                 </div>
                 <div>
-                  <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+                  <DialogTitle className="text-lg font-bold text-white">
+                    {/* ✅ GANTI JUDUL MENJADI NAMA USER */}
                     {selectedClient?.user_name || 'Client'}
-                    {isReadOnlySession && (
-                      <span className="text-xs font-normal text-amber-400 bg-amber-400/10 border border-amber-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Lock className="h-3 w-3" />
-                        Read Only
-                      </span>
-                    )}
                   </DialogTitle>
                   <DialogDescription className="text-sm text-slate-400">
+                    {/* ✅ GANTI SUBTITLE HANYA ID RFQ (TANPA "RFQ: " DI DEPAN) */}
                     {selectedClient?.session_name || activeSession?.slice(0, 8) + '...'}
                   </DialogDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={openInvoiceModal}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-xs"
-                >
-                  <FileText className="h-4 w-4 mr-1" />
-                  Buat Invoice
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setActiveSession(null);
-                    setChatMessages([]);
-                    setIsReadOnlySession(false);
-                    setSessionOwnerName(null);
-                  }}
-                  className="text-slate-400 hover:text-white hover:bg-slate-700"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setActiveSession(null);
+                  setChatMessages([]);
+                }}
+                className="text-slate-400 hover:text-white hover:bg-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </Button>
             </div>
           </DialogHeader>
 
@@ -3351,43 +3070,6 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
                   ? (msg.admin_profile?.admin_name || adminProfile?.admin_name || 'Admin')
                   : (msg.sender_profile?.full_name || 'User')
                 
-                // Handle invoice messages
-                if (msg.message_type === 'invoice') {
-                  let invoiceData: any = null
-                  try { invoiceData = JSON.parse(msg.message) } catch {}
-                  
-                  return (
-                    <div key={msg.id || index} className="flex justify-end mt-4">
-                      <div className="max-w-[80%] bg-emerald-900/30 border border-emerald-600/50 rounded-2xl rounded-tr-none px-4 py-3 shadow-sm">
-                        <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1">
-                          <FileText className="h-3 w-3" />
-                          INVOICE DIKIRIM
-                        </p>
-                        {invoiceData && (
-                          <div className="space-y-1 text-xs text-slate-300">
-                            <p className="font-mono font-bold text-white">{invoiceData.rfq_code}</p>
-                            <p>{invoiceData.user_name} — {invoiceData.company_name}</p>
-                            <div className="border-t border-emerald-700/50 my-2" />
-                            {invoiceData.items?.slice(0, 3).map((it: any, i: number) => (
-                              <p key={i}>{it.product_name} × {it.quantity}</p>
-                            ))}
-                            {(invoiceData.items?.length || 0) > 3 && (
-                              <p className="text-slate-500">+{invoiceData.items.length - 3} produk lainnya</p>
-                            )}
-                            <div className="border-t border-emerald-700/50 my-2" />
-                            <p className="text-orange-400 font-mono font-bold">
-                              Total: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(invoiceData.total_amount || 0)}
-                            </p>
-                          </div>
-                        )}
-                        <p className="text-[10px] text-emerald-300 mt-2 text-right">
-                          {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    </div>
-                  )
-                }
-
                 // ✅ RETURN JSX - POSISI YANG BENAR
                 return (
                   <div
@@ -3448,43 +3130,32 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
 
           {/* CHAT INPUT - FIXED AT BOTTOM */}
           <div className="border-t border-slate-700 bg-slate-800/50 p-4">
-            {isReadOnlySession ? (
-              <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-slate-800 border border-slate-700">
-                <Lock className="h-4 w-4 text-amber-400 flex-shrink-0" />
-                <span className="text-sm text-slate-400">
-                  Session ini ditangani oleh{' '}
-                  <span className="text-amber-400 font-medium">{sessionOwnerName || 'Admin lain'}</span>
-                  . Kamu hanya bisa membaca.
-                </span>
-              </div>
-            ) : (
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  placeholder="Ketik pesan..."
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && chatInput.trim() && activeSession) {
-                      sendChatMessage(activeSession, chatInput);
-                    }
-                  }}
-                />
-                <Button
-                  onClick={() => {
-                    if (chatInput.trim() && activeSession) {
-                      sendChatMessage(activeSession, chatInput);
-                    }
-                  }}
-                  disabled={!chatInput.trim() || !activeSession}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed"
-                >
-                  Kirim
-                  <MessageSquare className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
-            )}
+            <div className="flex gap-3">
+              <input
+                type="text"
+                placeholder="Ketik pesan..."
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && chatInput.trim() && activeSession) {
+                    sendChatMessage(activeSession, chatInput);
+                  }
+                }}
+              />
+              <Button
+                onClick={() => {
+                  if (chatInput.trim() && activeSession) {  // ✅ Tambah check activeSession
+                    sendChatMessage(activeSession, chatInput);
+                  }
+                }}
+                disabled={!chatInput.trim() || !activeSession}  // ✅ Disable jika activeSession null
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed"
+              >
+                Kirim
+                <MessageSquare className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -3817,116 +3488,6 @@ const assignClientToAdmin = async (userId: string, userName: string) => {
           </DialogContent>
         </Dialog>
       )}
-      {/* INVOICE MODAL */}
-      <Dialog open={showInvoiceModal} onOpenChange={setShowInvoiceModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 py-4 border-b border-slate-700 bg-slate-800/50">
-            <DialogTitle className="flex items-center gap-2 text-emerald-400">
-              <FileText className="h-5 w-5" />
-              Buat Invoice
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              {selectedClient?.session_name} — {selectedClient?.user_name} ({selectedClient?.company_name})
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {/* Invoice Items Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-slate-300">
-                <thead className="bg-slate-800 text-xs uppercase">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Produk</th>
-                    <th className="px-3 py-2 text-center w-20">Qty</th>
-                    <th className="px-3 py-2 text-right w-40">Harga Satuan</th>
-                    <th className="px-3 py-2 text-right w-40">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {invoiceItems.map((item, index) => (
-                    <tr key={index} className="hover:bg-slate-800/50">
-                      <td className="px-3 py-3">
-                        <p className="text-white font-medium">{item.product_name}</p>
-                        <p className="text-xs text-slate-500 font-mono">{item.sku}</p>
-                      </td>
-                      <td className="px-3 py-3">
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const qty = Math.max(1, parseInt(e.target.value) || 1)
-                            setInvoiceItems(prev => prev.map((it, i) =>
-                              i === index ? { ...it, quantity: qty, subtotal: qty * it.unit_price } : it
-                            ))
-                          }}
-                          className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-center text-white focus:outline-none focus:border-blue-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.unit_price}
-                          onChange={(e) => {
-                            const price = Math.max(0, parseFloat(e.target.value) || 0)
-                            setInvoiceItems(prev => prev.map((it, i) =>
-                              i === index ? { ...it, unit_price: price, subtotal: it.quantity * price } : it
-                            ))
-                          }}
-                          className="w-36 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-right text-white focus:outline-none focus:border-blue-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-orange-400">
-                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(item.subtotal)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-slate-600">
-                  <tr>
-                    <td colSpan={3} className="px-3 py-3 text-right font-bold text-white">Total</td>
-                    <td className="px-3 py-3 text-right font-mono font-bold text-orange-400 text-base">
-                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(
-                        invoiceItems.reduce((s, it) => s + it.subtotal, 0)
-                      )}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="text-sm text-slate-400 mb-1 block">Catatan Invoice (Opsional)</label>
-              <textarea
-                value={invoiceNotes}
-                onChange={(e) => setInvoiceNotes(e.target.value)}
-                rows={3}
-                className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 resize-none"
-                placeholder="Contoh: Harga sudah termasuk ongkos kirim ke lokasi..."
-              />
-            </div>
-          </div>
-
-          <div className="border-t border-slate-700 p-4 flex gap-3 flex-shrink-0 bg-slate-800/50">
-            <Button variant="outline" onClick={() => setShowInvoiceModal(false)} className="border-slate-600 flex-1" disabled={sendingInvoice}>
-              Batal
-            </Button>
-            <Button
-              onClick={sendInvoice}
-              disabled={sendingInvoice || invoiceItems.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700 flex-1"
-            >
-              {sendingInvoice ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Mengirim...</>
-              ) : (
-                <><Check className="h-4 w-4 mr-2" />Simpan & Kirim Invoice</>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
