@@ -635,83 +635,105 @@ alert("Gagal mengirim pesan");
 }
 
 // GANTI fungsi openChatWithClient yang lama dengan ini
+// GANTI fungsi openChatWithClient yang lama dengan ini
 const openChatWithClient = async (item: any) => {
-console.log("🔵 [OPEN CHAT] Opening chat for item:", item);
-const requestId = item.request_id;
-if (!requestId) {
-alert("❌ Item ini tidak memiliki request_id");
-return;
-}
-try {
-// 1. CARI session yang sudah ada di database
-console.log("🔵 [SEARCH] Looking for session with request_id:", requestId);
-const { data: existingSession, error: fetchError } = await supabase
-.from('chat_sessions')
-.select('*')
-.eq('request_id', requestId)
-.single();
-console.log("🔵 [RESULT] Existing session:", existingSession);
-console.log("🔵 [ERROR] Fetch error:", fetchError);
-if (fetchError && fetchError.code !== 'PGRST116') {
-throw fetchError;
-}
-let sessionId;
-let sessionData;
-if (existingSession) {
-sessionId = existingSession.id;
-sessionData = existingSession;
-console.log("✅ [FOUND] Menggunakan session yang sudah ada:", sessionId);
-} else {
-console.log("⚠️ [NEW] Tidak ada session, membuat baru...");
-const { data: newSession, error: insertError } = await supabase
-.from('chat_sessions')
-.insert({
-request_id: requestId,
-user_id: item.user_id,
-admin_id: adminProfile?.admin_id,
-session_name: `RFQ-${requestId}`,
-status: 'active'
-})
-.select('*')
-.single();
-if (insertError) throw insertError;
-sessionId = newSession.id;
-sessionData = newSession;
-console.log("✅ Session baru dibuat:", sessionId);
-}
-// 4. Set active session
-console.log("🔵 [SET STATE] Setting activeSession to:", sessionId);
-setActiveSession(sessionId);
-// ✅ SIMPAN SESSION DATA
-setSelectedClient({
-...item,
-session_name: sessionData?.session_name || `RFQ-${requestId}`
-});
-// 5. Load messages
-console.log("🔵 [FETCH] Memanggil fetchChatMessages dengan sessionId:", sessionId);
-await fetchChatMessages(sessionId);
-
-// ✅ FIX READ RECEIPTS: Tandai pesan dari USER sebagai terbaca oleh ADMIN
-const { data: unreadMessages } = await supabase
-.from('chat_messages')
-.select('id')
-.eq('session_id', sessionId)
-.eq('sender_type', 'user')
-.eq('is_read', false);
-if (unreadMessages && unreadMessages.length > 0) {
-await supabase
-.from('chat_messages')
-.update({ is_read: true })
-.in('id', unreadMessages.map(m => m.id));
-console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
-}
-
-// 6. Setup realtime subscription
-setupChatRealtimeSubscription(sessionId);
-} catch (error: any) {
-console.error("❌ [ERROR] Gagal membuka sesi chat:", error);
-alert("❌ Gagal membuka sesi chat: " + error.message);
-}
+  console.log("🔵 [OPEN CHAT] Opening chat for item:", item);
+  const requestId = item.request_id;
+  if (!requestId) {
+    alert("❌ Item ini tidak memiliki request_id");
+    return;
+  }
+  try {
+    // 1. CARI session yang sudah ada di database
+    console.log("🔵 [SEARCH] Looking for session with request_id:", requestId);
+    const { data: existingSession, error: fetchError } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('request_id', requestId)
+      .single();
+    
+    console.log("🔵 [RESULT] Existing session:", existingSession);
+    console.log("🔵 [ERROR] Fetch error:", fetchError);
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+    
+    let sessionId;
+    let sessionData;
+    
+    if (existingSession) {
+      sessionId = existingSession.id;
+      sessionData = existingSession;
+      console.log("✅ [FOUND] Menggunakan session yang sudah ada:", sessionId);
+      
+      // ✅ UPDATE admin_id dan admin_name jika masih NULL
+      if ((!existingSession.admin_id || !existingSession.admin_name) && adminProfile) {
+        await supabase
+          .from('chat_sessions')
+          .update({ 
+            admin_id: adminProfile.admin_id,
+            admin_name: adminProfile.admin_name  // Simpan nama admin langsung di session
+          })
+          .eq('id', existingSession.id);
+        console.log("🟢 [UPDATE] admin_id dan admin_name berhasil diupdate di chat_sessions");
+      }
+    } else {
+      console.log("⚠️ [NEW] Tidak ada session, membuat baru...");
+      const { data: newSession, error: insertError } = await supabase
+        .from('chat_sessions')
+        .insert({
+          request_id: requestId,
+          user_id: item.user_id,
+          admin_id: adminProfile?.admin_id,
+          admin_name: adminProfile?.admin_name,  // ✅ SIMPAN NAMA ADMIN LANGSUNG
+          session_name: `RFQ-${requestId}`,
+          status: 'active'
+        })
+        .select('*')
+        .single();
+      
+      if (insertError) throw insertError;
+      sessionId = newSession.id;
+      sessionData = newSession;
+      console.log("✅ Session baru dibuat:", sessionId);
+    }
+    
+    // 4. Set active session
+    console.log("🔵 [SET STATE] Setting activeSession to:", sessionId);
+    setActiveSession(sessionId);
+    
+    // ✅ SIMPAN SESSION DATA
+    setSelectedClient({
+      ...item,
+      session_name: sessionData?.session_name || `RFQ-${requestId}`,
+      admin_name: sessionData?.admin_name || adminProfile?.admin_name
+    });
+    
+    // 5. Load messages
+    console.log("🔵 [FETCH] Memanggil fetchChatMessages dengan sessionId:", sessionId);
+    await fetchChatMessages(sessionId);
+    
+    // ✅ FIX READ RECEIPTS: Tandai pesan dari USER sebagai terbaca oleh ADMIN
+    const { data: unreadMessages } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('sender_type', 'user')
+      .eq('is_read', false);
+    if (unreadMessages && unreadMessages.length > 0) {
+      await supabase
+        .from('chat_messages')
+        .update({ is_read: true })
+        .in('id', unreadMessages.map(m => m.id));
+      console.log(`🟢 [READ] Marked ${unreadMessages.length} user messages as read`);
+    }
+    
+    // 6. Setup realtime subscription
+    setupChatRealtimeSubscription(sessionId);
+  } catch (error: any) {
+    console.error("❌ [ERROR] Gagal membuka sesi chat:", error);
+    alert("❌ Gagal membuka sesi chat: " + error.message);
+  }
 }
 
 // Tambahkan fungsi realtime subscription
