@@ -452,24 +452,25 @@ console.error("Error loading messages:", err);
 }
 
 // Fungsi untuk mendapatkan nama admin (GANTI SELURUH FUNGSI INI)
-const getAdminDisplayName = (messages: any[]) => {
+// Opsi 1: Passing sebagai parameter
+const getAdminDisplayName = (messages: any[], chatSessions: any[], activeSession: string | null) => {
   console.log('🔵 [ADMIN] getAdminDisplayName called')
   console.log('🔵 [ADMIN] Messages:', messages)
   console.log('🔵 [ADMIN] Chat Sessions:', chatSessions)
   console.log('🔵 [ADMIN] Active Session:', activeSession)
-  
+
   // Cek di chatSessions dulu
-  const currentSession = chatSessions.find(s => s.id === activeSession)
+  const currentSession = chatSessions.find((s: any) => s.id === activeSession)
   console.log('🔵 [ADMIN] Current Session:', currentSession)
-  
+
   if (currentSession?.admin_name && currentSession.admin_name !== 'Admin') {
     console.log('🟢 [ADMIN] Found name from session:', currentSession.admin_name)
     return currentSession.admin_name
   }
-  
+
   // Fallback ke messages
   const adminMessage = messages.find(m =>
-    m.sender_type === 'admin' && m.admin_name
+    m.sender_type === 'admin' && m.admin_name && m.admin_name !== 'Admin'
   )
   if (adminMessage?.admin_name) {
     console.log('🟢 [ADMIN] Found name from message:', adminMessage.admin_name)
