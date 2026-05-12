@@ -131,21 +131,12 @@ export default function UserDashboard() {
   const [adminInfo, setAdminInfo] = useState<{ name: string; phone?: string } | null>(null)
   const [activeRfqSession, setActiveRfqSession] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  // Cached set of the current user's chat session IDs — used to filter realtime events
-  // so the global subscription only reacts to messages/updates for this user's sessions.
-  const userSessionIdsRef = useRef<Set<string>>(new Set())
 
   const [chatSessions, setChatSessions] = useState<any[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
-
-  const [showQRModal, setShowQRModal] = useState(false)
-  const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
-  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null)
-  const [qrLoading, setQrLoading] = useState(false)
-  const [merchantName, setMerchantName] = useState<string | null>(null)
 
   // Ref so fetchAuctionParticipation always reads the latest profile without needing
   // to be recreated (avoids tearing down realtime subscriptions on profile changes).
@@ -335,32 +326,20 @@ export default function UserDashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-
-      // Count all unread admin messages across ALL sessions for this user (for tab badge)
-      const { data: userSessions } = await supabase
-        .from('chat_sessions')
-        .select('id')
-        .eq('user_id', session.user.id)
-
-      if (!userSessions || userSessions.length === 0) {
-        setUnreadCount(0)
-        return
-      }
-
-      const sessionIds = userSessions.map((s: any) => s.id)
+      
       const { count, error } = await supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
-        .in('session_id', sessionIds)
-        .eq('is_read', false)
-        .eq('sender_type', 'admin')
-
+        .eq('session_id', activeSession)
+        .eq('read_by_user', false)
+        .not('admin_id', 'is', null)
+      
       if (error) throw error
       setUnreadCount(count || 0)
     } catch (err) {
       console.error("Failed to count unread:", err)
     }
-  }, [])
+  }, [activeSession])
 
   const handlePlaceBidFromHistory = (product: BidHistory) => {
     // Redirect ke halaman auctions dengan parameter highlight
@@ -589,17 +568,17 @@ useEffect(() => {
   return () => clearInterval(interval)
 }, [bidHistory])
 
-// ✅ REALTIME CHAT SUBSCRIPTION
+// ✅ REALTIME CHAT SUBSCRIPTION - PERBAIKI
 useEffect(() => {
   if (!activeSession) {
     console.log('🔵 [REALTIME] No active session, skipping subscription')
     return
   }
-
+  
   console.log('🔵 [REALTIME] Setting up subscription for session:', activeSession)
-
+  
   const channel = supabase
-    .channel(`user_chat:${activeSession}`)
+    .channel(`chat:${activeSession}`)
     .on(
       'postgres_changes',
       {
@@ -610,8 +589,8 @@ useEffect(() => {
       },
       async (payload) => {
         console.log('🔵 [REALTIME] New message received:', payload.new)
-
-        // ✅ Fetch admin name if message is from admin
+        
+        // ✅ PERBAIKAN: Fetch admin name jika pesan dari admin
         let newMessage = payload.new
         if (newMessage.sender_type === 'admin') {
           const { data: adminData } = await supabase
@@ -619,38 +598,28 @@ useEffect(() => {
             .select('admin_name')
             .eq('admin_id', newMessage.sender_id)
             .single()
-
+          
           newMessage = {
             ...newMessage,
             admin_name: adminData?.admin_name || 'Admin'
           }
-
-          // ✅ Auto-mark as read since user has the session open
-          await supabase
-            .from('chat_messages')
-            .update({ is_read: true })
-            .eq('id', newMessage.id)
-
-          newMessage = { ...newMessage, is_read: true }
         }
-
+        
         setMessages(prev => {
+          // Cek apakah pesan sudah ada (untuk menghindari duplikasi)
           const exists = prev.some(m => m.id === newMessage.id)
           if (exists) {
-            console.log('🔵 [REALTIME] Message already exists, skipping')
+            console.log(' [REALTIME] Message already exists, skipping')
             return prev
           }
-          return [...prev, newMessage]
+          const newMessages = [...prev, newMessage]
+          console.log('🔵 [REALTIME] Updated messages:', newMessages)
+          return newMessages
         })
-
-        // Refresh tab badge count
+        
         countUnreadMessages()
-        // Update sidebar unread count for this session directly (since we marked it read)
-        setChatSessions(prev => prev.map((s: any) =>
-          s.id === activeSession ? { ...s, unread_count: 0 } : s
-        ))
-
-        // Auto-scroll to latest message
+        
+        // Auto-scroll ke pesan terbaru
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }, 100)
@@ -666,7 +635,7 @@ useEffect(() => {
       },
       (payload) => {
         console.log('🔵 [REALTIME] Message updated:', payload.new)
-        // Update existing message (e.g. read status changed)
+        // Update pesan yang sudah ada (misal: status read berubah)
         setMessages(prev =>
           prev.map(msg => msg.id === payload.new.id ? payload.new : msg)
         )
@@ -684,83 +653,41 @@ useEffect(() => {
 
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
 const fetchChatSessions = useCallback(async () => {
+  console.log('🔵 [SESSIONS] fetchChatSessions called')
+  
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-
-    // ✅ QUERY DENGAN JOIN ke admin_marketing_profiles
+    if (!session) {
+      console.log('🔵 [SESSIONS] No session found')
+      return
+    }
+    
+    console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
+    
+    // Simplified query - remove complex joins first
     const { data, error } = await supabase
       .from('chat_sessions')
-      .select(`
-        *,
-        admin_profile:admin_marketing_profiles!admin_id (
-          admin_name,
-          admin_phone
-        )
-      `)
+      .select('*')  // Start simple
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
-
-    if (error) throw error
     
-    // Transform data untuk menampilkan nama admin
-    const sessionsWithAdminName = data?.map(sessionItem => ({
-      ...sessionItem,
-      admin_name: sessionItem.admin_profile?.admin_name || 'Admin',
-      admin_phone: sessionItem.admin_profile?.admin_phone
-    })) || []
-
-    setChatSessions(sessionsWithAdminName)
+    console.log('🔵 [SESSIONS] Raw data:', data)
+    console.log('🔵 [SESSIONS] Error:', error)
+    
+    if (error) {
+      console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
+      throw error
+    }
+    
+    const sessionsCount = data?.length || 0
+    console.log(`🟢 [SESSIONS] Fetched ${sessionsCount} chat sessions`)
+    console.log(' [SESSIONS] Sessions:', data)
+    
+    setChatSessions(data || [])
   } catch (err) {
     console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
   }
 }, [])
-
-// ✅ GLOBAL SUBSCRIPTION: receive badge updates even when no session is actively open.
-// - Admin sends to any session → unread badge increments without needing to switch tabs.
-// - Admin claims/renames a session → sidebar admin_name label refreshes immediately.
-useEffect(() => {
-  const globalChannel = supabase
-    .channel('user-chat-global-notifications')
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chat_messages'
-      },
-      (payload: any) => {
-        // Only react to admin messages belonging to one of this user's sessions.
-        // userSessionIdsRef is kept in sync with chatSessions so no extra DB call is needed.
-        if (
-          payload.new?.sender_type === 'admin' &&
-          userSessionIdsRef.current.has(payload.new.session_id)
-        ) {
-          countUnreadMessages()
-          fetchChatSessions()
-        }
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'chat_sessions'
-      },
-      (payload: any) => {
-        // Only refresh when a session belonging to this user changes (e.g. admin_name set).
-        if (userSessionIdsRef.current.has(payload.new?.id)) {
-          fetchChatSessions()
-        }
-      }
-    )
-    .subscribe()
-
-  return () => {
-    supabase.removeChannel(globalChannel)
-  }
-}, [countUnreadMessages, fetchChatSessions])
 
 // Load chat sessions saat component mount
 useEffect(() => {
@@ -768,21 +695,14 @@ useEffect(() => {
   fetchChatSessions()
 }, [fetchChatSessions])
 
-// Keep userSessionIdsRef in sync whenever the session list changes.
-// This ref is used by the global subscription to scope events to this user's sessions.
-useEffect(() => {
-  userSessionIdsRef.current = new Set(chatSessions.map((s: any) => s.id))
-}, [chatSessions])
-
 // Load chat sessions saat tab chat aktif
 useEffect(() => {
   console.log('🔵 [EFFECT] Active tab changed to:', activeTab)
   if (activeTab === 'chat') {
     console.log('🔵 [EFFECT] Chat tab is active, fetching sessions')
     fetchChatSessions()
-    countUnreadMessages()
   }
-}, [activeTab, fetchChatSessions, countUnreadMessages])
+}, [activeTab, fetchChatSessions])
 
 // ✅ TAMBAHKAN useEffect INI untuk restore chat session setelah refresh
 useEffect(() => {
@@ -825,48 +745,56 @@ const loadMessages = useCallback(async (sessionId: string) => {
       console.error('🔴 [MESSAGES] No user session found')
       return
     }
-
     console.log('🔵 [MESSAGES] Fetching messages from database...')
     console.log('🔵 [MESSAGES] Session ID:', sessionId)
-
-    // ✅ PERBAIKAN: Query dengan JOIN ke admin_marketing_profiles
+    
+    // ✅ PERBAIKAN: Query TANPA JOIN yang kompleks (karena tidak ada admin_id di chat_messages)
     const { data, error } = await supabase
       .from('chat_messages')
-      .select(`
-        *,
-        admin_profile:admin_marketing_profiles!sender_id (
-          admin_name,
-          admin_phone
-        )
-      `)
+      .select('*')  // Ambil semua data dulu tanpa JOIN
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-
+    
     console.log('🔵 [MESSAGES] Raw data:', data)
     console.log('🔵 [MESSAGES] Error:', error)
-
+    
     if (error) {
       console.error('🔴 [MESSAGES] Query error:', error)
       throw error
     }
-
+    
     const messagesCount = data?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
-
-    if (data && data.length > 0) {
-      // Transform data to include admin_name at top level
-      const transformedMessages = data.map(msg => ({
-        ...msg,
-        admin_name: msg.admin_profile?.admin_name || 'Admin'
-      }))
-
-      setMessages(transformedMessages)
-      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(transformedMessages))
-
-      // Mark as read - hanya untuk pesan dari admin
-      const unreadAdminMessages = transformedMessages.filter(m =>
+    
+    // ✅ PERBAIKAN: Fetch admin name terpisah HANYA untuk pesan admin
+    const messagesWithAdminName = await Promise.all(
+      (data || []).map(async (msg) => {
+        if (msg.sender_type === 'admin') {
+          // Query nama admin dari admin_marketing_profiles menggunakan sender_id
+          const { data: adminData } = await supabase
+            .from('admin_marketing_profiles')
+            .select('admin_name')
+            .eq('admin_id', msg.sender_id)  // sender_id admin = admin_id di admin_marketing_profiles
+            .single()
+          
+          return {
+            ...msg,
+            admin_name: adminData?.admin_name || 'Admin'
+          }
+        }
+        return msg
+      })
+    )
+    
+    if (messagesWithAdminName && messagesWithAdminName.length > 0) {
+      setMessages(messagesWithAdminName)
+      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(messagesWithAdminName))
+      
+      // ✅ Mark as read - hanya untuk pesan dari admin
+      const unreadAdminMessages = messagesWithAdminName.filter(m =>
         m.sender_type === 'admin' && !m.is_read
       )
+      
       if (unreadAdminMessages.length > 0) {
         await supabase
           .from('chat_messages')
@@ -917,6 +845,59 @@ const getAdminDisplayName = (messages: any[]) => {
   console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
   return 'Admin'
 }
+
+// Load chat sessions saat tab chat aktif
+useEffect(() => {
+  if (activeTab === 'chat') {
+    fetchChatSessions()
+  }
+}, [activeTab, fetchChatSessions])
+
+// Realtime subscription untuk chat
+useEffect(() => {
+  if (!activeSession) {
+    console.log('🔵 [REALTIME] No active session, skipping subscription')
+    return
+  }
+  
+  console.log('🔵 [REALTIME] Setting up subscription for session:', activeSession)
+  
+  const channel = supabase
+    .channel(`chat:${activeSession}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `session_id=eq.${activeSession}`
+      },
+      (payload) => {
+        console.log('🔵 [REALTIME] New message received:', payload.new)
+        setMessages(prev => {
+          const newMessages = [...prev, payload.new]
+          console.log('🔵 [REALTIME] Updated messages:', newMessages)
+          return newMessages
+        })
+        countUnreadMessages()
+      }
+    )
+    .subscribe((status) => {
+      console.log('🔵 [REALTIME] Subscription status:', status)
+    })
+  
+  return () => {
+    console.log('🔵 [REALTIME] Cleaning up subscription')
+    supabase.removeChannel(channel)
+  }
+}, [activeSession, countUnreadMessages])
+
+// ✅ LOAD CHAT SESSIONS SAAT COMPONENT MOUNT
+useEffect(() => {
+  if (activeTab === 'chat') {
+    fetchChatSessions()
+  }
+}, [activeTab, fetchChatSessions])
 
 // ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
 const getStatusBadgeColor = (status: string) => {
@@ -2772,13 +2753,7 @@ const confirmSubmitRequest = async () => {
                           onClick={() => {
                             console.log('🔵 [CLICK] Session clicked:', sessionItem.id)
                             setActiveSession(sessionItem.id)
-                            loadMessages(sessionItem.id).then(() => {
-                              // Refresh sidebar to clear unread badges after reading
-                              fetchChatSessions()
-                              countUnreadMessages()
-                            }).catch((err) => {
-                              console.error('🔴 [CLICK] Failed to load messages:', err)
-                            })
+                            loadMessages(sessionItem.id)
                           }}
                           className={`w-full p-3 rounded-lg text-left transition-colors ${
                             activeSession === sessionItem.id
@@ -2802,16 +2777,9 @@ const confirmSubmitRequest = async () => {
                                 })}
                               </p>
                             </div>
-                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                              {activeSession === sessionItem.id && (
-                                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                              )}
-                              {(sessionItem.unread_count || 0) > 0 && activeSession !== sessionItem.id && (
-                                <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
-                                  {(sessionItem.unread_count || 0) > 9 ? '9+' : sessionItem.unread_count}
-                                </span>
-                              )}
-                            </div>
+                            {activeSession === sessionItem.id && (
+                              <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0 mt-1" />
+                            )}
                           </div>
                         </button>
                       )
@@ -2832,34 +2800,39 @@ const confirmSubmitRequest = async () => {
                   ) : (
                     <>
                       {/* CHAT HEADER */}
-                        <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {/* ✅ AVATAR DENGAN INISIAL NAMA ADMIN */}
-                            <div 
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                              style={{
-                                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
-                              }}
-                            >
-                              {(() => {
-                                const adminName = chatSessions.find(s => s.id === activeSession)?.admin_name || 'Admin';
-                                return adminName.charAt(0).toUpperCase();
-                              })()}
-                            </div>
-                            
-                            <div>
-                              {/* ✅ NAMA ADMIN DINAMIS */}
-                              <p className="text-white font-medium">
-                                {chatSessions.find(s => s.id === activeSession)?.admin_name || 'Admin'}
-                              </p>
-                              <p className="text-xs text-green-400">Online</p>
-                            </div>
+                      <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {/* ✅ AVATAR ADMIN DINAMIS (Inisial Nama) */}
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg"
+                              style={{ 
+                                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' // Warna Orange sesuai profil
+                              }}>
+                            {/* Ambil inisial dari nama admin */}
+                            {(() => {
+                              const adminName = getAdminDisplayName(messages);
+                              return adminName ? adminName.charAt(0).toUpperCase() : 'A';
+                            })()}
                           </div>
-                          
-                          <Button size="sm" variant="outline" onClick={() => setActiveSession(null)}>
-                            <X className="h-4 w-4" />
-                          </Button>
+                          <div>
+                            {/* ✅ NAMA ADMIN DINAMIS */}
+                            <p className="text-white font-medium">
+                              {getAdminDisplayName(messages)}
+                            </p>
+                            <p className="text-xs text-green-400">Online</p>
+                          </div>
                         </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            console.log('🔵 [CLICK] Close chat button clicked')
+                            setActiveSession(null)
+                          }}
+                          className="border-slate-600 hover:bg-slate-700"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
 
                       {/* MESSAGES AREA */}
                       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-900/50">
@@ -2892,159 +2865,6 @@ const confirmSubmitRequest = async () => {
                               <Circle size={12} className="text-blue-300" />
                             )
                             
-                            // Handle invoice message from admin
-                            // Detect by message_type OR by JSON content (fallback for older DB schema)
-                            const isInvoiceMsg = msg.message_type === 'invoice' ||
-                              (msg.sender_type === 'admin' && msg.message_type === 'text' && (() => {
-                                try {
-                                  const p = JSON.parse(msg.message)
-                                  return p && p.rfq_id !== undefined && Array.isArray(p.items)
-                                } catch { return false }
-                              })())
-                            if (isInvoiceMsg) {
-                              let invoiceData: any = null
-                              try { invoiceData = JSON.parse(msg.message) } catch {}
-                              
-                              const escHtml = (s: any) => String(s ?? '')
-                                .replace(/&/g, '&amp;')
-                                .replace(/</g, '&lt;')
-                                .replace(/>/g, '&gt;')
-                                .replace(/"/g, '&quot;')
-                                .replace(/'/g, '&#39;')
-
-                              const handleDownloadInvoice = () => {
-                                if (!invoiceData) return
-                                const printContent = `
-                                  <html><head><title>Invoice ${escHtml(invoiceData.rfq_code)}</title>
-                                  <style>
-                                    body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-                                    h1 { color: #1e40af; }
-                                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                                    th { background: #1e3a5f; color: white; padding: 10px; text-align: left; }
-                                    td { padding: 8px; border-bottom: 1px solid #ddd; }
-                                    .total { font-weight: bold; font-size: 1.1em; color: #1e40af; }
-                                    .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
-                                    .company { font-size: 0.9em; color: #666; }
-                                  </style></head><body>
-                                  <div class="header">
-                                    <div><h1>INVOICE</h1><p class="company">Solar Nusantara</p></div>
-                                    <div style="text-align:right"><p><strong>${escHtml(invoiceData.rfq_code)}</strong></p>
-                                    <p>${escHtml(new Date(invoiceData.created_at).toLocaleDateString('id-ID'))}</p></div>
-                                  </div>
-                                  <p><strong>Kepada:</strong> ${escHtml(invoiceData.user_name)}</p>
-                                  <p><strong>Perusahaan:</strong> ${escHtml(invoiceData.company_name)}</p>
-                                  <table>
-                                    <thead><tr><th>Produk</th><th>SKU</th><th>Qty</th><th>Harga Satuan</th><th>Subtotal</th></tr></thead>
-                                    <tbody>
-                                    ${invoiceData.items?.map((it: any) => `
-                                      <tr>
-                                        <td>${escHtml(it.product_name)}</td>
-                                        <td>${escHtml(it.sku)}</td>
-                                        <td>${escHtml(it.quantity)}</td>
-                                        <td>Rp ${Number(it.unit_price).toLocaleString('id-ID')}</td>
-                                        <td>Rp ${Number(it.subtotal).toLocaleString('id-ID')}</td>
-                                      </tr>`).join('')}
-                                    </tbody>
-                                    <tfoot><tr><td colspan="4" style="text-align:right;font-weight:bold">Total</td>
-                                    <td class="total">Rp ${Number(invoiceData.total_amount).toLocaleString('id-ID')}</td></tr></tfoot>
-                                  </table>
-                                  ${invoiceData.notes ? `<p style="margin-top:20px"><strong>Catatan:</strong> ${escHtml(invoiceData.notes)}</p>` : ''}
-                                  </body></html>`
-                                const blob = new Blob([printContent], { type: 'text/html' })
-                                const url = URL.createObjectURL(blob)
-                                // Schedule cleanup after a reasonable delay to handle popup blockers
-                                setTimeout(() => URL.revokeObjectURL(url), 60000)
-                                const w = window.open(url, '_blank')
-                                if (w) {
-                                  w.addEventListener('load', () => {
-                                    w.print()
-                                    // Clear the timeout and revoke immediately after print dialog
-                                    URL.revokeObjectURL(url)
-                                  })
-                                }
-                              }
-                              
-                              return (
-                                <div key={msg.id} className="flex justify-start mt-4">
-                                  <div className="max-w-[80%] bg-emerald-900/20 border border-emerald-600/40 rounded-2xl rounded-bl-none px-4 py-3">
-                                    <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1">
-                                      <FileText className="h-3 w-3" />
-                                      INVOICE DARI ADMIN
-                                    </p>
-                                    {invoiceData && (
-                                      <div className="space-y-1 text-xs text-slate-300 mb-3">
-                                        <p className="font-mono font-bold text-white">{invoiceData.rfq_code}</p>
-                                        <div className="border-t border-emerald-700/30 my-2" />
-                                        {invoiceData.items?.slice(0, 3).map((it: any, i: number) => (
-                                          <div key={i} className="flex justify-between">
-                                            <span>{it.product_name} × {it.quantity}</span>
-                                            <span className="font-mono">Rp {Number(it.subtotal).toLocaleString('id-ID')}</span>
-                                          </div>
-                                        ))}
-                                        {(invoiceData.items?.length || 0) > 3 && (
-                                          <p className="text-slate-500">+{invoiceData.items.length - 3} produk lainnya</p>
-                                        )}
-                                        <div className="border-t border-emerald-700/30 my-2" />
-                                        <div className="flex justify-between font-bold text-orange-400">
-                                          <span>Total</span>
-                                          <span className="font-mono">Rp {Number(invoiceData.total_amount).toLocaleString('id-ID')}</span>
-                                        </div>
-                                      </div>
-                                    )}
-                                    <div className="flex gap-2 mt-3">
-                                      <Button
-                                        size="sm"
-                                        onClick={async () => {
-                                          setSelectedInvoice(invoiceData)
-                                          setQrImageUrl(null)
-                                          setQrLoading(true)
-                                          setShowQRModal(true)
-                                          // Generate real QRIS
-                                          try {
-                                            const { data: settings } = await supabase
-                                              .from('payment_settings')
-                                              .select('static_qris, merchant_name')
-                                              .eq('setting_type', 'qris')
-                                              .eq('is_active', true)
-                                              .limit(1)
-                                              .maybeSingle()
-                                            if (settings?.static_qris) {
-                                              const { generateDynamicQris } = await import('@/lib/qris')
-                                              const dynamicQris = generateDynamicQris(settings.static_qris, invoiceData.total_amount)
-                                              const QRCode = (await import('qrcode')).default
-                                              const url = await QRCode.toDataURL(dynamicQris, { width: 280, margin: 1 })
-                                              setQrImageUrl(url)
-                                              setMerchantName(settings.merchant_name || null)
-                                            }
-                                          } catch (err) {
-                                            console.error('Failed to generate QRIS:', err)
-                                          } finally {
-                                            setQrLoading(false)
-                                          }
-                                        }}
-                                        className="bg-green-600 hover:bg-green-700 text-xs flex-1"
-                                      >
-                                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                                        Deal
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={handleDownloadInvoice}
-                                        className="border-slate-600 text-xs flex-1"
-                                      >
-                                        <ExternalLink className="h-3 w-3 mr-1" />
-                                        Unduh PDF
-                                      </Button>
-                                    </div>
-                                    <p className="text-[10px] text-emerald-300 mt-2 text-right">
-                                      {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                                    </p>
-                                  </div>
-                                </div>
-                              )
-                            }
-
                             return (
                               <div
                                 key={msg.id}
@@ -3550,64 +3370,6 @@ const confirmSubmitRequest = async () => {
           <DialogFooter>
             <Button onClick={() => setShowStatusModal(false)} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600">
               Tutup
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* QR CODE PAYMENT MODAL */}
-      <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-400">
-              <CheckCircle className="h-5 w-5" />
-              Konfirmasi Deal & Pembayaran
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Scan QR code di bawah untuk melakukan pembayaran
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4 text-center">
-            {selectedInvoice && (
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 mb-4 text-left text-sm">
-                <p className="text-white font-bold">{selectedInvoice.rfq_code}</p>
-                <p className="text-slate-400 text-xs mt-1">Total Pembayaran</p>
-                <p className="text-orange-400 font-mono font-bold text-lg">
-                  Rp {Number(selectedInvoice.total_amount).toLocaleString('id-ID')}
-                </p>
-              </div>
-            )}
-            {/* QRIS from database */}
-            <div className="flex justify-center">
-              {qrLoading ? (
-                <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                  <span className="text-sm">Memuat QRIS pembayaran...</span>
-                </div>
-              ) : qrImageUrl ? (
-                <div className="bg-white p-4 rounded-xl">
-                  <img src={qrImageUrl} alt="QRIS Pembayaran" className="w-48 h-48 object-contain" />
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 py-6 text-slate-500 text-sm">
-                  <span>QRIS belum dikonfigurasi.</span>
-                  <span className="text-xs">Hubungi Admin Keuangan untuk mengaktifkan pembayaran QRIS.</span>
-                </div>
-              )}
-            </div>
-            {merchantName && qrImageUrl && (
-              <p className="text-slate-300 text-sm font-medium">{merchantName}</p>
-            )}
-            {qrImageUrl && (
-              <>
-                <p className="text-slate-400 text-sm">Scan QR code ini dengan aplikasi pembayaran Anda</p>
-                <p className="text-xs text-slate-500">Nominal sudah ter-embed di dalam QRIS secara otomatis</p>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowQRModal(false)} className="w-full bg-green-600 hover:bg-green-700">
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Selesai
             </Button>
           </DialogFooter>
         </DialogContent>
