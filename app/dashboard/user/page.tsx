@@ -745,56 +745,48 @@ const loadMessages = useCallback(async (sessionId: string) => {
       console.error('🔴 [MESSAGES] No user session found')
       return
     }
+
     console.log('🔵 [MESSAGES] Fetching messages from database...')
     console.log('🔵 [MESSAGES] Session ID:', sessionId)
-    
-    // ✅ PERBAIKAN: Query TANPA JOIN yang kompleks (karena tidak ada admin_id di chat_messages)
+
+    // ✅ PERBAIKAN: Query dengan JOIN ke admin_marketing_profiles
     const { data, error } = await supabase
       .from('chat_messages')
-      .select('*')  // Ambil semua data dulu tanpa JOIN
+      .select(`
+        *,
+        admin_profile:admin_marketing_profiles!sender_id (
+          admin_name,
+          admin_phone
+        )
+      `)
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    
+
     console.log('🔵 [MESSAGES] Raw data:', data)
     console.log('🔵 [MESSAGES] Error:', error)
-    
+
     if (error) {
       console.error('🔴 [MESSAGES] Query error:', error)
       throw error
     }
-    
+
     const messagesCount = data?.length || 0
     console.log(`🟢 [MESSAGES] Loaded ${messagesCount} messages`)
-    
-    // ✅ PERBAIKAN: Fetch admin name terpisah HANYA untuk pesan admin
-    const messagesWithAdminName = await Promise.all(
-      (data || []).map(async (msg) => {
-        if (msg.sender_type === 'admin') {
-          // Query nama admin dari admin_marketing_profiles menggunakan sender_id
-          const { data: adminData } = await supabase
-            .from('admin_marketing_profiles')
-            .select('admin_name')
-            .eq('admin_id', msg.sender_id)  // sender_id admin = admin_id di admin_marketing_profiles
-            .single()
-          
-          return {
-            ...msg,
-            admin_name: adminData?.admin_name || 'Admin'
-          }
-        }
-        return msg
-      })
-    )
-    
-    if (messagesWithAdminName && messagesWithAdminName.length > 0) {
-      setMessages(messagesWithAdminName)
-      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(messagesWithAdminName))
-      
-      // ✅ Mark as read - hanya untuk pesan dari admin
-      const unreadAdminMessages = messagesWithAdminName.filter(m =>
+
+    if (data && data.length > 0) {
+      // Transform data to include admin_name at top level
+      const transformedMessages = data.map(msg => ({
+        ...msg,
+        admin_name: msg.admin_profile?.admin_name || 'Admin'
+      }))
+
+      setMessages(transformedMessages)
+      localStorage.setItem(`chat_messages_${sessionId}`, JSON.stringify(transformedMessages))
+
+      // Mark as read - hanya untuk pesan dari admin
+      const unreadAdminMessages = transformedMessages.filter(m =>
         m.sender_type === 'admin' && !m.is_read
       )
-      
       if (unreadAdminMessages.length > 0) {
         await supabase
           .from('chat_messages')
