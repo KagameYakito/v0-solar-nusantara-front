@@ -683,58 +683,66 @@ supabase.removeChannel(channel)
 }, [activeSession, countUnreadMessages])
 
 // ✅ FUNGSI UNTUK LOAD CHAT SESSIONS
+// ✅ FUNGSI UNTUK LOAD CHAT SESSIONS (GANTI SELURUH FUNGSI INI)
 const fetchChatSessions = useCallback(async () => {
-console.log('🔵 [SESSIONS] fetchChatSessions called')
+  console.log('🔵 [SESSIONS] fetchChatSessions called')
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      console.log('🔵 [SESSIONS] No session found')
+      return
+    }
 
-try {
-const { data: { session } } = await supabase.auth.getSession()
-if (!session) {
-console.log('🔵 [SESSIONS] No session found')
-return
-}
+    console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
+    
+    // ✅ PERBAIKAN: JOIN dengan admin_marketing_profiles untuk mendapatkan nama admin
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select(`
+        *,
+        admin_info:admin_marketing_profiles!admin_id (
+          admin_name
+        )
+      `)
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
 
-console.log('🔵 [SESSIONS] Fetching sessions for user:', session.user.id)
+    if (error) {
+      console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
+      throw error
+    }
 
-const { data, error } = await supabase
-.from('chat_sessions')
-.select('*')
-.eq('user_id', session.user.id)
-.order('created_at', { ascending: false })
+    if (!data || data.length === 0) {
+      setChatSessions([])
+      return
+    }
 
-if (error) {
-console.error('🔴 [SESSIONS] Error fetching chat sessions:', error)
-throw error
-}
+    // ✅ Fetch per-session unread counts for sidebar badges
+    const sessionIds = data.map((s: any) => s.id)
+    const { data: unreadData } = await supabase
+      .from('chat_messages')
+      .select('session_id')
+      .in('session_id', sessionIds)
+      .eq('sender_type', 'admin')
+      .eq('is_read', false)
 
-if (!data || data.length === 0) {
-setChatSessions([])
-return
-}
+    const unreadCounts: Record<string, number> = {}
+    ;(unreadData || []).forEach((msg: any) => {
+      unreadCounts[msg.session_id] = (unreadCounts[msg.session_id] || 0) + 1
+    })
 
-// ✅ Fetch per-session unread counts for sidebar badges
-const sessionIds = data.map((s: any) => s.id)
-const { data: unreadData } = await supabase
-.from('chat_messages')
-.select('session_id')
-.in('session_id', sessionIds)
-.eq('sender_type', 'admin')
-.eq('is_read', false)
+    // ✅ Transform data: Gabungkan info admin dan unread count
+    const sessionsWithInfo = data.map((s: any) => ({
+      ...s,
+      admin_name: s.admin_info?.admin_name || 'Admin', // Ambil nama dari hasil JOIN
+      unread_count: unreadCounts[s.id] || 0
+    }))
 
-const unreadCounts: Record<string, number> = {}
-;(unreadData || []).forEach((msg: any) => {
-unreadCounts[msg.session_id] = (unreadCounts[msg.session_id] || 0) + 1
-})
-
-const sessionsWithUnread = data.map((s: any) => ({
-...s,
-unread_count: unreadCounts[s.id] || 0
-}))
-
-console.log(`🟢 [SESSIONS] Fetched ${data.length} chat sessions`)
-setChatSessions(sessionsWithUnread)
-} catch (err) {
-console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
-}
+    console.log(`🟢 [SESSIONS] Fetched ${data.length} chat sessions with admin names`)
+    setChatSessions(sessionsWithInfo)
+  } catch (err) {
+    console.error('🔴 [SESSIONS] Failed to fetch chat sessions:', err)
+  }
 }, [])
 
 // ✅ GLOBAL SUBSCRIPTION: receive badge updates even when no session is actively open.
@@ -923,28 +931,29 @@ setChatLoading(false)
 }
 }, [])
 
-// Fungsi untuk mendapatkan nama admin
+// Fungsi untuk mendapatkan nama admin (GANTI SELURUH FUNGSI INI)
 const getAdminDisplayName = (messages: any[]) => {
-console.log('🔵 [ADMIN] getAdminDisplayName called, messages:', messages)
+  console.log('🔵 [ADMIN] getAdminDisplayName called')
+  
+  // ✅ PRIORITAS 1: Cek apakah session yang sedang aktif punya nama admin di state chatSessions
+  const currentSession = chatSessions.find(s => s.id === activeSession)
+  if (currentSession?.admin_name && currentSession.admin_name !== 'Admin') {
+    console.log('🟢 [ADMIN] Found name from session:', currentSession.admin_name)
+    return currentSession.admin_name
+  }
 
-// Cari pesan dari admin yang punya admin_name
-const adminMessage = messages.find(m =>
-m.sender_type === 'admin' && m.admin_name
-)
+  // ✅ PRIORITAS 2: Fallback ke pesan (jika admin sudah chat duluan)
+  const adminMessage = messages.find(m => 
+    m.sender_type === 'admin' && m.admin_name && m.admin_name !== 'Admin'
+  )
+  
+  if (adminMessage?.admin_name) {
+    console.log('🟢 [ADMIN] Found name from message:', adminMessage.admin_name)
+    return adminMessage.admin_name
+  }
 
-if (adminMessage?.admin_name) {
-console.log('🟢 [ADMIN] Found admin name:', adminMessage.admin_name)
-return adminMessage.admin_name
-}
-
-// Fallback: cari dari pesan admin mana saja
-const anyAdminMessage = messages.find(m => m.sender_type === 'admin')
-if (anyAdminMessage?.admin_name) {
-return anyAdminMessage.admin_name
-}
-
-console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
-return 'Admin'
+  console.log('🟡 [ADMIN] No admin name found, using default "Admin"')
+  return 'Admin'
 }
 
 // ✅ UPDATE getStatusBadgeColor (Lebih Halus & Modern)
